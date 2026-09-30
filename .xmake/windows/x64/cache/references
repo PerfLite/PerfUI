@@ -1,0 +1,10 @@
+{
+    packages = {
+        [[C:\Users\Alik\AppData\Local\.xmake\packages\n\ninja\v1.13.2\388143d312d14320a9c5240d43405107]],
+        [[C:\Users\Alik\AppData\Local\.xmake\packages\c\cmake\4.3.4\0f8cea59944043e09419f613dd6acd4d]],
+        [[C:\Users\Alik\AppData\Local\.xmake\packages\f\fmt\12.2.0\b36ef53d91b14842882910d96159a1e2]],
+        [[C:\Users\Alik\AppData\Local\.xmake\packages\r\rapidcsv\v8.92\3ea9c5686c084d99b7090d143af1b725]],
+        [[C:\Users\Alik\AppData\Local\.xmake\packages\s\spdlog\v1.17.0\7142d71af51c4f6799faae062ccbbd61]],
+        [[C:\Users\Alik\AppData\Local\.xmake\packages\c\commonlibsse-ng\v3.7.0\8fbc7934b6804602a2ab7c9af70b43b8]]
+    }
+}

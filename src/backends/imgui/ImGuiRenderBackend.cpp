@@ -152,12 +152,12 @@ void ImGuiRenderBackend::drawShadow(
     if (!dl || shadowColor.a == 0) return;
 
     // Multi-pass approximation for soft drop shadow
-    int passes = std::clamp(static_cast<int>(blurRadius / 2.0f), 1, 6);
+    int passes = (std::clamp)(static_cast<int>(blurRadius / 2.0f), 1, 6);
     float alphaStep = static_cast<float>(shadowColor.a) / (passes * 2.0f);
 
     for (int i = 0; i < passes; ++i) {
         float expand = static_cast<float>(i + 1) * (blurRadius / passes);
-        uint8_t a = static_cast<uint8_t>(std::max(1.0f, alphaStep * (passes - i)));
+        uint8_t a = static_cast<uint8_t>((std::max)(1.0f, alphaStep * (passes - i)));
         Color passColor(shadowColor.r, shadowColor.g, shadowColor.b, a);
 
         ImVec2 pMin(rect.x + offset.x - expand, rect.y + offset.y - expand);
