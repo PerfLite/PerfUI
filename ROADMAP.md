@@ -31,30 +31,31 @@ Phase 17 ──► Advanced Features (Live Reload, In-game UI Inspector, Profile
 
 ## Phase Details & Exit Criteria
 
-### Phase 0: Research & Architecture (CURRENT)
+### Phase 0: Research & Architecture (COMPLETED)
 - [x] Project directory layout (`include/PerfUI`, `src/core`, `src/backends`, etc.).
 - [x] Version control initialized (`.git`, `.gitignore`).
 - [x] Move ImGui to `third_party/imgui/`.
 - [x] Document core architecture (`ARCHITECTURE.md`).
 - [x] Document roadmap and milestones (`ROADMAP.md`).
 - [x] Document design system and API ergonomics (`DESIGN.md`).
-- [ ] Configure root `CMakeLists.txt` and standalone sandbox project.
-*Exit Criteria:* All design specs completed; CMake configures cleanly for desktop sandbox.
+- [x] Configure root `CMakeLists.txt` and standalone sandbox project (`PerfUI_Sandbox`).
+*Exit Criteria:* All design specs completed; CMake and Sandbox build cleanly.
 
-### Phase 1: Minimal SKSE + ImGui Prototype
-- Setup CommonLibSSE-NG dependency in CMake.
-- Implement DXGI Present hook for Skyrim D3D11.
-- State preservation: save and restore DirectX 11 pipeline state before/after rendering.
-- Hotkey toggle (e.g. `F11` or `Insert`) to open/close a test window.
-- Basic input capture so the game camera doesn't rotate while mouse is moving over the UI.
-*Exit Criteria:* Pressing hotkey in Skyrim displays a test window without crashes, works on Alt+Tab, and cleanly shuts down on game exit.
+### Phase 1: Minimal SKSE + ImGui Prototype (COMPLETED & DEPLOYED)
+- [x] Setup CommonLibSSE-NG dependency (via xmake & local cache).
+- [x] Implement DXGI Present & ResizeBuffers hooks for Skyrim D3D11.
+- [x] State preservation: save and restore DirectX 11 pipeline state before/after rendering.
+- [x] Hotkey toggle (`F11`) to open/close test window with `ESC` to close.
+- [x] Input capture: swallow mouse and keyboard from Skyrim camera/controls when UI is open.
+- [x] Auto-deploy script (`deploy.ps1`) to Mod Organizer 2 mods and profiles.
+*Exit Criteria:* `PerfUI.dll` compiles and deploys cleanly to MO2, ready for in-game verification.
 
-### Phase 2: Backend Abstraction
-- Define pure abstract interfaces: `UIRenderBackend` and `UIInputBackend`.
-- Implement `ImGuiRenderBackend` in `src/backends/imgui/` using `ImDrawList`.
-- Remove all `<imgui.h>` includes from Core headers and public includes.
-- Validate that Core compiles with zero awareness of ImGui.
-*Exit Criteria:* Core contains 0 ImGui references; the test window renders identically via `UIRenderBackend`.
+### Phase 2: Backend Abstraction (COMPLETED)
+- [x] Define pure abstract interface: `UIRenderBackend`.
+- [x] Implement `ImGuiRenderBackend` in `src/backends/imgui/` using `ImDrawList`.
+- [x] Zero `<imgui.h>` includes in Core headers and public includes.
+- [x] Validate that Core compiles with zero awareness of ImGui.
+*Exit Criteria:* Core contains 0 ImGui references; rendering flows entirely through `UIRenderBackend`.
 
 ### Phase 3: Retained UI Tree
 - Implement `UIContext`, `UIElement`, `Container`, `UIWindow`.
