@@ -80,7 +80,7 @@ public:
 
 private:
     LayoutDirection m_direction{ LayoutDirection::Vertical };
-    Alignment m_alignment{ Alignment::Start };
+    Alignment m_alignment{ Alignment::Stretch };
     JustifyContent m_justify{ JustifyContent::Start };
 
     Insets m_padding{};

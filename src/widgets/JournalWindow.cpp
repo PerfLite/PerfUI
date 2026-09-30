@@ -184,10 +184,10 @@ void JournalWindow::buildUI() {
            .borderWidth(1.0f)
            .cornerRadius(8.0f);
     sidebar->layout()
-           .width(300.0f)
+           .width(250.0f)
            .direction(LayoutDirection::Vertical)
-           .padding(12.0f)
-           .gap(10.0f);
+           .padding(10.0f)
+           .gap(8.0f);
 
     auto* listHeader = sidebar->add<Text>("ACTIVE QUESTS");
     listHeader->color(Color::TextAccent()).fontSize(13.0f).bold(true);
@@ -197,7 +197,7 @@ void JournalWindow::buildUI() {
 
     for (size_t i = 0; i < m_quests.size(); ++i) {
         auto* btn = questScrollView->add<Button>(m_quests[i].title);
-        btn->layout().padding(10.0f, 8.0f);
+        btn->layout().width(DimensionConstraint::Flex(1.0f)).padding(10.0f, 8.0f);
         btn->fontSize(13.0f);
         btn->normalColor(Color(24, 30, 40, 220), Color::BorderSubtle(), Color::TextPrimary());
         btn->hoverColor(Color(36, 46, 62, 240), Color::BorderFocus(), Color::White());
@@ -254,8 +254,9 @@ void JournalWindow::buildUI() {
     innerDivider->backgroundColor(Color::BorderSubtle()).borderWidth(0.0f);
     innerDivider->layout().height(1.0f);
 
-    // Description
+    // Description (Word wrapped)
     m_questDescText = details->add<Text>("Description placeholder...");
+    m_questDescText->wrap(true);
     m_questDescText->color(Color(200, 205, 215, 255)).fontSize(14.0f);
 
     // Objectives Section
@@ -343,14 +344,18 @@ void JournalWindow::updateDetailsPanel() {
 }
 
 void JournalWindow::measure(Dimensions availableSize) {
-    // Window is 920x600 centered
-    layout().width(920.0f).height(600.0f);
+    float targetW = (std::min)(availableSize.width * 0.90f, 920.0f);
+    float targetH = (std::min)(availableSize.height * 0.88f, 560.0f);
+    targetW = (std::max)(targetW, 600.0f);
+    targetH = (std::max)(targetH, 380.0f);
+
+    layout().width(targetW).height(targetH);
     Panel::measure(availableSize);
 }
 
 void JournalWindow::arrange(const Rect& finalRect) {
-    float w = 920.0f;
-    float h = 600.0f;
+    float w = layout().width().value;
+    float h = layout().height().value;
     float x = (std::max)(0.0f, (finalRect.width - w) * 0.5f);
     float y = (std::max)(0.0f, (finalRect.height - h) * 0.5f);
 

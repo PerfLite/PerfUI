@@ -182,12 +182,15 @@ void D3D11Hook::InitializeImGui(IDXGISwapChain* pSwapChain) {
 
     ImGui::StyleColorsDark();
 
+    // Initialize backend and load sharp TrueType vector fonts before creating DirectX 11 textures
+    m_renderBackend = std::make_unique<PerfUI::ImGuiRenderBackend>();
+    m_renderBackend->initFonts();
+
     ImGui_ImplWin32_Init(m_hWnd);
     ImGui_ImplDX11_Init(m_device, m_context);
 
     // Initialize PerfUI
     m_uiContext = std::make_unique<PerfUI::UIContext>();
-    m_renderBackend = std::make_unique<PerfUI::ImGuiRenderBackend>();
 
     // Add retained-mode Nordic Journal Window
     m_uiContext->root()->add<PerfUI::JournalWindow>();
@@ -252,23 +255,23 @@ void D3D11Hook::RenderFrame() {
     float height = static_cast<float>(clientRect.bottom - clientRect.top);
     m_uiContext->setViewportSize({ width, height });
 
-    // Drain queued input from message thread and dispatch safely on Render thread
-    auto inputEvents = InputHook::GetSingleton().DrainInputQueue();
-    for (const auto& ev : inputEvents) {
-        switch (ev.type) {
-        case InputHook::QueuedInput::Type::MouseMove:
-            m_uiContext->onMouseMove({ ev.x, ev.y });
-            break;
-        case InputHook::QueuedInput::Type::MouseDown:
-            m_uiContext->onMouseDown(ev.button, { ev.x, ev.y });
-            break;
-        case InputHook::QueuedInput::Type::MouseUp:
-            m_uiContext->onMouseUp(ev.button, { ev.x, ev.y });
-            break;
-        case InputHook::QueuedInput::Type::MouseWheel:
-            m_uiContext->onMouseWheel(ev.wheelDelta, { ev.x, ev.y });
-            break;
-        }
+    // Draw software cursor inside Skyrim when UI is visible
+    ImGui::GetIO().MouseDrawCursor = m_uiVisible.load();
+
+    // Drain queued input from background hook
+    InputHook::GetSingleton().DrainInputQueue();
+
+    // Directly synchronize UIContext pointer with ImGui's Win32 mouse state
+    const auto& io = ImGui::GetIO();
+    m_uiContext->onMouseMove({ io.MousePos.x, io.MousePos.y });
+    if (io.MouseClicked[0]) {
+        m_uiContext->onMouseDown(0, { io.MousePos.x, io.MousePos.y });
+    }
+    if (io.MouseReleased[0]) {
+        m_uiContext->onMouseUp(0, { io.MousePos.x, io.MousePos.y });
+    }
+    if (io.MouseWheel != 0.0f) {
+        m_uiContext->onMouseWheel(io.MouseWheel, { io.MousePos.x, io.MousePos.y });
     }
 
     m_uiContext->update(dt);

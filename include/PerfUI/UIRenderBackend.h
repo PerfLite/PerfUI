@@ -12,6 +12,7 @@ struct TextStyle {
     float fontSize{ 14.0f };
     bool bold{ false };
     bool italic{ false };
+    float wrapWidth{ 0.0f };
 };
 
 class UIRenderBackend {

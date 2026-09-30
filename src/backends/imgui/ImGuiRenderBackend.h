@@ -2,8 +2,9 @@
 
 #include "PerfUI/UIRenderBackend.h"
 
-// Forward declare ImDrawList so imgui.h is NOT exposed in this header
+// Forward declare ImDrawList and ImFont so imgui.h is NOT exposed in this header
 struct ImDrawList;
+struct ImFont;
 
 namespace PerfUI {
 
@@ -54,10 +55,20 @@ public:
         const Point& offset
     ) override;
 
+    void initFonts();
+
 private:
     ImDrawList* getDrawList();
+    ImFont* getFontForStyle(const TextStyle& style) const;
 
     ImDrawList* m_customDrawList{ nullptr };
+    bool m_fontsInitialized{ false };
+    ImFont* m_fontSmall{ nullptr };
+    ImFont* m_fontRegular{ nullptr };
+    ImFont* m_fontMedium{ nullptr };
+    ImFont* m_fontBold{ nullptr };
+    ImFont* m_fontTitle{ nullptr };
+    ImFont* m_fontHeader{ nullptr };
 };
 
 } // namespace PerfUI

@@ -173,6 +173,7 @@ void LayoutEngine::ArrangeHorizontal(UIElement* element, const Rect& contentRect
             childW = child->desiredSize().width;
         }
         childW = (std::clamp)(childW, child->layout().minWidth(), child->layout().maxWidth());
+        childW = (std::min)(childW, (std::max)(0.0f, contentRect.width - margin.horizontal()));
 
         Alignment align = child->layout().alignment();
         if (align == Alignment::Start && element->layout().alignment() != Alignment::Start) {
@@ -275,6 +276,7 @@ void LayoutEngine::ArrangeVertical(UIElement* element, const Rect& contentRect) 
             childH = child->desiredSize().height;
         }
         childH = (std::clamp)(childH, child->layout().minHeight(), child->layout().maxHeight());
+        childH = (std::min)(childH, (std::max)(0.0f, contentRect.height - margin.vertical()));
 
         Alignment align = child->layout().alignment();
         if (align == Alignment::Start && element->layout().alignment() != Alignment::Start) {

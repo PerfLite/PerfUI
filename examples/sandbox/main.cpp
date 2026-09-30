@@ -146,12 +146,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     ImGui::StyleColorsDark();
 
+    // Initialize backend and load sharp TrueType vector fonts before DX11 device objects
+    g_renderBackend = std::make_unique<PerfUI::ImGuiRenderBackend>();
+    g_renderBackend->initFonts();
+
     ImGui_ImplWin32_Init(hWnd);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
-    // Initialize PerfUI Core & Render Backend
+    // Initialize PerfUI Core
     g_uiContext = std::make_unique<PerfUI::UIContext>();
-    g_renderBackend = std::make_unique<PerfUI::ImGuiRenderBackend>();
 
     // Add our Nordic Quest Journal window to the UIContext root
     g_uiContext->root()->add<PerfUI::JournalWindow>();

@@ -27,6 +27,9 @@ public:
     Alignment textAlign() const { return m_textAlign; }
     Text& textAlign(Alignment align) { m_textAlign = align; return *this; }
 
+    bool wrap() const { return m_wrap; }
+    Text& wrap(bool enable) { m_wrap = enable; markLayoutDirty(); return *this; }
+
     void measure(Dimensions availableSize) override;
     void render(UIRenderBackend& backend) override;
 
@@ -34,6 +37,7 @@ private:
     std::string m_text;
     TextStyle m_style{ Color::TextPrimary(), 15.0f, false, false };
     Alignment m_textAlign{ Alignment::Start };
+    bool m_wrap{ false };
 };
 
 } // namespace PerfUI

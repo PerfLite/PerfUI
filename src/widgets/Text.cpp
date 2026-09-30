@@ -19,12 +19,15 @@ Text& Text::text(std::string_view str) {
 }
 
 void Text::measure(Dimensions availableSize) {
-    (void)availableSize;
-
     Dimensions measured{ 0.0f, 0.0f };
 
+    TextStyle measureStyle = m_style;
+    if (m_wrap && availableSize.width > 0.0f && availableSize.width < 50000.0f) {
+        measureStyle.wrapWidth = availableSize.width;
+    }
+
     if (m_context && m_context->renderBackend() && !m_text.empty()) {
-        measured = m_context->renderBackend()->measureText(m_text, m_style);
+        measured = m_context->renderBackend()->measureText(m_text, measureStyle);
     } else if (!m_text.empty()) {
         // Fallback heuristic if not yet attached to renderer
         measured.width = static_cast<float>(m_text.length()) * (m_style.fontSize * 0.58f);
@@ -51,9 +54,14 @@ void Text::measure(Dimensions availableSize) {
 void Text::render(UIRenderBackend& backend) {
     if (!isVisible() || m_text.empty()) return;
 
+    TextStyle renderStyle = m_style;
+    if (m_wrap && m_bounds.width > 0.0f) {
+        renderStyle.wrapWidth = m_bounds.width;
+    }
+
     // In case measure was done before backend was attached
     if (m_desiredSize.width <= 0.0f || m_desiredSize.height <= 0.0f) {
-        m_desiredSize = backend.measureText(m_text, m_style);
+        m_desiredSize = backend.measureText(m_text, renderStyle);
     }
 
     float posX = m_bounds.x;
@@ -66,11 +74,11 @@ void Text::render(UIRenderBackend& backend) {
     }
 
     float posY = m_bounds.y;
-    if (m_bounds.height > m_desiredSize.height) {
+    if (m_bounds.height > m_desiredSize.height && !m_wrap) {
         posY = m_bounds.y + (m_bounds.height - m_desiredSize.height) * 0.5f;
     }
 
-    backend.drawText(m_text, Point{ posX, posY }, m_style);
+    backend.drawText(m_text, Point{ posX, posY }, renderStyle);
 }
 
 } // namespace PerfUI
