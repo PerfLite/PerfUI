@@ -40,6 +40,8 @@ void UIContext::performLayout() {
 }
 
 void UIContext::render(UIRenderBackend& backend) {
+    m_renderBackend = &backend;
+
     if (m_layoutDirty) {
         performLayout();
     }
@@ -93,6 +95,19 @@ void UIContext::onMouseUp(int button, const Point& screenPos) {
         Point localPoint = screenPos - m_pressedElement->bounds().topLeft();
         m_pressedElement->onPointerUp(localPoint);
         m_pressedElement = nullptr;
+    }
+}
+
+void UIContext::onMouseWheel(float delta, const Point& screenPos) {
+    m_lastMousePos = screenPos;
+    if (!m_root) return;
+
+    UIElement* target = m_root->hitTest(screenPos);
+    for (UIElement* el = target; el != nullptr; el = el->parent()) {
+        Point localPoint = screenPos - el->bounds().topLeft();
+        if (el->onMouseWheel(delta, localPoint)) {
+            break;
+        }
     }
 }
 

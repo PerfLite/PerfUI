@@ -15,12 +15,25 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(PerfUI_Core STATIC
     include/PerfUI/Types.h
+    include/PerfUI/Layout.h
+    include/PerfUI/LayoutEngine.h
     include/PerfUI/UIRenderBackend.h
     include/PerfUI/UIElement.h
     include/PerfUI/UIContext.h
+    include/PerfUI/Panel.h
+    include/PerfUI/Text.h
+    include/PerfUI/Button.h
+    include/PerfUI/ScrollView.h
+    include/PerfUI/JournalWindow.h
     include/PerfUI/PerfUI.h
     src/core/UIElement.cpp
     src/core/UIContext.cpp
+    src/layout/LayoutEngine.cpp
+    src/widgets/Panel.cpp
+    src/widgets/Text.cpp
+    src/widgets/Button.cpp
+    src/widgets/ScrollView.cpp
+    src/widgets/JournalWindow.cpp
 )
 
 target_include_directories(PerfUI_Core PUBLIC

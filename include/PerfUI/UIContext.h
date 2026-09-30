@@ -28,6 +28,10 @@ public:
         return m_root->add<T>(std::forward<Args>(args)...);
     }
 
+    // Backend
+    UIRenderBackend* renderBackend() const { return m_renderBackend; }
+    void setRenderBackend(UIRenderBackend* backend) { m_renderBackend = backend; }
+
     // Lifecycle
     void update(float deltaTime);
     void render(UIRenderBackend& backend);
@@ -36,6 +40,7 @@ public:
     void onMouseMove(const Point& screenPos);
     void onMouseDown(int button, const Point& screenPos);
     void onMouseUp(int button, const Point& screenPos);
+    void onMouseWheel(float delta, const Point& screenPos);
     void onNavigate(NavDirection direction);
     void onSubmit();
     void onCancel();
@@ -53,6 +58,7 @@ private:
     void performLayout();
 
     std::unique_ptr<UIElement> m_root;
+    UIRenderBackend* m_renderBackend{ nullptr };
     Dimensions m_viewportSize{ 1920.0f, 1080.0f };
 
     UIElement* m_focusedElement{ nullptr };

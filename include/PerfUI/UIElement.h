@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.h"
+#include "Layout.h"
 #include "UIRenderBackend.h"
 #include <vector>
 #include <memory>
@@ -64,9 +65,17 @@ public:
     const Rect& bounds() const { return m_bounds; }
     void setBounds(const Rect& bounds);
 
+    const Dimensions& desiredSize() const { return m_desiredSize; }
+    void setDesiredSize(Dimensions size) { m_desiredSize = size; }
+
+    // Layout
+    LayoutProps& layout() { return m_layout; }
+    const LayoutProps& layout() const { return m_layout; }
+
     // Dirty flags
     bool isLayoutDirty() const { return m_layoutDirty; }
     void markLayoutDirty();
+    void clearLayoutDirty() { m_layoutDirty = false; }
 
     // Lifecycle passes
     virtual void update(float deltaTime);
@@ -80,6 +89,7 @@ public:
     virtual bool onPointerUp(const Point& localPoint);
     virtual void onPointerEnter();
     virtual void onPointerLeave();
+    virtual bool onMouseWheel(float delta, const Point& localPoint);
     virtual void onFocusChanged(bool focused);
     virtual bool onAction(NavDirection dir);
 
@@ -94,6 +104,7 @@ protected:
 
     Rect m_bounds{};
     Dimensions m_desiredSize{};
+    LayoutProps m_layout{};
 
     bool m_visible{ true };
     bool m_enabled{ true };

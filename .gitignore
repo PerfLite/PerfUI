@@ -3,6 +3,7 @@ build/
 bin/
 out/
 .cache/
+.xmake/
 
 # Visual Studio / IDE
 .vs/

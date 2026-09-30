@@ -3,6 +3,7 @@
 #include <backends/imgui_impl_win32.h>
 #include <backends/imgui_impl_dx11.h>
 #include "InputHook.h"
+#include "PerfUI/JournalWindow.h"
 
 namespace PerfUI::Skyrim {
 
@@ -188,8 +189,8 @@ void D3D11Hook::InitializeImGui(IDXGISwapChain* pSwapChain) {
     m_uiContext = std::make_unique<PerfUI::UIContext>();
     m_renderBackend = std::make_unique<PerfUI::ImGuiRenderBackend>();
 
-    // Add in-game demo card
-    m_uiContext->root()->add<SkyrimDemoCard>();
+    // Add retained-mode Nordic Journal Window
+    m_uiContext->root()->add<PerfUI::JournalWindow>();
 
     m_lastFrameTime = std::chrono::high_resolution_clock::now();
     m_imguiInitialized.store(true);
@@ -263,6 +264,9 @@ void D3D11Hook::RenderFrame() {
             break;
         case InputHook::QueuedInput::Type::MouseUp:
             m_uiContext->onMouseUp(ev.button, { ev.x, ev.y });
+            break;
+        case InputHook::QueuedInput::Type::MouseWheel:
+            m_uiContext->onMouseWheel(ev.wheelDelta, { ev.x, ev.y });
             break;
         }
     }

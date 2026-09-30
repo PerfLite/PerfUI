@@ -109,11 +109,18 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
             hook.PushInput({ QueuedInput::Type::MouseUp, 0, x, y });
             return 0;
         }
+        case WM_MOUSEWHEEL: {
+            short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+            float delta = static_cast<float>(zDelta) / static_cast<float>(WHEEL_DELTA);
+            POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            ::ScreenToClient(hWnd, &pt);
+            hook.PushInput({ QueuedInput::Type::MouseWheel, 0, static_cast<float>(pt.x), static_cast<float>(pt.y), delta });
+            return 0;
+        }
         case WM_RBUTTONDOWN:
         case WM_RBUTTONUP:
         case WM_MBUTTONDOWN:
         case WM_MBUTTONUP:
-        case WM_MOUSEWHEEL:
             return 0; // Swallow from Skyrim
         }
     }

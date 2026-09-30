@@ -22,6 +22,8 @@ target("PerfUI")
 
     add_files(
         "src/core/*.cpp",
+        "src/layout/*.cpp",
+        "src/widgets/*.cpp",
         "src/backends/imgui/*.cpp",
         "src/skyrim/*.cpp",
         "third_party/imgui/imgui.cpp",

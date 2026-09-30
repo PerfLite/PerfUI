@@ -12,11 +12,13 @@ public:
         enum class Type {
             MouseMove,
             MouseDown,
-            MouseUp
+            MouseUp,
+            MouseWheel
         } type;
         int button{ 0 };
         float x{ 0.0f };
         float y{ 0.0f };
+        float wheelDelta{ 0.0f };
     };
 
     static InputHook& GetSingleton();

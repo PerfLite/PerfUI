@@ -153,8 +153,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     g_uiContext = std::make_unique<PerfUI::UIContext>();
     g_renderBackend = std::make_unique<PerfUI::ImGuiRenderBackend>();
 
-    // Add our demo card to the UIContext root
-    g_uiContext->root()->add<DemoPanel>();
+    // Add our Nordic Quest Journal window to the UIContext root
+    g_uiContext->root()->add<PerfUI::JournalWindow>();
 
     auto lastTime = std::chrono::high_resolution_clock::now();
 
@@ -303,6 +303,14 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             float x = static_cast<float>(LOWORD(lParam));
             float y = static_cast<float>(HIWORD(lParam));
             g_uiContext->onMouseUp(0, { x, y });
+            break;
+        }
+        case WM_MOUSEWHEEL: {
+            short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+            float delta = static_cast<float>(zDelta) / static_cast<float>(WHEEL_DELTA);
+            POINT pt{ LOWORD(lParam), HIWORD(lParam) };
+            ::ScreenToClient(hWnd, &pt);
+            g_uiContext->onMouseWheel(delta, { static_cast<float>(pt.x), static_cast<float>(pt.y) });
             break;
         }
         case WM_KEYDOWN: {

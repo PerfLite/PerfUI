@@ -1,5 +1,6 @@
 #include "PerfUI/UIElement.h"
 #include "PerfUI/UIContext.h"
+#include "PerfUI/LayoutEngine.h"
 #include <atomic>
 #include <algorithm>
 
@@ -90,23 +91,11 @@ void UIElement::update(float deltaTime) {
 }
 
 void UIElement::measure(Dimensions availableSize) {
-    m_desiredSize = availableSize;
-    for (auto& child : m_children) {
-        if (child && child->isVisible()) {
-            child->measure(availableSize);
-        }
-    }
+    LayoutEngine::Measure(this, availableSize);
 }
 
 void UIElement::arrange(const Rect& finalRect) {
-    m_bounds = finalRect;
-    m_layoutDirty = false;
-
-    for (auto& child : m_children) {
-        if (child && child->isVisible()) {
-            child->arrange(finalRect);
-        }
-    }
+    LayoutEngine::Arrange(this, finalRect);
 }
 
 void UIElement::render(UIRenderBackend& backend) {
@@ -153,6 +142,12 @@ void UIElement::onPointerEnter() {
 void UIElement::onPointerLeave() {
     m_hovered = false;
     m_pressed = false;
+}
+
+bool UIElement::onMouseWheel(float delta, const Point& localPoint) {
+    (void)delta;
+    (void)localPoint;
+    return false;
 }
 
 void UIElement::onFocusChanged(bool focused) {
