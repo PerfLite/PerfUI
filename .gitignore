@@ -1,0 +1,22 @@
+# Build directories
+build/
+bin/
+out/
+.cache/
+
+# Visual Studio / IDE
+.vs/
+*.user
+*.suo
+*.VC.db
+*.opendb
+.idea/
+.vscode/
+
+# CMake artifacts
+CMakeSettings.json
+CMakeUserPresets.json
+
+# Crash dumps and logs
+*.log
+*.dmp

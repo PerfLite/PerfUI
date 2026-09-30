@@ -1,0 +1,157 @@
+# PerfUI Development Roadmap
+
+This roadmap defines the step-by-step development process of **PerfUI**. Every phase must culminate in a working, verifiable state before proceeding to the next.
+
+---
+
+## Phase Overview
+
+```text
+Phase 0  ──► Architecture & Research (Clean foundations, documents, CMake structure)
+Phase 1  ──► Minimal SKSE + ImGui D3D11 Hook (First stable in-game window & hotkey)
+Phase 2  ──► Backend Abstraction (UIRenderBackend decoupling)
+Phase 3  ──► Retained UI Tree (UIContext, Element, Window, Lifecycle)
+Phase 4  ──► Layout Engine (Flex/Stack Box Model, Auto-sizing, Scroll)
+Phase 5  ──► Core Widgets (Panel, Text, Button, ScrollView, etc.)
+Phase 6  ──► Styling & Themes (States, Brushes, Border, Fonts, Default Theme)
+Phase 7  ──► Input & Navigation (Gamepad-First 2D Focus Graph, Actions)
+Phase 8  ──► Animation System (Timelines, Tweens, Easing curves)
+Phase 9  ──► Rendering Improvements (Shadows, Rounded corners, Masks, Icons)
+Phase 10 ──► Skyrim Integration (SKSE/CommonLibSSE Quest & Event APIs)
+Phase 11 ──► Journal Prototype (The First Big Test)
+Phase 12 ──► Stress & Performance Testing (100+ widgets, Alt-Tab, Memory leaks)
+Phase 13 ──► Main Menu Prototype
+Phase 14 ──► Developer API & Documentation
+Phase 15 ──► Backend Independence Test (Mock/Second Backend)
+Phase 16 ──► PerfUI SDK Packaging
+Phase 17 ──► Advanced Features (Live Reload, In-game UI Inspector, Profiler)
+```
+
+---
+
+## Phase Details & Exit Criteria
+
+### Phase 0: Research & Architecture (CURRENT)
+- [x] Project directory layout (`include/PerfUI`, `src/core`, `src/backends`, etc.).
+- [x] Version control initialized (`.git`, `.gitignore`).
+- [x] Move ImGui to `third_party/imgui/`.
+- [x] Document core architecture (`ARCHITECTURE.md`).
+- [x] Document roadmap and milestones (`ROADMAP.md`).
+- [x] Document design system and API ergonomics (`DESIGN.md`).
+- [ ] Configure root `CMakeLists.txt` and standalone sandbox project.
+*Exit Criteria:* All design specs completed; CMake configures cleanly for desktop sandbox.
+
+### Phase 1: Minimal SKSE + ImGui Prototype
+- Setup CommonLibSSE-NG dependency in CMake.
+- Implement DXGI Present hook for Skyrim D3D11.
+- State preservation: save and restore DirectX 11 pipeline state before/after rendering.
+- Hotkey toggle (e.g. `F11` or `Insert`) to open/close a test window.
+- Basic input capture so the game camera doesn't rotate while mouse is moving over the UI.
+*Exit Criteria:* Pressing hotkey in Skyrim displays a test window without crashes, works on Alt+Tab, and cleanly shuts down on game exit.
+
+### Phase 2: Backend Abstraction
+- Define pure abstract interfaces: `UIRenderBackend` and `UIInputBackend`.
+- Implement `ImGuiRenderBackend` in `src/backends/imgui/` using `ImDrawList`.
+- Remove all `<imgui.h>` includes from Core headers and public includes.
+- Validate that Core compiles with zero awareness of ImGui.
+*Exit Criteria:* Core contains 0 ImGui references; the test window renders identically via `UIRenderBackend`.
+
+### Phase 3: Retained UI Tree
+- Implement `UIContext`, `UIElement`, `Container`, `UIWindow`.
+- Parent/child lifecycle management (`std::unique_ptr` ownership, observer handles).
+- Dirty flags system (`LayoutDirty`, `RenderDirty`, `StyleDirty`).
+- Tree traversal (measure, arrange, hit test, render).
+*Exit Criteria:* UI is constructed via retained hierarchy (`window->add<Container>()`), not immediate frame-by-frame procedural calls.
+
+### Phase 4: Layout Engine
+- Box model: `Rect`, `Point`, `Size`, `Padding`, `Margin`.
+- Directional layout: `Horizontal` and `Vertical` stacks.
+- Sizing modes: `Fixed`, `Auto` (content-driven), `Percent`, `Flex`.
+- Gap spacing, alignment (`Start`, `Center`, `End`, `Stretch`).
+- Clipping rects and scroll view offsets.
+*Exit Criteria:* Nested containers arrange their children automatically without manual `SetCursorPos` coordinates.
+
+### Phase 5: Core Widgets
+- Implement foundation components:
+  - `Panel` (Background container)
+  - `Text` (Typography with wrap and auto-size)
+  - `Image` (Texture rendering with aspect ratio)
+  - `Button` & `IconButton` (Interactive with click callback)
+  - `List` & `ScrollView` (Scrollable item containers)
+  - `Checkbox`, `Slider`, `ProgressBar`
+- Modder-extensible widget base class (`class MyWidget : public PerfUI::Widget`).
+*Exit Criteria:* Core widgets can be combined in test sandbox to construct rich static layouts.
+
+### Phase 6: Styling & Themes
+- Visual properties: colors, borders, border radii, shadows, fonts.
+- State-driven styling: `Normal`, `Hovered`, `Pressed`, `Focused`, `Disabled`.
+- Theme manager with `PerfUIDefault` theme.
+*Exit Criteria:* Changing theme or widget state automatically updates visuals smoothly without modifying widget code.
+
+### Phase 7: Input & Controller Navigation
+- Gamepad-first focus manager.
+- 2D spatial navigation algorithm (nearest neighbor in Up/Down/Left/Right directions).
+- Action bindings for XInput: D-Pad, Left Stick, `A` (Submit), `B` (Cancel), Bumpers (Tabs).
+- Keyboard parity (Arrow keys, Enter, Esc, Tab).
+- Modal focus isolation.
+*Exit Criteria:* Full navigation through complex forms and menus solely using an Xbox/PlayStation controller.
+
+### Phase 8: Animation System
+- Property tweener: numeric interpolation over time.
+- Easing library (Linear, OutCubic, InOutQuad, OutBack, OutBounce, etc.).
+- Animated transitions for widget states (e.g. hover glow, panel slide-in, fade-in).
+*Exit Criteria:* Smooth opening and closing animations of windows and buttons driven by `deltaTime`.
+
+### Phase 9: Rendering Refinements
+- High-quality rounded corners and multi-stop gradients.
+- Box shadows with soft blur.
+- Font atlas integration and glyph caching.
+- Vector icons / SVG or icon font support.
+*Exit Criteria:* UI visuals match modern AAA game standards.
+
+### Phase 10: Skyrim Integration Layer
+- Pure C++ wrapper layer `PerfUI::Skyrim` isolated from UI Core.
+- Hook into Skyrim menu lifecycle (`MenuOpen`, `MenuClose`).
+- Game event listeners (`QuestStatusChanged`, etc.).
+- Safe game-thread to render-thread data marshalling.
+- Quest API (`Skyrim::Quests::active()`, objectives, stages).
+*Exit Criteria:* Reading Skyrim quests from the engine into plain C++ data structures safely on the render thread.
+
+### Phase 11: The Journal Prototype
+- Full implementation of Skyrim Quest Journal:
+  - Left sidebar: Categories (Main, Side, Misc, Completed).
+  - Center: Quest list with selection state and controller scroll.
+  - Right: Quest details, stage summary, animated objective checkboxes.
+- 100% built on PerfUI public API (zero direct ImGui or Skyrim engine calls in Journal code).
+*Exit Criteria:* Fully functional, beautiful, controller-navigable Journal in Skyrim.
+
+### Phase 12: Stress & Performance Testing
+- 100+ active widgets in view.
+- Frame time profiling (< 0.2ms target for UI update and render).
+- Stress test: rapid window toggle, 1000 alt-tabs, resolution switches, memory leak check.
+*Exit Criteria:* Zero memory leaks, zero D3D11 device loss crashes, zero frame drops.
+
+### Phase 13: Main Menu Integration
+- Full-screen Main Menu prototype (Continue, New Game, Load, Settings, Quit).
+- Integration with Skyrim's start-up lifecycle.
+*Exit Criteria:* PerfUI successfully powers full-screen primary game menus.
+
+### Phase 14: Developer API & Examples
+- Clear modder documentation and tutorials.
+- Small minimal example projects in `examples/`.
+- Developer quick-start guide.
+*Exit Criteria:* A third-party modder can create a custom window in under 30 lines of code.
+
+### Phase 15: Backend Independence Test
+- Create a mock or secondary rendering backend (e.g. headless recorder or software renderer).
+- Verify that Core builds and passes all tests completely detached from ImGui.
+*Exit Criteria:* Proof of complete backend neutrality.
+
+### Phase 16: PerfUI SDK Packaging
+- Modular distribution: `PerfUI_Core.lib`, `PerfUI_Backend_ImGui.lib`, `PerfUI_Skyrim.lib`, public headers.
+*Exit Criteria:* Ready-to-consume SDK release for the Skyrim modding community.
+
+### Phase 17: Long-Term Innovations
+- In-game UI Inspector (live element picker and property editor).
+- Live reload of styles and layouts.
+- Real-time in-game UI profiler (draw calls, layout time, memory).
