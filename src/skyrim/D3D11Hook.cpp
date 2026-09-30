@@ -150,6 +150,15 @@ void D3D11Hook::ToggleUI() {
 void D3D11Hook::SetUIVisible(bool visible) {
     m_uiVisible.store(visible);
     InputHook::GetSingleton().SetCaptureInput(visible);
+
+    SKSE::GetTaskInterface()->AddTask([visible]() {
+        auto* controlMap = RE::ControlMap::GetSingleton();
+        if (controlMap) {
+            using UEFlag = RE::UserEvents::USER_EVENT_FLAG;
+            controlMap->ToggleControls(UEFlag::kAll, !visible);
+        }
+    });
+
     SKSE::log::info("PerfUI visibility set to: {}", visible ? "Visible" : "Hidden");
 }
 
@@ -241,6 +250,22 @@ void D3D11Hook::RenderFrame() {
     float width = static_cast<float>(clientRect.right - clientRect.left);
     float height = static_cast<float>(clientRect.bottom - clientRect.top);
     m_uiContext->setViewportSize({ width, height });
+
+    // Drain queued input from message thread and dispatch safely on Render thread
+    auto inputEvents = InputHook::GetSingleton().DrainInputQueue();
+    for (const auto& ev : inputEvents) {
+        switch (ev.type) {
+        case InputHook::QueuedInput::Type::MouseMove:
+            m_uiContext->onMouseMove({ ev.x, ev.y });
+            break;
+        case InputHook::QueuedInput::Type::MouseDown:
+            m_uiContext->onMouseDown(ev.button, { ev.x, ev.y });
+            break;
+        case InputHook::QueuedInput::Type::MouseUp:
+            m_uiContext->onMouseUp(ev.button, { ev.x, ev.y });
+            break;
+        }
+    }
 
     m_uiContext->update(dt);
     m_uiContext->render(*m_renderBackend);

@@ -1,5 +1,6 @@
 #include "InputHook.h"
 #include "D3D11Hook.h"
+#include <windowsx.h>
 #include <imgui.h>
 #include <backends/imgui_impl_win32.h>
 
@@ -33,6 +34,8 @@ bool InputHook::Install(HWND hWnd) {
 void InputHook::Uninstall() {
     if (!m_installed.load()) return;
 
+    SetCaptureInput(false);
+
     if (m_hWnd && m_originalWndProc) {
         ::SetWindowLongPtrW(m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(m_originalWndProc));
         m_originalWndProc = nullptr;
@@ -48,8 +51,25 @@ void InputHook::Uninstall() {
 
 void InputHook::SetCaptureInput(bool capture) {
     m_captureInput.store(capture);
-    // Show cursor when UI is captured
-    ::ShowCursor(capture);
+
+    // Properly adjust Windows cursor display count
+    if (capture) {
+        while (::ShowCursor(TRUE) < 0);
+    } else {
+        while (::ShowCursor(FALSE) >= 0);
+    }
+}
+
+void InputHook::PushInput(QueuedInput event) {
+    std::lock_guard<std::mutex> lock(m_queueLock);
+    m_inputQueue.push_back(event);
+}
+
+std::vector<InputHook::QueuedInput> InputHook::DrainInputQueue() {
+    std::lock_guard<std::mutex> lock(m_queueLock);
+    std::vector<QueuedInput> result;
+    result.swap(m_inputQueue);
+    return result;
 }
 
 LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -70,34 +90,31 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
     if (hook.m_captureInput.load()) {
         ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
 
-        auto* uiContext = D3D11Hook::GetSingleton().GetContext();
-        if (uiContext) {
-            switch (msg) {
-            case WM_MOUSEMOVE: {
-                float x = static_cast<float>(LOWORD(lParam));
-                float y = static_cast<float>(HIWORD(lParam));
-                uiContext->onMouseMove({ x, y });
-                return 0; // Swallow from Skyrim camera
-            }
-            case WM_LBUTTONDOWN: {
-                float x = static_cast<float>(LOWORD(lParam));
-                float y = static_cast<float>(HIWORD(lParam));
-                uiContext->onMouseDown(0, { x, y });
-                return 0; // Swallow
-            }
-            case WM_LBUTTONUP: {
-                float x = static_cast<float>(LOWORD(lParam));
-                float y = static_cast<float>(HIWORD(lParam));
-                uiContext->onMouseUp(0, { x, y });
-                return 0; // Swallow
-            }
-            case WM_RBUTTONDOWN:
-            case WM_RBUTTONUP:
-            case WM_MBUTTONDOWN:
-            case WM_MBUTTONUP:
-            case WM_MOUSEWHEEL:
-                return 0; // Swallow all mouse events while UI is active
-            }
+        switch (msg) {
+        case WM_MOUSEMOVE: {
+            float x = static_cast<float>(GET_X_LPARAM(lParam));
+            float y = static_cast<float>(GET_Y_LPARAM(lParam));
+            hook.PushInput({ QueuedInput::Type::MouseMove, 0, x, y });
+            return 0;
+        }
+        case WM_LBUTTONDOWN: {
+            float x = static_cast<float>(GET_X_LPARAM(lParam));
+            float y = static_cast<float>(GET_Y_LPARAM(lParam));
+            hook.PushInput({ QueuedInput::Type::MouseDown, 0, x, y });
+            return 0;
+        }
+        case WM_LBUTTONUP: {
+            float x = static_cast<float>(GET_X_LPARAM(lParam));
+            float y = static_cast<float>(GET_Y_LPARAM(lParam));
+            hook.PushInput({ QueuedInput::Type::MouseUp, 0, x, y });
+            return 0;
+        }
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+        case WM_MOUSEWHEEL:
+            return 0; // Swallow from Skyrim
         }
     }
 
@@ -108,12 +125,9 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
     RE::InputEvent* const* a_event,
     RE::BSTEventSource<RE::InputEvent*>*
 ) {
-    if (!a_event || !m_captureInput.load()) {
-        return RE::BSEventNotifyControl::kContinue;
-    }
-
-    // While UI is open, block game controls (jumping, shouting, attacking)
-    return RE::BSEventNotifyControl::kStop;
+    (void)a_event;
+    // Always return kContinue to avoid breaking Skyrim's internal input event pipeline
+    return RE::BSEventNotifyControl::kContinue;
 }
 
 } // namespace PerfUI::Skyrim

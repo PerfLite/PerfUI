@@ -1,11 +1,24 @@
 #pragma once
 
 #include "Pch.h"
+#include <mutex>
+#include <vector>
 
 namespace PerfUI::Skyrim {
 
 class InputHook : public RE::BSTEventSink<RE::InputEvent*> {
 public:
+    struct QueuedInput {
+        enum class Type {
+            MouseMove,
+            MouseDown,
+            MouseUp
+        } type;
+        int button{ 0 };
+        float x{ 0.0f };
+        float y{ 0.0f };
+    };
+
     static InputHook& GetSingleton();
 
     bool Install(HWND hWnd);
@@ -13,6 +26,9 @@ public:
 
     void SetCaptureInput(bool capture);
     bool IsCaptureInput() const { return m_captureInput.load(); }
+
+    void PushInput(QueuedInput event);
+    std::vector<QueuedInput> DrainInputQueue();
 
     RE::BSEventNotifyControl ProcessEvent(
         RE::InputEvent* const* a_event,
@@ -30,7 +46,9 @@ private:
     std::atomic<bool> m_installed{ false };
     std::atomic<bool> m_captureInput{ false };
 
-    // F11 = 0x7A, Escape = 0x1B
+    std::mutex m_queueLock;
+    std::vector<QueuedInput> m_inputQueue;
+
     static constexpr uint32_t kDefaultToggleKey = VK_F11;
 };
 

@@ -5,6 +5,10 @@
         "xmake build -y",
         "xmake build -y",
         "xmake build -y",
+        "xmake build -y",
+        "xmake build -y",
+        "xmake build -y",
+        "xmake build -y",
         "xmake build -y"
     }
 }

@@ -36,6 +36,16 @@ void OnMessage(SKSE::MessagingInterface::Message* a_msg) {
                 PerfUI::Skyrim::InputHook::GetSingleton().Install(hWnd);
             }
             SKSE::log::info("PerfUI initialized successfully! Press F11 in game to toggle menu.");
+
+            auto* dataHandler = RE::TESDataHandler::GetSingleton();
+            if (dataHandler) {
+                const auto* lal = dataHandler->LookupLoadedModByName("Alternate Start - Live Another Life.esp");
+                if (lal) {
+                    SKSE::log::info(">>> Alternate Start - Live Another Life.esp IS LOADED! Index: {}", lal->compileIndex);
+                } else {
+                    SKSE::log::warn(">>> Alternate Start - Live Another Life.esp is NOT LOADED by Skyrim!");
+                }
+            }
         } else {
             SKSE::log::error("Failed to install D3D11 hook");
         }
