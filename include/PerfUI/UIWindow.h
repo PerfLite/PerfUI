@@ -15,7 +15,7 @@ public:
         : Panel(std::move(name))
         , m_title(std::move(title))
     {
-        setLayoutDirection(FlexDirection::Column);
+        layout().direction(LayoutDirection::Vertical);
         cornerRadius(6.0f);
         backgroundColor(Color(18, 22, 28, 245));
         borderColor(Color(140, 160, 190, 200));

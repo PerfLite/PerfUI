@@ -9,9 +9,10 @@ set_warnings("allextra")
 add_rules("mode.release", "mode.debug")
 add_rules("plugin.vsxmake.autoupdate")
 
-add_requires("commonlibsse-ng")
+add_requires("commonlibsse-ng", {optional = true})
 
 target("PerfUI")
+    set_default(false)
     set_kind("shared")
     add_packages("commonlibsse-ng")
 
