@@ -29,3 +29,6 @@ PerfUI_Config.json
 # Temporary files
 *.tmp
 *.bak
+
+# Local deployment scripts
+deploy.ps1
