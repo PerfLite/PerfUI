@@ -129,3 +129,20 @@ target_link_libraries(PerfUI_Test_Independence PRIVATE
     PerfUI_Core
 )
 
+# ---------------------------------------------------------------------------
+# 5. PerfUI_Test_Layout (Layout Engine, Flexbox & Focus Test Suite + Bench)
+# ---------------------------------------------------------------------------
+add_executable(PerfUI_Test_Layout
+    tests/LayoutTest.cpp
+    src/backends/mock/MockRenderBackend.h
+)
+
+target_include_directories(PerfUI_Test_Layout PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/mock
+)
+
+target_link_libraries(PerfUI_Test_Layout PRIVATE
+    PerfUI_Core
+)
+
+

@@ -36,3 +36,28 @@ target("PerfUI")
 
     add_syslinks("d3d11", "dxgi", "d3dcompiler", "user32", "gdi32")
     set_pcxxheader("src/skyrim/Pch.h")
+
+target("PerfUI_Test_Independence")
+    set_kind("binary")
+    set_languages("c++20")
+    add_syslinks("user32")
+    add_includedirs("include", "src/backends/mock", "src")
+    add_files(
+        "src/core/*.cpp",
+        "src/layout/*.cpp",
+        "src/widgets/*.cpp",
+        "tests/BackendIndependenceTest.cpp"
+    )
+
+target("PerfUI_Test_Layout")
+    set_kind("binary")
+    set_languages("c++20")
+    add_syslinks("user32")
+    add_includedirs("include", "src/backends/mock", "src")
+    add_files(
+        "src/core/*.cpp",
+        "src/layout/*.cpp",
+        "src/widgets/*.cpp",
+        "tests/LayoutTest.cpp"
+    )
+

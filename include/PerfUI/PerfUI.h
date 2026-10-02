@@ -26,3 +26,5 @@
 #include "ModalDialog.h"
 #include "JournalWindow.h"
 #include "MainMenuWindow.h"
+#include "UIWindow.h"
+

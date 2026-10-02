@@ -422,6 +422,10 @@ void UIContext::closeContextMenu() {
 }
 
 void UIContext::setFocus(UIElement* element) {
+    if (element && !element->isFocusable()) {
+        element = nullptr;
+    }
+
     if (m_focusedElement == element) return;
 
     if (m_focusedElement) {

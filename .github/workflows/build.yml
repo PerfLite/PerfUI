@@ -1,0 +1,66 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Build & Test (Windows MSVC)
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up MSVC environment
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Set up XMake
+      uses: xmake-io/github-action-setup-xmake@v1
+      with:
+        xmake-version: latest
+
+    - name: Configure CMake
+      run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build Core Tests with CMake
+      run: cmake --build build --config Release --target PerfUI_Test_Independence PerfUI_Test_Layout
+
+    - name: Run Backend Independence Unit Tests
+      run: .\build\Release\PerfUI_Test_Independence.exe
+
+    - name: Run Layout & Performance Benchmark Suite
+      run: .\build\Release\PerfUI_Test_Layout.exe
+
+    - name: Build Standalone Tests with XMake
+      run: |
+        xmake f -m release
+        xmake build PerfUI_Test_Independence
+        xmake build PerfUI_Test_Layout
+        xmake run PerfUI_Test_Independence
+        xmake run PerfUI_Test_Layout
+
+    - name: Prepare Release Artifacts
+      if: startsWith(github.ref, 'refs/tags/v')
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Path "artifact/include" -Force
+        Copy-Item -Recurse -Path "include/*" -Destination "artifact/include"
+        Copy-Item -Path "LICENSE" -Destination "artifact/"
+        Copy-Item -Path "README.md" -Destination "artifact/"
+        Copy-Item -Path "build/Release/PerfUI_Core.lib" -Destination "artifact/"
+        Compress-Archive -Path "artifact/*" -DestinationPath "PerfUI-${{ github.ref_name }}.zip"
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: PerfUI-${{ github.ref_name }}.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
