@@ -1,5 +1,8 @@
 #include "PerfUI/UIContext.h"
+#include "PerfUI/ModalDialog.h"
+#include "PerfUI/ComboBox.h"
 #include <algorithm>
+#include <chrono>
 
 namespace PerfUI {
 
@@ -29,14 +32,65 @@ void UIContext::update(float deltaTime) {
     if (m_root) {
         m_root->update(deltaTime);
     }
+
+    // Modal dialog lifecycle
+    if (m_activeModal) {
+        m_activeModal->update(deltaTime);
+        if (!m_activeModal->isOpen() && m_activeModal->alpha() <= 0.02f) {
+            m_activeModal.reset();
+        }
+    }
+
+    // Toast notifications lifecycle
+    m_toastManager.update(deltaTime);
+
+    // Context menu lifecycle
+    m_contextMenu.update(deltaTime);
+
+    // Tooltip timer logic
+    if (m_hoveredElement && !m_hoveredElement->tooltip().empty()) {
+        if (m_hoveredElement->tooltip() != m_lastTooltipText) {
+            m_lastTooltipText = m_hoveredElement->tooltip();
+            m_tooltipHoverTimer = 0.0f;
+            m_tooltipAlpha.snapTo(0.0f);
+        }
+        m_tooltipHoverTimer += deltaTime;
+        if (m_tooltipHoverTimer >= 0.35f) {
+            m_tooltipAlpha.setTarget(1.0f);
+        }
+    } else {
+        m_tooltipHoverTimer = 0.0f;
+        m_tooltipAlpha.setTarget(0.0f);
+    }
+    m_tooltipAlpha.update(deltaTime);
+}
+
+static uint32_t CountElementsRecursive(const UIElement* elem) {
+    if (!elem) return 0;
+    uint32_t count = 1;
+    for (const auto& child : elem->children()) {
+        count += CountElementsRecursive(child.get());
+    }
+    return count;
 }
 
 void UIContext::performLayout() {
     if (!m_root) return;
 
+    auto start = std::chrono::high_resolution_clock::now();
     m_root->measure(m_viewportSize);
     m_root->arrange(Rect{ 0.0f, 0.0f, m_viewportSize.width, m_viewportSize.height });
+
+    if (m_activeModal) {
+        m_activeModal->measure(m_viewportSize);
+        m_activeModal->arrange(Rect{ 0.0f, 0.0f, m_viewportSize.width, m_viewportSize.height });
+    }
+
     m_layoutDirty = false;
+    auto end = std::chrono::high_resolution_clock::now();
+
+    m_metrics.layoutTimeUs = std::chrono::duration<float, std::micro>(end - start).count();
+    m_metrics.elementCount = CountElementsRecursive(m_root.get());
 }
 
 void UIContext::render(UIRenderBackend& backend) {
@@ -46,18 +100,104 @@ void UIContext::render(UIRenderBackend& backend) {
         performLayout();
     }
 
+    auto start = std::chrono::high_resolution_clock::now();
     backend.beginFrame();
     if (m_root && m_root->isVisible()) {
         m_root->render(backend);
     }
+    renderOverlay(backend);
     backend.endFrame();
+    auto end = std::chrono::high_resolution_clock::now();
+
+    m_metrics.renderTimeUs = std::chrono::duration<float, std::micro>(end - start).count();
+}
+
+void UIContext::renderOverlay(UIRenderBackend& backend) {
+    // 1. Custom overlay callback (popups, dropdowns)
+    if (m_overlayRenderCallback) {
+        m_overlayRenderCallback(backend);
+    }
+
+    // 2. Modal Dialog rendering
+    if (m_activeModal) {
+        m_activeModal->render(backend);
+    }
+
+    // 3. ComboBox dropdown overlay
+    if (m_activeComboBox && m_activeComboBox->isOpen()) {
+        m_activeComboBox->renderDropdownOverlay(backend);
+    }
+
+    // 4. Tooltip rendering
+    float alpha = m_tooltipAlpha.value();
+    if (alpha > 0.01f && !m_lastTooltipText.empty()) {
+        TextStyle textStyle;
+        textStyle.fontSize = 12.0f;
+        textStyle.color = Color(240, 246, 252, static_cast<uint8_t>(255.0f * alpha));
+
+        Dimensions textDim = backend.measureText(m_lastTooltipText, textStyle);
+        float padH = 12.0f;
+        float padV = 8.0f;
+        float cardW = textDim.width + padH * 2.0f;
+        float cardH = textDim.height + padV * 2.0f;
+
+        float posX = m_lastMousePos.x + 14.0f;
+        float posY = m_lastMousePos.y + 16.0f;
+
+        // Clamp to viewport
+        if (posX + cardW > m_viewportSize.width - 8.0f) {
+            posX = m_lastMousePos.x - cardW - 6.0f;
+        }
+        if (posY + cardH > m_viewportSize.height - 8.0f) {
+            posY = m_lastMousePos.y - cardH - 6.0f;
+        }
+        posX = (std::max)(8.0f, posX);
+        posY = (std::max)(8.0f, posY);
+
+        Rect cardRect{ posX, posY, cardW, cardH };
+
+        // Soft drop shadow
+        Color shadowColor = Color(0, 0, 0, static_cast<uint8_t>(180.0f * alpha));
+        backend.drawShadow(cardRect, 6.0f, shadowColor, 12.0f * alpha, { 0.0f, 4.0f });
+
+        // Background & subtle gold border
+        Color bg = Color(16, 21, 28, static_cast<uint8_t>(245.0f * alpha));
+        Color border = Color(212, 175, 55, static_cast<uint8_t>(210.0f * alpha));
+        backend.drawRoundedRect(cardRect, bg, 6.0f, border, 1.0f);
+
+        // Tooltip text
+        backend.drawText(m_lastTooltipText, Point{ posX + padH, posY + padV }, textStyle);
+    }
+
+    // 5. Toast notifications rendering
+    m_toastManager.render(backend, m_viewportSize);
+
+    // 6. Context Menu rendering (Phase 18)
+    if (m_contextMenu.isOpen()) {
+        m_contextMenu.render(backend, m_viewportSize);
+    }
 }
 
 void UIContext::onMouseMove(const Point& screenPos) {
     m_lastMousePos = screenPos;
-    if (!m_root) return;
 
-    UIElement* hovered = m_root->hitTest(screenPos);
+    if (m_contextMenu.isOpen()) {
+        m_contextMenu.onMouseMove(screenPos);
+    }
+
+    if (m_activeComboBox && m_activeComboBox->isOpen()) {
+        m_activeComboBox->onDropdownMouseMove(screenPos);
+    }
+
+    if (m_pressedElement) {
+        Point localPoint = screenPos - m_pressedElement->bounds().topLeft();
+        m_pressedElement->onPointerMove(localPoint);
+    }
+
+    UIElement* searchRoot = (m_activeModal && m_activeModal->isOpen()) ? m_activeModal.get() : m_root.get();
+    if (!searchRoot) return;
+
+    UIElement* hovered = searchRoot->hitTest(screenPos);
 
     if (hovered != m_hoveredElement) {
         if (m_hoveredElement) {
@@ -72,6 +212,58 @@ void UIContext::onMouseMove(const Point& screenPos) {
 
 void UIContext::onMouseDown(int button, const Point& screenPos) {
     m_lastMousePos = screenPos;
+
+    // 1. Context Menu has top priority
+    if (m_contextMenu.isOpen()) {
+        if (m_contextMenu.onPointerDown(screenPos)) {
+            return;
+        }
+    }
+
+    // 2. ComboBox dropdown popup has next priority
+    if (m_activeComboBox && m_activeComboBox->isOpen()) {
+        ComboBox* activeCombo = m_activeComboBox;
+        if (activeCombo->dropdownBounds().contains(screenPos)) {
+            activeCombo->onDropdownPointerDown(screenPos);
+            return;
+        } else if (activeCombo->bounds().contains(screenPos)) {
+            activeCombo->setOpen(false);
+            return;
+        } else {
+            // Click outside closes the dropdown and swallows the click
+            activeCombo->setOpen(false);
+            return;
+        }
+    }
+
+    // 3. Modal Dialog has next priority
+    if (m_activeModal && m_activeModal->isOpen()) {
+        if (button == 0) { // Left Mouse Button
+            UIElement* target = m_activeModal->hitTest(screenPos);
+            if (!target || target == m_activeModal.get()) {
+                m_activeModal->onPointerDown(screenPos);
+                return;
+            }
+
+            if (target != m_focusedElement) {
+                setFocus(target && target->isFocusable() ? target : nullptr);
+            }
+
+            m_pressedElement = nullptr;
+            UIElement* curr = target;
+            while (curr && curr != m_activeModal->parent()) {
+                Point localPoint = screenPos - curr->bounds().topLeft();
+                if (curr->onPointerDown(localPoint)) {
+                    m_pressedElement = curr;
+                    break;
+                }
+                curr = curr->parent();
+            }
+        }
+        return;
+    }
+
+    // 4. Main element hierarchy
     if (!m_root) return;
 
     UIElement* target = m_root->hitTest(screenPos);
@@ -81,10 +273,24 @@ void UIContext::onMouseDown(int button, const Point& screenPos) {
             setFocus(target && target->isFocusable() ? target : nullptr);
         }
 
-        m_pressedElement = target;
-        if (m_pressedElement) {
-            Point localPoint = screenPos - m_pressedElement->bounds().topLeft();
-            m_pressedElement->onPointerDown(localPoint);
+        m_pressedElement = nullptr;
+        UIElement* curr = target;
+        while (curr) {
+            Point localPoint = screenPos - curr->bounds().topLeft();
+            if (curr->onPointerDown(localPoint)) {
+                m_pressedElement = curr;
+                break;
+            }
+            curr = curr->parent();
+        }
+    } else if (button == 1) { // Right Mouse Button (Context Menu)
+        UIElement* curr = target;
+        while (curr) {
+            Point localPoint = screenPos - curr->bounds().topLeft();
+            if (curr->onContextMenu(localPoint)) {
+                break;
+            }
+            curr = curr->parent();
         }
     }
 }
@@ -100,9 +306,15 @@ void UIContext::onMouseUp(int button, const Point& screenPos) {
 
 void UIContext::onMouseWheel(float delta, const Point& screenPos) {
     m_lastMousePos = screenPos;
-    if (!m_root) return;
 
-    UIElement* target = m_root->hitTest(screenPos);
+    if (m_activeComboBox && m_activeComboBox->isOpen()) {
+        m_activeComboBox->setOpen(false);
+    }
+
+    UIElement* searchRoot = (m_activeModal && m_activeModal->isOpen()) ? m_activeModal.get() : m_root.get();
+    if (!searchRoot) return;
+
+    UIElement* target = searchRoot->hitTest(screenPos);
     for (UIElement* el = target; el != nullptr; el = el->parent()) {
         Point localPoint = screenPos - el->bounds().topLeft();
         if (el->onMouseWheel(delta, localPoint)) {
@@ -127,6 +339,88 @@ void UIContext::onCancel() {
     clearFocus();
 }
 
+void UIContext::onCharInput(uint32_t charCode) {
+    if (m_focusedElement) {
+        m_focusedElement->onCharInput(charCode);
+    }
+}
+
+void UIContext::onKeyDown(int keyCode) {
+    if (m_activeComboBox && m_activeComboBox->isOpen()) {
+        if (keyCode == 0x1B) { // VK_ESCAPE
+            m_activeComboBox->setOpen(false);
+            return;
+        }
+    }
+
+    if (m_activeModal && m_activeModal->isOpen()) {
+        if (m_activeModal->onKeyDown(keyCode)) {
+            return;
+        }
+    }
+
+    if (m_focusedElement) {
+        m_focusedElement->onKeyDown(keyCode);
+    }
+}
+
+void UIContext::setActiveComboBox(ComboBox* cb) {
+    if (m_activeComboBox && m_activeComboBox != cb) {
+        m_activeComboBox->setOpen(false);
+    }
+    m_activeComboBox = cb;
+}
+
+void UIContext::clearActiveComboBox(ComboBox* cb) {
+    if (!cb || m_activeComboBox == cb) {
+        m_activeComboBox = nullptr;
+    }
+}
+
+void UIContext::playSound(const std::string& soundId) {
+    if (m_soundCallback) {
+        m_soundCallback(soundId);
+    }
+}
+
+void UIContext::showToast(std::string title, std::string message, ToastType type, float duration) {
+    m_toastManager.show(std::move(title), std::move(message), type, duration);
+}
+
+void UIContext::showModal(std::shared_ptr<ModalDialog> modal) {
+    if (m_activeComboBox) {
+        m_activeComboBox->setOpen(false);
+    }
+    m_activeModal = std::move(modal);
+    if (m_activeModal) {
+        m_activeModal->setContext(this);
+        m_activeModal->measure(m_viewportSize);
+        m_activeModal->arrange(Rect{ 0.0f, 0.0f, m_viewportSize.width, m_viewportSize.height });
+        m_activeModal->open();
+        playSound("UIMenuOK");
+    }
+    requestLayout();
+}
+
+void UIContext::closeModal() {
+    if (m_activeModal) {
+        m_activeModal->close();
+        playSound("UIMenuCancel");
+    }
+}
+
+void UIContext::showContextMenu(const Point& screenPos, std::vector<ContextMenuItem> items) {
+    if (m_activeComboBox) {
+        m_activeComboBox->setOpen(false);
+    }
+    m_contextMenu.open(screenPos, std::move(items));
+    playSound("UIMenuBlade");
+}
+
+void UIContext::closeContextMenu() {
+    m_contextMenu.close();
+}
+
 void UIContext::setFocus(UIElement* element) {
     if (m_focusedElement == element) return;
 
@@ -143,6 +437,19 @@ void UIContext::setFocus(UIElement* element) {
 
 void UIContext::clearFocus() {
     setFocus(nullptr);
+}
+
+void UIContext::notifyElementDestroyed(UIElement* element) {
+    if (!element) return;
+    if (m_hoveredElement == element) {
+        m_hoveredElement = nullptr;
+    }
+    if (m_pressedElement == element) {
+        m_pressedElement = nullptr;
+    }
+    if (m_focusedElement == element) {
+        m_focusedElement = nullptr;
+    }
 }
 
 } // namespace PerfUI

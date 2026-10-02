@@ -2,6 +2,7 @@
 
 #include "UIElement.h"
 #include "Types.h"
+#include "Animation.h"
 #include "UIRenderBackend.h"
 #include <string>
 #include <string_view>
@@ -54,6 +55,8 @@ public:
         return *this;
     }
 
+
+    void update(float deltaTime) override;
     void measure(Dimensions availableSize) override;
     void render(UIRenderBackend& backend) override;
 
@@ -64,6 +67,7 @@ public:
 private:
     std::string m_label;
     std::function<void()> m_onClick;
+    bool m_triggerOnDown{ true };
 
     TextStyle m_textStyle{ Color::TextPrimary(), 14.0f, false, false };
     float m_cornerRadius{ 6.0f };
@@ -82,6 +86,7 @@ private:
     Color m_pressTextColor{ Color::White() };
 
     Color m_focusBorder{ Color::BorderFocus() };
+    AnimatedFloat m_hoverAnim{ 0.0f, 14.0f };
 };
 
 } // namespace PerfUI

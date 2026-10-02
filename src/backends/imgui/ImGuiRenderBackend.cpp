@@ -107,12 +107,14 @@ void ImGuiRenderBackend::initFonts() {
     cfg.OversampleV = 2;
     cfg.PixelSnapH = true;
 
-    m_fontSmall   = io.Fonts->AddFontFromFileTTF(regularPath, 13.0f, &cfg);
-    m_fontRegular = io.Fonts->AddFontFromFileTTF(regularPath, 16.0f, &cfg);
-    m_fontMedium  = io.Fonts->AddFontFromFileTTF(regularPath, 19.0f, &cfg);
-    m_fontBold    = io.Fonts->AddFontFromFileTTF(boldPath,    17.0f, &cfg);
-    m_fontTitle   = io.Fonts->AddFontFromFileTTF(boldPath,    22.0f, &cfg);
-    m_fontHeader  = io.Fonts->AddFontFromFileTTF(boldPath,    28.0f, &cfg);
+    const ImWchar* glyphRanges = io.Fonts->GetGlyphRangesCyrillic();
+
+    m_fontSmall   = io.Fonts->AddFontFromFileTTF(regularPath, 13.0f, &cfg, glyphRanges);
+    m_fontRegular = io.Fonts->AddFontFromFileTTF(regularPath, 16.0f, &cfg, glyphRanges);
+    m_fontMedium  = io.Fonts->AddFontFromFileTTF(regularPath, 19.0f, &cfg, glyphRanges);
+    m_fontBold    = io.Fonts->AddFontFromFileTTF(boldPath,    17.0f, &cfg, glyphRanges);
+    m_fontTitle   = io.Fonts->AddFontFromFileTTF(boldPath,    22.0f, &cfg, glyphRanges);
+    m_fontHeader  = io.Fonts->AddFontFromFileTTF(boldPath,    28.0f, &cfg, glyphRanges);
 
     if (!m_fontRegular) {
         io.Fonts->AddFontDefault();

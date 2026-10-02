@@ -108,6 +108,16 @@ struct Color {
     static constexpr Color SlateDark()   { return BackgroundBase(); }
     static constexpr Color SlateCard()   { return BackgroundElevated(); }
 
+    static constexpr Color Lerp(const Color& c1, const Color& c2, float t) {
+        float f = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+        return {
+            static_cast<uint8_t>(static_cast<float>(c1.r) + static_cast<float>(c2.r - c1.r) * f),
+            static_cast<uint8_t>(static_cast<float>(c1.g) + static_cast<float>(c2.g - c1.g) * f),
+            static_cast<uint8_t>(static_cast<float>(c1.b) + static_cast<float>(c2.b - c1.b) * f),
+            static_cast<uint8_t>(static_cast<float>(c1.a) + static_cast<float>(c2.a - c1.a) * f)
+        };
+    }
+
     constexpr uint32_t toRGBA32() const {
         return (static_cast<uint32_t>(a) << 24) |
                (static_cast<uint32_t>(b) << 16) |

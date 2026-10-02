@@ -4,6 +4,8 @@
 #include <backends/imgui_impl_dx11.h>
 #include "InputHook.h"
 #include "PerfUI/JournalWindow.h"
+#include "SkyrimQuestService.h"
+#include "SkyrimSoundService.h"
 
 namespace PerfUI::Skyrim {
 
@@ -145,12 +147,46 @@ void D3D11Hook::Uninstall() {
 }
 
 void D3D11Hook::ToggleUI() {
-    SetUIVisible(!m_uiVisible.load());
+    bool current = m_uiVisible.load();
+    if (!current) {
+        SetUIVisible(true);
+        if (m_journalWindow) m_journalWindow->setVisible(true);
+        if (m_mainMenuWindow) m_mainMenuWindow->setVisible(false);
+    } else {
+        if (m_journalWindow && m_journalWindow->isVisible()) {
+            SetUIVisible(false);
+        } else {
+            if (m_journalWindow) m_journalWindow->setVisible(true);
+            if (m_mainMenuWindow) m_mainMenuWindow->setVisible(false);
+        }
+    }
+}
+
+void D3D11Hook::ToggleMainMenu() {
+    bool current = m_uiVisible.load();
+    if (!current) {
+        SetUIVisible(true);
+        if (m_journalWindow) m_journalWindow->setVisible(false);
+        if (m_mainMenuWindow) m_mainMenuWindow->setVisible(true);
+    } else {
+        if (m_mainMenuWindow && m_mainMenuWindow->isVisible()) {
+            SetUIVisible(false);
+        } else {
+            if (m_journalWindow) m_journalWindow->setVisible(false);
+            if (m_mainMenuWindow) m_mainMenuWindow->setVisible(true);
+        }
+    }
 }
 
 void D3D11Hook::SetUIVisible(bool visible) {
     m_uiVisible.store(visible);
     InputHook::GetSingleton().SetCaptureInput(visible);
+
+    SkyrimSoundService::PlayUISound(visible ? "UIJournalOpen" : "UIJournalClose");
+
+    if (visible) {
+        SkyrimQuestService::GetSingleton().RequestQuestRefresh();
+    }
 
     SKSE::GetTaskInterface()->AddTask([visible]() {
         auto* controlMap = RE::ControlMap::GetSingleton();
@@ -191,9 +227,25 @@ void D3D11Hook::InitializeImGui(IDXGISwapChain* pSwapChain) {
 
     // Initialize PerfUI
     m_uiContext = std::make_unique<PerfUI::UIContext>();
+    m_uiContext->setSoundCallback([](const std::string& soundId) {
+        SkyrimSoundService::PlayUISound(soundId.c_str());
+    });
 
     // Add retained-mode Nordic Journal Window
-    m_uiContext->root()->add<PerfUI::JournalWindow>();
+    m_journalWindow = m_uiContext->root()->add<PerfUI::JournalWindow>();
+    m_journalWindow->onTrackQuest([](uint32_t formId, bool active) {
+        SkyrimQuestService::GetSingleton().SetQuestActive(formId, active);
+    });
+
+    // Add retained-mode Main Menu Window (Phase 13)
+    m_mainMenuWindow = m_uiContext->root()->add<PerfUI::MainMenuWindow>();
+    m_mainMenuWindow->setVisible(false);
+    m_mainMenuWindow->onContinueGame([this]() {
+        SetUIVisible(false);
+    });
+    m_mainMenuWindow->onQuitToDesktop([]() {
+        ::PostQuitMessage(0);
+    });
 
     m_lastFrameTime = std::chrono::high_resolution_clock::now();
     m_imguiInitialized.store(true);
@@ -259,7 +311,14 @@ void D3D11Hook::RenderFrame() {
     ImGui::GetIO().MouseDrawCursor = m_uiVisible.load();
 
     // Drain queued input from background hook
-    InputHook::GetSingleton().DrainInputQueue();
+    auto queuedInputs = InputHook::GetSingleton().DrainInputQueue();
+    for (const auto& ev : queuedInputs) {
+        if (ev.type == InputHook::QueuedInput::Type::Char) {
+            m_uiContext->onCharInput(ev.charCode);
+        } else if (ev.type == InputHook::QueuedInput::Type::KeyDown) {
+            m_uiContext->onKeyDown(ev.keyCode);
+        }
+    }
 
     // Directly synchronize UIContext pointer with ImGui's Win32 mouse state
     const auto& io = ImGui::GetIO();
@@ -270,8 +329,23 @@ void D3D11Hook::RenderFrame() {
     if (io.MouseReleased[0]) {
         m_uiContext->onMouseUp(0, { io.MousePos.x, io.MousePos.y });
     }
+    if (io.MouseClicked[1]) {
+        m_uiContext->onMouseDown(1, { io.MousePos.x, io.MousePos.y });
+    }
+    if (io.MouseReleased[1]) {
+        m_uiContext->onMouseUp(1, { io.MousePos.x, io.MousePos.y });
+    }
     if (io.MouseWheel != 0.0f) {
         m_uiContext->onMouseWheel(io.MouseWheel, { io.MousePos.x, io.MousePos.y });
+    }
+
+    // Safely consume live quests and player stats loaded from Skyrim engine
+    SkyrimDataBundle bundle;
+    if (SkyrimQuestService::GetSingleton().ConsumeNewData(bundle)) {
+        if (m_journalWindow) {
+            m_journalWindow->setQuests(std::move(bundle.activeQuests), std::move(bundle.completedQuests));
+            m_journalWindow->setPlayerStats(bundle.playerStats);
+        }
     }
 
     m_uiContext->update(dt);

@@ -51,35 +51,36 @@ void Button::measure(Dimensions availableSize) {
     m_desiredSize = Dimensions{ w, h };
 }
 
+void Button::update(float deltaTime) {
+    UIElement::update(deltaTime);
+
+    bool isTargetHovered = (currentState() == WidgetState::Hovered || currentState() == WidgetState::Pressed);
+    m_hoverAnim.setTarget(isTargetHovered ? 1.0f : 0.0f);
+    m_hoverAnim.update(deltaTime);
+}
+
 void Button::render(UIRenderBackend& backend) {
     if (!isVisible()) return;
 
-    Color bg = m_normalBg;
-    Color border = m_normalBorder;
-    Color textCol = m_normalTextColor;
+    float t = m_hoverAnim.value();
+    Color bg = Color::Lerp(m_normalBg, m_hoverBg, t);
+    Color border = Color::Lerp(m_normalBorder, m_hoverBorder, t);
+    Color textCol = Color::Lerp(m_normalTextColor, m_hoverTextColor, t);
 
     WidgetState state = currentState();
-    switch (state) {
-    case WidgetState::Pressed:
+    if (state == WidgetState::Pressed) {
         bg = m_pressBg;
         border = m_pressBorder;
         textCol = m_pressTextColor;
-        break;
-    case WidgetState::Hovered:
-        bg = m_hoverBg;
-        border = m_hoverBorder;
-        textCol = m_hoverTextColor;
-        break;
-    case WidgetState::Focused:
+    } else if (state == WidgetState::Focused) {
         border = m_focusBorder;
-        break;
-    default:
-        break;
     }
 
-    // Subtle hover glow if hovered
-    if (m_hovered) {
-        backend.drawShadow(m_bounds, m_cornerRadius, Color::FocusGlow(), 8.0f, { 0.0f, 2.0f });
+    // Smooth hover glow based on animation
+    if (t > 0.01f) {
+        Color glow = Color::FocusGlow();
+        glow.a = static_cast<uint8_t>(static_cast<float>(glow.a) * t);
+        backend.drawShadow(m_bounds, m_cornerRadius, glow, 8.0f * t, { 0.0f, 2.0f * t });
     }
 
     backend.drawRoundedRect(m_bounds, bg, m_cornerRadius, border, m_borderWidth);
@@ -107,7 +108,10 @@ bool Button::onPointerUp(const Point& localPoint) {
     bool wasPressed = m_pressed;
     UIElement::onPointerUp(localPoint);
 
-    if (wasPressed && m_bounds.contains(Point{ m_bounds.x + localPoint.x, m_bounds.y + localPoint.y })) {
+    bool inside = (localPoint.x >= 0.0f && localPoint.x <= m_bounds.width &&
+                   localPoint.y >= 0.0f && localPoint.y <= m_bounds.height);
+
+    if (wasPressed || inside) {
         if (m_onClick) {
             m_onClick();
         }

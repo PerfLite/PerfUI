@@ -17,6 +17,12 @@ UIElement::UIElement(std::string name)
 {
 }
 
+UIElement::~UIElement() {
+    if (m_context) {
+        m_context->notifyElementDestroyed(this);
+    }
+}
+
 void UIElement::setContext(UIContext* ctx) {
     m_context = ctx;
     for (auto& child : m_children) {
@@ -126,13 +132,13 @@ UIElement* UIElement::hitTest(const Point& point) {
 bool UIElement::onPointerDown(const Point& localPoint) {
     (void)localPoint;
     m_pressed = true;
-    return true;
+    return false;
 }
 
 bool UIElement::onPointerUp(const Point& localPoint) {
     (void)localPoint;
     m_pressed = false;
-    return true;
+    return false;
 }
 
 void UIElement::onPointerEnter() {
@@ -156,6 +162,13 @@ void UIElement::onFocusChanged(bool focused) {
 
 bool UIElement::onAction(NavDirection dir) {
     (void)dir;
+    return false;
+}
+
+bool UIElement::onContextMenu(const Point& localPoint) {
+    if (m_onContextMenu) {
+        return m_onContextMenu(localPoint);
+    }
     return false;
 }
 

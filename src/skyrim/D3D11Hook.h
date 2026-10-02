@@ -2,6 +2,8 @@
 
 #include "Pch.h"
 #include "../../src/backends/imgui/ImGuiRenderBackend.h"
+#include "PerfUI/JournalWindow.h"
+#include "PerfUI/MainMenuWindow.h"
 
 namespace PerfUI::Skyrim {
 
@@ -13,6 +15,7 @@ public:
     void Uninstall();
 
     void ToggleUI();
+    void ToggleMainMenu();
     void SetUIVisible(bool visible);
     bool IsUIVisible() const { return m_uiVisible.load(); }
 
@@ -60,6 +63,8 @@ private:
 
     std::unique_ptr<PerfUI::UIContext> m_uiContext;
     std::unique_ptr<PerfUI::ImGuiRenderBackend> m_renderBackend;
+    PerfUI::JournalWindow* m_journalWindow{ nullptr };
+    PerfUI::MainMenuWindow* m_mainMenuWindow{ nullptr };
 
     std::chrono::high_resolution_clock::time_point m_lastFrameTime;
 };

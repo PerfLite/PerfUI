@@ -13,12 +13,16 @@ public:
             MouseMove,
             MouseDown,
             MouseUp,
-            MouseWheel
+            MouseWheel,
+            Char,
+            KeyDown
         } type;
         int button{ 0 };
         float x{ 0.0f };
         float y{ 0.0f };
         float wheelDelta{ 0.0f };
+        uint32_t charCode{ 0 };
+        int keyCode{ 0 };
     };
 
     static InputHook& GetSingleton();

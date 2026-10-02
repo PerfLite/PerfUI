@@ -1,5 +1,7 @@
 #include "InputHook.h"
 #include "D3D11Hook.h"
+#include "PerfUI/ConfigManager.h"
+#include "PerfUI/UIContext.h"
 #include <windowsx.h>
 #include <imgui.h>
 #include <backends/imgui_impl_win32.h>
@@ -75,15 +77,26 @@ std::vector<InputHook::QueuedInput> InputHook::DrainInputQueue() {
 LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     auto& hook = InputHook::GetSingleton();
 
-    if (msg == WM_KEYDOWN) {
-        if (wParam == kDefaultToggleKey) {
-            D3D11Hook::GetSingleton().ToggleUI();
-            return 0;
-        }
+    if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) {
+        auto* uiCtx = D3D11Hook::GetSingleton().GetContext();
+        bool capturingKeybind = uiCtx && uiCtx->isCapturingKeybind();
 
-        if (hook.m_captureInput.load() && wParam == VK_ESCAPE) {
-            D3D11Hook::GetSingleton().SetUIVisible(false);
-            return 0;
+        if (!capturingKeybind) {
+            if (wParam == VK_F10) {
+                D3D11Hook::GetSingleton().ToggleMainMenu();
+                return 0;
+            }
+
+            uint32_t toggleKey = ConfigManager::GetSingleton().config().toggleHotkey;
+            if (wParam == toggleKey) {
+                D3D11Hook::GetSingleton().ToggleUI();
+                return 0;
+            }
+
+            if (hook.m_captureInput.load() && wParam == VK_ESCAPE) {
+                D3D11Hook::GetSingleton().SetUIVisible(false);
+                return 0;
+            }
         }
     }
 
@@ -117,10 +130,33 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
             hook.PushInput({ QueuedInput::Type::MouseWheel, 0, static_cast<float>(pt.x), static_cast<float>(pt.y), delta });
             return 0;
         }
-        case WM_RBUTTONDOWN:
-        case WM_RBUTTONUP:
+        case WM_RBUTTONDOWN: {
+            float x = static_cast<float>(GET_X_LPARAM(lParam));
+            float y = static_cast<float>(GET_Y_LPARAM(lParam));
+            hook.PushInput({ QueuedInput::Type::MouseDown, 1, x, y });
+            return 0;
+        }
+        case WM_RBUTTONUP: {
+            float x = static_cast<float>(GET_X_LPARAM(lParam));
+            float y = static_cast<float>(GET_Y_LPARAM(lParam));
+            hook.PushInput({ QueuedInput::Type::MouseUp, 1, x, y });
+            return 0;
+        }
         case WM_MBUTTONDOWN:
         case WM_MBUTTONUP:
+            return 0; // Swallow from Skyrim
+        case WM_CHAR: {
+            hook.PushInput({ QueuedInput::Type::Char, 0, 0.0f, 0.0f, 0.0f, static_cast<uint32_t>(wParam), 0 });
+            return 0; // Swallow from Skyrim
+        }
+        case WM_SYSKEYDOWN:
+        case WM_KEYDOWN: {
+            hook.PushInput({ QueuedInput::Type::KeyDown, 0, 0.0f, 0.0f, 0.0f, 0, static_cast<int>(wParam) });
+            return 0; // Swallow from Skyrim
+        }
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+        case WM_DEADCHAR:
             return 0; // Swallow from Skyrim
         }
     }

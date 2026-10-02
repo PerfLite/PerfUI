@@ -11,6 +11,7 @@
 
 #include "PerfUI/PerfUI.h"
 #include "../../src/backends/imgui/ImGuiRenderBackend.h"
+#include "../modder_custom_hud/CustomHealthBar.h"
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -30,6 +31,10 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 // PerfUI test instance
 static std::unique_ptr<PerfUI::UIContext> g_uiContext;
 static std::unique_ptr<PerfUI::ImGuiRenderBackend> g_renderBackend;
+static PerfUI::JournalWindow* g_journalWindow = nullptr;
+static PerfUI::MainMenuWindow* g_mainMenuWindow = nullptr;
+static PerfUI::Examples::CustomHealthBar* g_customHud = nullptr;
+static float g_simulatedHealth = 100.0f;
 
 // Simple custom test component to demonstrate retained rendering
 class DemoPanel : public PerfUI::UIElement {
@@ -156,8 +161,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     // Initialize PerfUI Core
     g_uiContext = std::make_unique<PerfUI::UIContext>();
 
-    // Add our Nordic Quest Journal window to the UIContext root
-    g_uiContext->root()->add<PerfUI::JournalWindow>();
+    // Add our Nordic Quest Journal window and Main Menu window to the UIContext root
+    g_journalWindow = g_uiContext->root()->add<PerfUI::JournalWindow>();
+    g_mainMenuWindow = g_uiContext->root()->add<PerfUI::MainMenuWindow>();
+    g_mainMenuWindow->setVisible(false); // start with Quest Journal visible
+
+    // Add third-party modder Custom HUD example (can be toggled via F8)
+    g_customHud = g_uiContext->root()->add<PerfUI::Examples::CustomHealthBar>();
+    g_customHud->setScreenPosition(PerfUI::Point{ 30.0f, 630.0f });
+    g_customHud->setVisible(false); // start hidden, press F8 to reveal
+
+    g_mainMenuWindow->onContinueGame([]() {
+        if (g_mainMenuWindow && g_journalWindow) {
+            g_mainMenuWindow->setVisible(false);
+            g_journalWindow->setVisible(true);
+            if (g_uiContext) {
+                g_uiContext->showToast("Game Resumed", "Switched to Nordic Quest Journal", PerfUI::ToastType::Success);
+            }
+        }
+    });
 
     auto lastTime = std::chrono::high_resolution_clock::now();
 
@@ -308,6 +330,18 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_uiContext->onMouseUp(0, { x, y });
             break;
         }
+        case WM_RBUTTONDOWN: {
+            float x = static_cast<float>(LOWORD(lParam));
+            float y = static_cast<float>(HIWORD(lParam));
+            g_uiContext->onMouseDown(1, { x, y });
+            break;
+        }
+        case WM_RBUTTONUP: {
+            float x = static_cast<float>(LOWORD(lParam));
+            float y = static_cast<float>(HIWORD(lParam));
+            g_uiContext->onMouseUp(1, { x, y });
+            break;
+        }
         case WM_MOUSEWHEEL: {
             short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
             float delta = static_cast<float>(zDelta) / static_cast<float>(WHEEL_DELTA);
@@ -316,11 +350,75 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_uiContext->onMouseWheel(delta, { static_cast<float>(pt.x), static_cast<float>(pt.y) });
             break;
         }
+        case WM_CHAR: {
+            g_uiContext->onCharInput(static_cast<uint32_t>(wParam));
+            break;
+        }
+        case WM_SYSKEYDOWN:
         case WM_KEYDOWN: {
+            if (g_uiContext && g_uiContext->isCapturingKeybind()) {
+                g_uiContext->onKeyDown(static_cast<int>(wParam));
+                return 0;
+            }
+            if (wParam == VK_F8) {
+                if (g_customHud) {
+                    bool showHud = !g_customHud->isVisible();
+                    g_customHud->setVisible(showHud);
+                    if (g_uiContext) {
+                        g_uiContext->showToast("Modder Custom HUD [F8]", showHud ? "Custom Health Bar Visible (Press H to heal, J to damage)" : "Custom Health Bar Hidden", PerfUI::ToastType::Info, 2.5f);
+                    }
+                }
+                return 0;
+            }
+            if (wParam == 'H' || wParam == 'h') {
+                if (g_customHud && g_customHud->isVisible()) {
+                    g_simulatedHealth = (std::min)(100.0f, g_simulatedHealth + 15.0f);
+                    g_customHud->setHealth(g_simulatedHealth, 100.0f);
+                    return 0;
+                }
+            }
+            if (wParam == 'J' || wParam == 'j') {
+                if (g_customHud && g_customHud->isVisible()) {
+                    g_simulatedHealth = (std::max)(5.0f, g_simulatedHealth - 15.0f);
+                    g_customHud->setHealth(g_simulatedHealth, 100.0f);
+                    return 0;
+                }
+            }
+            if (wParam == VK_F10) {
+                if (g_mainMenuWindow && g_journalWindow) {
+                    bool showMenu = !g_mainMenuWindow->isVisible();
+                    g_mainMenuWindow->setVisible(showMenu);
+                    g_journalWindow->setVisible(!showMenu);
+                    if (g_uiContext) {
+                        g_uiContext->showToast("View Switched", showMenu ? "Main Menu Active [F10]" : "Quest Journal Active [F11]", PerfUI::ToastType::Info);
+                    }
+                }
+                return 0;
+            }
+            if (wParam == VK_F11) {
+                if (g_mainMenuWindow && g_journalWindow) {
+                    bool showJournal = !g_journalWindow->isVisible();
+                    g_journalWindow->setVisible(showJournal);
+                    g_mainMenuWindow->setVisible(!showJournal);
+                    if (g_uiContext) {
+                        g_uiContext->showToast("View Switched", showJournal ? "Quest Journal Active [F11]" : "Main Menu Active [F10]", PerfUI::ToastType::Info);
+                    }
+                }
+                return 0;
+            }
             if (wParam == VK_ESCAPE) {
+                if (g_uiContext->hasActiveModal()) {
+                    g_uiContext->closeModal();
+                    return 0;
+                }
+                if (g_uiContext->focusedElement()) {
+                    g_uiContext->clearFocus();
+                    return 0;
+                }
                 ::PostQuitMessage(0);
                 return 0;
             }
+            g_uiContext->onKeyDown(static_cast<int>(wParam));
             break;
         }
         default:

@@ -15,7 +15,7 @@ class UIContext;
 class UIElement {
 public:
     explicit UIElement(std::string name = "");
-    virtual ~UIElement() = default;
+    virtual ~UIElement();
 
     UIElement(const UIElement&) = delete;
     UIElement& operator=(const UIElement&) = delete;
@@ -32,7 +32,7 @@ public:
         auto child = std::make_unique<T>(std::forward<Args>(args)...);
         T* ptr = child.get();
         child->m_parent = this;
-        child->m_context = m_context;
+        child->setContext(m_context);
         m_children.push_back(std::move(child));
         markLayoutDirty();
         return ptr;
@@ -61,6 +61,10 @@ public:
 
     WidgetState currentState() const;
 
+    // Tooltip
+    const std::string& tooltip() const { return m_tooltip; }
+    UIElement& tooltip(std::string text) { m_tooltip = std::move(text); return *this; }
+
     // Bounds & Geometry
     const Rect& bounds() const { return m_bounds; }
     void setBounds(const Rect& bounds);
@@ -87,11 +91,19 @@ public:
     virtual UIElement* hitTest(const Point& point);
     virtual bool onPointerDown(const Point& localPoint);
     virtual bool onPointerUp(const Point& localPoint);
+    virtual void onPointerMove(const Point& localPoint) { (void)localPoint; }
     virtual void onPointerEnter();
     virtual void onPointerLeave();
     virtual bool onMouseWheel(float delta, const Point& localPoint);
     virtual void onFocusChanged(bool focused);
     virtual bool onAction(NavDirection dir);
+    virtual bool onCharInput(uint32_t charCode) { (void)charCode; return false; }
+    virtual bool onKeyDown(int keyCode) { (void)keyCode; return false; }
+    virtual bool onContextMenu(const Point& localPoint);
+
+    void onContextMenu(std::function<bool(const Point&)> callback) {
+        m_onContextMenu = std::move(callback);
+    }
 
 protected:
     static ElementId generateNextId();
@@ -113,6 +125,8 @@ protected:
     bool m_pressed{ false };
 
     bool m_layoutDirty{ true };
+    std::string m_tooltip;
+    std::function<bool(const Point&)> m_onContextMenu;
 };
 
 } // namespace PerfUI

@@ -21,3 +21,11 @@ CMakeUserPresets.json
 # Crash dumps and logs
 *.log
 *.dmp
+
+# Runtime configuration & state
+imgui.ini
+PerfUI_Config.json
+
+# Temporary files
+*.tmp
+*.bak

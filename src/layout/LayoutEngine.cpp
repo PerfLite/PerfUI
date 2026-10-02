@@ -173,15 +173,18 @@ void LayoutEngine::ArrangeHorizontal(UIElement* element, const Rect& contentRect
             childW = child->desiredSize().width;
         }
         childW = (std::clamp)(childW, child->layout().minWidth(), child->layout().maxWidth());
-        childW = (std::min)(childW, (std::max)(0.0f, contentRect.width - margin.horizontal()));
+        float maxAvailableChildW = (std::max)(0.0f, (contentRect.x + contentRect.width) - (currentX + margin.left) - margin.right);
+        childW = (std::min)(childW, maxAvailableChildW);
 
-        Alignment align = child->layout().alignment();
-        if (align == Alignment::Start && element->layout().alignment() != Alignment::Start) {
-            align = element->layout().alignment();
+        Alignment align = element->layout().alignment();
+        if (child->layout().alignment() != Alignment::Stretch) {
+            align = child->layout().alignment();
         }
 
         float childH = child->desiredSize().height;
-        if (align == Alignment::Stretch || child->layout().height().mode == SizeMode::Flex) {
+        if (child->layout().height().mode == SizeMode::Fixed) {
+            childH = child->layout().height().value;
+        } else if (align == Alignment::Stretch || child->layout().height().mode == SizeMode::Flex) {
             childH = (std::max)(0.0f, contentRect.height - margin.vertical());
         }
         childH = (std::clamp)(childH, child->layout().minHeight(), child->layout().maxHeight());
@@ -276,18 +279,22 @@ void LayoutEngine::ArrangeVertical(UIElement* element, const Rect& contentRect) 
             childH = child->desiredSize().height;
         }
         childH = (std::clamp)(childH, child->layout().minHeight(), child->layout().maxHeight());
-        childH = (std::min)(childH, (std::max)(0.0f, contentRect.height - margin.vertical()));
+        float maxAvailableChildH = (std::max)(0.0f, (contentRect.y + contentRect.height) - (currentY + margin.top) - margin.bottom);
+        childH = (std::min)(childH, maxAvailableChildH);
 
-        Alignment align = child->layout().alignment();
-        if (align == Alignment::Start && element->layout().alignment() != Alignment::Start) {
-            align = element->layout().alignment();
+        Alignment align = element->layout().alignment();
+        if (child->layout().alignment() != Alignment::Stretch) {
+            align = child->layout().alignment();
         }
 
         float childW = child->desiredSize().width;
-        if (align == Alignment::Stretch || child->layout().width().mode == SizeMode::Flex) {
+        if (child->layout().width().mode == SizeMode::Fixed) {
+            childW = child->layout().width().value;
+        } else if (align == Alignment::Stretch || child->layout().width().mode == SizeMode::Flex) {
             childW = (std::max)(0.0f, contentRect.width - margin.horizontal());
         }
         childW = (std::clamp)(childW, child->layout().minWidth(), child->layout().maxWidth());
+        childW = (std::min)(childW, (std::max)(0.0f, contentRect.width - margin.horizontal()));
 
         float childX = contentRect.x + margin.left;
         if (align == Alignment::Center) {

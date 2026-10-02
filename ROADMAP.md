@@ -132,20 +132,23 @@ Phase 17 ──► Advanced Features (Live Reload, In-game UI Inspector, Profile
 - Stress test: rapid window toggle, 1000 alt-tabs, resolution switches, memory leak check.
 *Exit Criteria:* Zero memory leaks, zero D3D11 device loss crashes, zero frame drops.
 
-### Phase 13: Main Menu Integration
-- Full-screen Main Menu prototype (Continue, New Game, Load, Settings, Quit).
-- Integration with Skyrim's start-up lifecycle.
+### Phase 13: Main Menu Integration (COMPLETED)
+- [x] Full-screen Main Menu prototype (`MainMenuWindow`: Continue, New Game, Load, Settings, Credits, Quit).
+- [x] Hotkey toggle in sandbox (`F10`) and seamless switching between Quest Journal and Main Menu.
+- [x] Integration with Skyrim D3D11 rendering hook.
 *Exit Criteria:* PerfUI successfully powers full-screen primary game menus.
 
-### Phase 14: Developer API & Examples
-- Clear modder documentation and tutorials.
-- Small minimal example projects in `examples/`.
-- Developer quick-start guide.
-*Exit Criteria:* A third-party modder can create a custom window in under 30 lines of code.
+### Phase 14: Developer API & Examples (COMPLETED)
+- [x] Clear modder documentation and tutorials (`docs/MODDER_GUIDE.md`).
+- [x] Minimal example project (`examples/modder_custom_hud/`: `CustomHealthBar.h`, `ModEntry.cpp`, `CMakeLists.txt`).
+- [x] Dynamic SDK API loader (`PerfUI/PerfUIApi.h`) and `RequestPluginAPI` export in `PerfUI.dll`.
+- [x] Interactive sandbox integration (`F8` toggle, `H` heal, `J` damage simulator).
+*Exit Criteria:* A third-party modder can create a custom window or HUD in under 30 lines of code.
 
-### Phase 15: Backend Independence Test
-- Create a mock or secondary rendering backend (e.g. headless recorder or software renderer).
-- Verify that Core builds and passes all tests completely detached from ImGui.
+### Phase 15: Backend Independence Test (COMPLETED)
+- [x] Create headless mock rendering backend (`src/backends/mock/MockRenderBackend.h`).
+- [x] Create automated test runner (`tests/BackendIndependenceTest.cpp` -> `PerfUI_Test_Independence.exe`).
+- [x] Verified 100% Core build and execution completely detached from ImGui and DirectX (16/16 tests passed).
 *Exit Criteria:* Proof of complete backend neutrality.
 
 ### Phase 16: PerfUI SDK Packaging

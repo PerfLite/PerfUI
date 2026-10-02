@@ -1,6 +1,8 @@
 #include "Pch.h"
 #include "D3D11Hook.h"
 #include "InputHook.h"
+#include "SkyrimSoundService.h"
+#include "PerfUI/PerfUIApi.h"
 #include <spdlog/sinks/basic_file_sink.h>
 
 namespace {
@@ -66,7 +68,7 @@ void OnMessage(SKSE::MessagingInterface::Message* a_msg) {
 SKSEPluginInfo(
     .Version = REL::Version{ 0, 1, 0, 0 },
     .Name = "PerfUI",
-    .Author = "Alik"
+    .Author = "PerfLite"
 )
 
 SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
@@ -86,4 +88,55 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
 
     SKSE::log::info("PerfUI loaded and messaging listener registered");
     return true;
+}
+
+// -------------------------------------------------------------
+// PerfUI Official Plugin API Export (for third-party modders)
+// -------------------------------------------------------------
+static PerfUI::UIContext* API_GetContext() {
+    return PerfUI::Skyrim::D3D11Hook::GetSingleton().GetContext();
+}
+
+static void API_ShowToast(const char* title, const char* message, int toastType, float duration) {
+    auto* ctx = API_GetContext();
+    if (ctx && title && message) {
+        ctx->showToast(title, message, static_cast<PerfUI::ToastType>(toastType), duration);
+    }
+}
+
+static void API_PlaySound(const char* soundEditorId) {
+    if (soundEditorId) {
+        PerfUI::Skyrim::SkyrimSoundService::PlayUISound(soundEditorId);
+    }
+}
+
+static void API_SetUIVisible(bool visible) {
+    PerfUI::Skyrim::D3D11Hook::GetSingleton().SetUIVisible(visible);
+}
+
+static bool API_IsUIVisible() {
+    return PerfUI::Skyrim::D3D11Hook::GetSingleton().IsUIVisible();
+}
+
+static void API_ToggleUI() {
+    PerfUI::Skyrim::D3D11Hook::GetSingleton().ToggleUI();
+}
+
+static PerfUI::API::IPerfUI_v1 g_perfUI_API_v1{
+    .version = PerfUI::API::InterfaceVersion_1,
+    .GetContext = API_GetContext,
+    .ShowToast = API_ShowToast,
+    .PlaySound = API_PlaySound,
+    .SetUIVisible = API_SetUIVisible,
+    .IsUIVisible = API_IsUIVisible,
+    .ToggleUI = API_ToggleUI
+};
+
+extern "C" __declspec(dllexport) void* RequestPluginAPI(unsigned long a_interfaceVersion) {
+    if (a_interfaceVersion == PerfUI::API::InterfaceVersion_1) {
+        SKSE::log::info("RequestPluginAPI(v1) called by external mod - granting API pointer!");
+        return &g_perfUI_API_v1;
+    }
+    SKSE::log::warn("RequestPluginAPI called with unsupported version: {}", a_interfaceVersion);
+    return nullptr;
 }
