@@ -5,6 +5,8 @@
 #include "PerfUI/JournalWindow.h"
 #include "PerfUI/MainMenuWindow.h"
 
+struct ImGuiContext;
+
 namespace PerfUI::Skyrim {
 
 class D3D11Hook {
@@ -20,6 +22,7 @@ public:
     bool IsUIVisible() const { return m_uiVisible.load(); }
 
     UIContext* GetContext() { return m_uiContext.get(); }
+    ImGuiContext* GetImGuiContext() const { return m_imguiContext; }
 
 private:
     D3D11Hook() = default;
@@ -60,6 +63,7 @@ private:
     ID3D11Device* m_device{ nullptr };
     ID3D11DeviceContext* m_context{ nullptr };
     ID3D11RenderTargetView* m_renderTargetView{ nullptr };
+    ImGuiContext* m_imguiContext{ nullptr };
 
     std::unique_ptr<PerfUI::UIContext> m_uiContext;
     std::unique_ptr<PerfUI::ImGuiRenderBackend> m_renderBackend;

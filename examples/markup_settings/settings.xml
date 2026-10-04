@@ -1,0 +1,24 @@
+<UI>
+  <Panel name="SettingsWindow" direction="column" width="460" padding="20" gap="14" bg="$surfaceElevated" border="$borderSubtle" radius="10" shadow="true">
+    <Text text="Mod Configuration Menu" font="$fontTitle" color="$nordicGold" bold="true"/>
+    <Text text="Customize gameplay visual HUD and system settings." font="$fontSmall" color="$textSecondary"/>
+
+    <Panel direction="column" gap="8" width="100%">
+      <Text text="Audio Settings" font="$fontMedium" bold="true"/>
+      <Slider name="MasterVolume" label="Master Volume" min="0" max="100" value="80" step="5"/>
+      <Slider name="MusicVolume" label="Music Volume" min="0" max="100" value="65" step="5"/>
+    </Panel>
+
+    <Panel direction="column" gap="8" width="100%">
+      <Text text="Display & HUD" font="$fontMedium" bold="true"/>
+      <Checkbox name="EnableCompass" label="Show Extended Enemy Compass" checked="true"/>
+      <Checkbox name="EnableDistance" label="Show Long-Range Discovery Markers" checked="true"/>
+      <ComboBox name="UiPreset" options="Nordic Gold, Slate Dark, Minimal Silver" selectedIndex="0"/>
+    </Panel>
+
+    <Panel direction="row" gap="10" justify="end" width="100%" margin="8 0 0 0">
+      <Button name="BtnCancel" text="Cancel" onClick="cancelAction"/>
+      <Button name="BtnApply" text="Apply & Save" onClick="applyAction" class="primary"/>
+    </Panel>
+  </Panel>
+</UI>

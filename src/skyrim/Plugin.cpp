@@ -132,11 +132,43 @@ static PerfUI::API::IPerfUI_v1 g_perfUI_API_v1{
     .ToggleUI = API_ToggleUI
 };
 
-extern "C" __declspec(dllexport) void* RequestPluginAPI(unsigned long a_interfaceVersion) {
-    if (a_interfaceVersion == PerfUI::API::InterfaceVersion_1) {
-        SKSE::log::info("RequestPluginAPI(v1) called by external mod - granting API pointer!");
-        return &g_perfUI_API_v1;
+extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interfaceVersion, const PerfUI::API::ClientABIInfo* a_clientAbi) {
+    if (a_interfaceVersion != PerfUI::API::InterfaceVersion_1) {
+        SKSE::log::warn("RequestPluginAPIEx called with unsupported version: {}", a_interfaceVersion);
+        return nullptr;
     }
-    SKSE::log::warn("RequestPluginAPI called with unsupported version: {}", a_interfaceVersion);
-    return nullptr;
+
+    if (a_clientAbi) {
+        constexpr unsigned long hostMscVer =
+#if defined(_MSC_VER)
+            _MSC_VER;
+#else
+            0;
+#endif
+        constexpr int hostIdl =
+#if defined(_ITERATOR_DEBUG_LEVEL)
+            _ITERATOR_DEBUG_LEVEL;
+#else
+            0;
+#endif
+
+        if (a_clientAbi->iteratorDebugLevel != hostIdl) {
+            SKSE::log::error("PerfUI API Rejected: _ITERATOR_DEBUG_LEVEL mismatch! Host={}, Client={}. Mod must be built in Release mode with /MD.",
+                hostIdl, a_clientAbi->iteratorDebugLevel);
+            return nullptr;
+        }
+
+        if (a_clientAbi->mscVer > 0 && (a_clientAbi->mscVer / 100 != hostMscVer / 100 || a_clientAbi->mscVer < 1930)) {
+            SKSE::log::error("PerfUI API Rejected: MSVC toolchain version mismatch! Host requires MSVC v143 (_MSC_VER >= 1930), client provided _MSC_VER={}.",
+                a_clientAbi->mscVer);
+            return nullptr;
+        }
+    }
+
+    SKSE::log::info("RequestPluginAPIEx(v1) called by external mod - ABI verified, granting API pointer!");
+    return &g_perfUI_API_v1;
+}
+
+extern "C" __declspec(dllexport) void* RequestPluginAPI(unsigned long a_interfaceVersion) {
+    return RequestPluginAPIEx(a_interfaceVersion, nullptr);
 }

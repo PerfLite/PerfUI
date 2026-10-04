@@ -1,7 +1,10 @@
 #include "ImGuiRenderBackend.h"
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#endif
 #include <imgui.h>
+#include <filesystem>
 #include <algorithm>
 
 namespace PerfUI {
@@ -96,25 +99,26 @@ void ImGuiRenderBackend::initFonts() {
     const char* boldPath = "C:\\Windows\\Fonts\\segoeuib.ttf";
 
     // Fallback to Arial if Segoe UI is not present
-    DWORD attrib = ::GetFileAttributesA(regularPath);
-    if (attrib == INVALID_FILE_ATTRIBUTES) {
+    if (!std::filesystem::exists(regularPath)) {
         regularPath = "C:\\Windows\\Fonts\\arial.ttf";
         boldPath = "C:\\Windows\\Fonts\\arialbd.ttf";
     }
 
-    ImFontConfig cfg;
-    cfg.OversampleH = 3;
-    cfg.OversampleV = 2;
-    cfg.PixelSnapH = true;
+    if (std::filesystem::exists(regularPath)) {
+        ImFontConfig cfg;
+        cfg.OversampleH = 3;
+        cfg.OversampleV = 2;
+        cfg.PixelSnapH = true;
 
-    const ImWchar* glyphRanges = io.Fonts->GetGlyphRangesCyrillic();
+        const ImWchar* glyphRanges = io.Fonts->GetGlyphRangesCyrillic();
 
-    m_fontSmall   = io.Fonts->AddFontFromFileTTF(regularPath, 13.0f, &cfg, glyphRanges);
-    m_fontRegular = io.Fonts->AddFontFromFileTTF(regularPath, 16.0f, &cfg, glyphRanges);
-    m_fontMedium  = io.Fonts->AddFontFromFileTTF(regularPath, 19.0f, &cfg, glyphRanges);
-    m_fontBold    = io.Fonts->AddFontFromFileTTF(boldPath,    17.0f, &cfg, glyphRanges);
-    m_fontTitle   = io.Fonts->AddFontFromFileTTF(boldPath,    22.0f, &cfg, glyphRanges);
-    m_fontHeader  = io.Fonts->AddFontFromFileTTF(boldPath,    28.0f, &cfg, glyphRanges);
+        m_fontSmall   = io.Fonts->AddFontFromFileTTF(regularPath, 13.0f, &cfg, glyphRanges);
+        m_fontRegular = io.Fonts->AddFontFromFileTTF(regularPath, 16.0f, &cfg, glyphRanges);
+        m_fontMedium  = io.Fonts->AddFontFromFileTTF(regularPath, 19.0f, &cfg, glyphRanges);
+        m_fontBold    = io.Fonts->AddFontFromFileTTF(boldPath,    17.0f, &cfg, glyphRanges);
+        m_fontTitle   = io.Fonts->AddFontFromFileTTF(boldPath,    22.0f, &cfg, glyphRanges);
+        m_fontHeader  = io.Fonts->AddFontFromFileTTF(boldPath,    28.0f, &cfg, glyphRanges);
+    }
 
     if (!m_fontRegular) {
         io.Fonts->AddFontDefault();

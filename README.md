@@ -2,14 +2,14 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/PerfLite/PerfUI/actions/workflows/build.yml/badge.svg)](https://github.com/PerfLite/PerfUI/actions)
-[![C++23](https://img.shields.io/badge/Language-C%2B%2B23-f34b7d.svg)](https://en.cppreference.com/w/cpp/23)
+[![C++20](https://img.shields.io/badge/Language-C%2B%2B20-f34b7d.svg)](https://en.cppreference.com/w/cpp/20)
 [![DirectX 11](https://img.shields.io/badge/Renderer-DirectX%2011-0078D6.svg)](https://learn.microsoft.com/en-us/windows/win32/direct3d11/atoc-dx-graphics-direct3d-11)
 [![Skyrim SE / AE](https://img.shields.io/badge/Skyrim-SE%201.5.97%20%7C%20AE%201.6%2B-555555.svg)](https://skse.silverlock.org/)
 [![Backend: Dear ImGui](https://img.shields.io/badge/Backend-Dear%20ImGui-success.svg)](https://github.com/ocornut/imgui)
 
 ![PerfUI Skyrim SE Journal Demo](docs/assets/perfui_skyrim_preview.png)
 
-**PerfUI** is an independent, high-performance retained-mode C++23 user interface framework built specifically for *The Elder Scrolls V: Skyrim Special Edition / Anniversary Edition*, as well as standalone DirectX 11 applications.
+**PerfUI** is an independent, high-performance retained-mode C++20 user interface framework built specifically for *The Elder Scrolls V: Skyrim Special Edition / Anniversary Edition*, as well as standalone DirectX 11 applications.
 
 It provides mod authors and game developers with an intuitive, modern object-oriented API for building complex, fluid, gamepad-friendly in-game menus, HUD overlays, journal windows, and configuration interfaces.
 
@@ -40,6 +40,7 @@ While Dear ImGui powers low-level font rendering and 2D vector primitives, **Per
 * **Animation & State Engine:** Smooth easing functions, transitions, hover/active glow effects, and auto-fade mechanisms.
 * **Cyrillic & Localization Ready:** Native UTF-8 string support with Cyrillic glyph range preloading (`GetGlyphRangesCyrillic`) and Windows system font fallback (Segoe UI / Arial / custom TTF).
 * **Skyrim Game Services:** Bridge for playing native UI sound descriptors, querying quests/stats, and hooking into the DirectX 11 Present loop.
+* **Declarative XML Markup & Instant Hot-Reload:** Separate lightweight static library (`PerfUI_Markup`) allowing authors to declare complex UIs in XML, bind C++ callbacks by name, and edit layouts live with instant state-preserving hot-reload. See [docs/MARKUP.md](docs/MARKUP.md).
 
 ---
 
@@ -60,7 +61,7 @@ Measurements taken on Windows 11 x64 (MSVC 2022 v143, Release Build):
 | Metric | 550+ Elements Hierarchy | Overhead / Note |
 | :--- | :--- | :--- |
 | **Cold Layout + Render** | **~0.21 ms** (208 µs) | Initial tree build and full measurement |
-| **Dirty-Flag Cached Pass** | **~0.05 ms** (50 µs) | Layout skipped; pure draw call submission |
+| **Layout Cache Pass (Dirty-Flag Hit)** | **~0.05 ms** (50 µs) | Layout calculation skipped via cache; pure draw command submission |
 | **Full Tree Re-Layout** | **~0.11 ms** (109 µs) | Invalidation of root + flexbox re-arrangement |
 | **Mock Draw Call Submission** | **1,042 draw calls in 0.04 ms** | Sub-microsecond per draw command |
 
@@ -201,10 +202,10 @@ PerfUI/
 
 ## 🛠️ Build & Testing
 
-* **OS:** Windows 10 / 11 (64-bit)
-* **Compiler:** Microsoft Visual C++ (MSVC) 2022 v143+ with `/std:c++20` or `/std:c++23` support
-* **Build System:** [XMake](https://xmake.io/) (Recommended) or [CMake](https://cmake.org/) (3.23+)
-* **Dependencies:** DirectX 11 SDK (included with Windows SDK)
+* **OS:** Windows 10 / 11 (64-bit), Linux (Core & Tests)
+* **Compiler:** Microsoft Visual C++ (MSVC) 2022 v143+, GCC 12+, Clang 15+ with C++20 support (`/std:c++20` / `-std=c++20`)
+* **Build System:** [XMake](https://xmake.io/) (Recommended) or [CMake](https://cmake.org/) (3.20+)
+* **Dependencies:** DirectX 11 SDK (included with Windows SDK for Skyrim plugin and Win32 sandbox; Core & Tests are dependency-free)
 
 ### Building with XMake (Fastest)
 
@@ -227,15 +228,24 @@ cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --target PerfUI_Test_Layout PerfUI_Test_Independence
 
 # Run tests
-.\build\Release\PerfUI_Test_Layout.exe
-.\build\Release\PerfUI_Test_Independence.exe
+ctest --test-dir build -C Release --output-on-failure
 ```
+
+---
+
+## 📚 Documentation & Guides
+
+* **Modder Integration Guide:** [English](docs/MODDER_GUIDE_EN.md) | [Русский](docs/MODDER_GUIDE.md)
+* **Declarative XML Markup & Hot-Reload:** [English](docs/MARKUP_EN.md) | [Русский](docs/MARKUP.md)
+* **Skyrim Input, Mouse & Cursor Integration:** [English](docs/SKYRIM_INPUT_GUIDE_EN.md) | [Русский](docs/SKYRIM_INPUT_GUIDE.md)
+* **Core Architecture Overview:** [ARCHITECTURE.md](ARCHITECTURE.md)
+* **Visual & Widget Design Specification:** [DESIGN.md](DESIGN.md)
 
 ---
 
 ## 🇷🇺 Описание проекта (Russian Overview)
 
-**PerfUI** — это независимый, высокопроизводительный retained-mode UI-фреймворк на современном стандарте **C++20/C++23**, разработанный специально для создания модификаций и интерфейсов для игры *The Elder Scrolls V: Skyrim Special Edition / Anniversary Edition*, а также для автономных графических приложений на DirectX 11.
+**PerfUI** — это независимый, высокопроизводительный retained-mode UI-фреймворк на современном стандарте **C++20**, разработанный специально для создания модификаций и интерфейсов для игры *The Elder Scrolls V: Skyrim Special Edition / Anniversary Edition*, а также для автономных графических приложений на DirectX 11.
 
 Фреймворк предоставляет авторам модов и разработчикам удобный объектно-ориентированный C++ API для построения плавных, отзывчивых и удобных для управления с геймпада внутриигровых меню: журналов заданий, кастомных HUD-полосок, экранов настроек, диалоговых окон и окон конфигурации модов.
 
@@ -251,6 +261,45 @@ cmake --build build --config Release --target PerfUI_Test_Layout PerfUI_Test_Ind
 * **Стилизация в эстетике Скайрима:** Встроенные темы оформления (тёмный сланец, пергамент, золото, серебряные окантовки, нордические орнаменты) и движок анимаций (плавное появление, пульсация, hover-эффекты).
 * **Поддержка кириллицы:** Встроенная загрузка диапазонов кириллических глифов ImGui и системных шрифтов Windows (Segoe UI, Arial).
 * **Изоляция бэкенда:** Проект использует библиотеку [Dear ImGui](https://github.com/ocornut/imgui) **исключительно** как начальный фундамент растеризации вершинных буферов (`ImDrawList`). Внешний API `PerfUI` полностью независим и не подключает заголовочные файлы ImGui, что позволяет в будущем бесшовно заменить бэкенд на прямой D3D11/D3D12/Vulkan без переписывания пользовательского кода интерфейсов.
+
+---
+
+## 🔥 Рисуй интерфейс без перекомпиляции (XML Markup & Hot-Reload)
+
+С новой библиотекой **`PerfUI_Markup`** интерфейсы описываются в декларативном XML без необходимости пересобирать плагин или перезапускать игру:
+
+```xml
+<UI>
+  <Panel name="Settings" direction="column" width="420" padding="20" gap="10" bg="$surfaceElevated">
+    <Text text="Настройки мода" font="title" color="$nordicGold"/>
+    <Slider name="Volume" label="Громкость" min="0" max="100" value="80"/>
+    <Checkbox name="EnableCompass" label="Показывать расширенный компас" checked="true"/>
+    <Panel direction="row" gap="8" justify="end">
+      <Button text="Отмена" onClick="cancelAction"/>
+      <Button text="Сохранить" onClick="saveAction" class="primary"/>
+    </Panel>
+  </Panel>
+</UI>
+```
+
+```cpp
+#include <PerfUI/Markup/MarkupLoader.h>
+
+PerfUI::MarkupLoader loader(context);
+loader.bindCallback("cancelAction", [&]() { /* ... */ });
+loader.bindCallback("saveAction", [&]() { /* ... */ });
+
+loader.enableHotReload(true);
+loader.loadFile("Data/Interface/PerfUI/settings.xml");
+
+// В каждом кадре:
+loader.poll(); // Автоматически перезагрузит изменённый XML!
+```
+
+* **Мгновенный отклик:** файл опрашивается каждые ~500 мс без блокировок и фоновых потоков.
+* **Сохранение состояния:** при перезагрузке автоматически сохраняется фокус ввода, позиция скролла (`ScrollView`) и выбранные вкладки (`TabBar`).
+* **Устойчивость к ошибкам:** при битом XML предыдущее рабочее дерево не ломается, а на экран выводится детальный Toast с номером строки ошибки.
+* **Подробное руководство:** см. [docs/MARKUP.md](docs/MARKUP.md).
 
 ---
 

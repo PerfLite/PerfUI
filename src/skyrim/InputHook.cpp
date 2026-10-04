@@ -87,11 +87,8 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
                 return 0;
             }
 
-            uint32_t toggleKey = ConfigManager::GetSingleton().config().toggleHotkey;
-            if (wParam == toggleKey) {
-                D3D11Hook::GetSingleton().ToggleUI();
-                return 0;
-            }
+            // F11 / toggleHotkey disabled as requested by user
+            (void)wParam;
 
             if (hook.m_captureInput.load() && wParam == VK_ESCAPE) {
                 D3D11Hook::GetSingleton().SetUIVisible(false);
@@ -101,7 +98,17 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
     }
 
     if (hook.m_captureInput.load()) {
-        ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
+        auto* imguiCtx = D3D11Hook::GetSingleton().GetImGuiContext();
+        if (imguiCtx) {
+            auto* prevCtx = ImGui::GetCurrentContext();
+            ImGui::SetCurrentContext(imguiCtx);
+            ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
+            if (prevCtx && prevCtx != imguiCtx) {
+                ImGui::SetCurrentContext(prevCtx);
+            }
+        } else {
+            ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
+        }
 
         switch (msg) {
         case WM_MOUSEMOVE: {

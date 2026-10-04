@@ -104,7 +104,9 @@ SkyrimDataBundle SkyrimQuestService::ReadBundleGameThread() {
     const char* playerName = player->GetName();
     bundle.playerStats.name = (playerName && playerName[0]) ? playerName : "Dovahkiin";
     bundle.playerStats.level = player->GetLevel();
-    bundle.playerStats.gold = player->GetGoldAmount();
+    using getGold_t = int(*)(RE::Actor*);
+    static REL::Relocation<getGold_t> funcGetGold{ RELOCATION_ID(36527, 37527) };
+    bundle.playerStats.gold = funcGetGold(player);
     auto* avOwner = player->AsActorValueOwner();
     if (avOwner) {
         bundle.playerStats.health = avOwner->GetActorValue(RE::ActorValue::kHealth);

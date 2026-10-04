@@ -1,5 +1,7 @@
 # Skyrim UI Input & Cursor Integration Guide (PerfUI)
 
+[English](SKYRIM_INPUT_GUIDE_EN.md) | [Русский](SKYRIM_INPUT_GUIDE.md)
+
 Этот документ описывает критические правила и архитектурные решения для работы с вводом, мышью и курсором в кастомных DirectX 11 UI-модах для The Elder Scrolls V: Skyrim Special Edition (SKSE / CommonLibSSE).
 
 ---

@@ -10,8 +10,12 @@ ScrollView::ScrollView(std::string name)
 }
 
 ScrollView& ScrollView::scrollTo(float offset) {
-    float maxScroll = (std::max)(0.0f, m_contentHeight - m_bounds.height);
-    m_scrollOffset = (std::clamp)(offset, 0.0f, maxScroll);
+    if (m_contentHeight > 0.0f && m_bounds.height > 0.0f) {
+        float maxScroll = (std::max)(0.0f, m_contentHeight - m_bounds.height);
+        m_scrollOffset = (std::clamp)(offset, 0.0f, maxScroll);
+    } else {
+        m_scrollOffset = (std::max)(0.0f, offset);
+    }
     markLayoutDirty();
     return *this;
 }

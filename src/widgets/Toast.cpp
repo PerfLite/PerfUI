@@ -72,6 +72,9 @@ void ToastManager::render(UIRenderBackend& backend, Dimensions viewportSize) {
         case ToastType::Warning:
             accentColor = Color(240, 160, 45, static_cast<uint8_t>(255.0f * alpha));
             break;
+        case ToastType::Error:
+            accentColor = Color(248, 81, 73, static_cast<uint8_t>(255.0f * alpha));
+            break;
         case ToastType::Info:
         default:
             accentColor = Color(212, 175, 55, static_cast<uint8_t>(255.0f * alpha));

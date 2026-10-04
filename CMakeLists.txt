@@ -8,6 +8,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Optimization & warning flags
 if(MSVC)
     add_compile_options(/W4 /permissive- /utf-8 /EHsc /MP)
+else()
+    add_compile_options(-Wall -Wextra)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -43,6 +45,7 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/PerfUI.h
     src/core/UIElement.cpp
     src/core/UIContext.cpp
+    src/core/Theme.cpp
     src/core/ConfigManager.cpp
     src/layout/LayoutEngine.cpp
     src/widgets/Panel.cpp
@@ -67,6 +70,10 @@ add_library(PerfUI_Core STATIC
 target_include_directories(PerfUI_Core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
+)
+
+target_compile_definitions(PerfUI_Core PUBLIC
+    PERFUI_STATIC
 )
 
 # ---------------------------------------------------------------------------
@@ -94,24 +101,26 @@ target_link_libraries(PerfUI_Backend_ImGui PUBLIC
 # ---------------------------------------------------------------------------
 # 3. PerfUI_Sandbox (Desktop Standalone Test Runner)
 # ---------------------------------------------------------------------------
-add_executable(PerfUI_Sandbox WIN32
-    examples/sandbox/main.cpp
-    third_party/imgui/backends/imgui_impl_win32.h
-    third_party/imgui/backends/imgui_impl_win32.cpp
-    third_party/imgui/backends/imgui_impl_dx11.h
-    third_party/imgui/backends/imgui_impl_dx11.cpp
-)
+if(WIN32)
+    add_executable(PerfUI_Sandbox WIN32
+        examples/sandbox/main.cpp
+        third_party/imgui/backends/imgui_impl_win32.h
+        third_party/imgui/backends/imgui_impl_win32.cpp
+        third_party/imgui/backends/imgui_impl_dx11.h
+        third_party/imgui/backends/imgui_impl_dx11.cpp
+    )
 
-target_include_directories(PerfUI_Sandbox PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui/backends
-)
+    target_include_directories(PerfUI_Sandbox PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui/backends
+    )
 
-target_link_libraries(PerfUI_Sandbox PRIVATE
-    PerfUI_Backend_ImGui
-    d3d11
-    dxgi
-    d3dcompiler
-)
+    target_link_libraries(PerfUI_Sandbox PRIVATE
+        PerfUI_Backend_ImGui
+        d3d11
+        dxgi
+        d3dcompiler
+    )
+endif()
 
 # ---------------------------------------------------------------------------
 # 4. PerfUI_Test_Independence (Headless Core & Mock Backend Test Suite)
@@ -144,5 +153,94 @@ target_include_directories(PerfUI_Test_Layout PRIVATE
 target_link_libraries(PerfUI_Test_Layout PRIVATE
     PerfUI_Core
 )
+
+# ---------------------------------------------------------------------------
+# 6. PerfUI_Bench_ImGui (Layout Cache & Real ImGui Backend Benchmark)
+# ---------------------------------------------------------------------------
+add_executable(PerfUI_Bench_ImGui
+    tests/ImGuiBenchmark.cpp
+)
+
+target_include_directories(PerfUI_Bench_ImGui PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/imgui
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui
+)
+
+target_link_libraries(PerfUI_Bench_ImGui PRIVATE
+    PerfUI_Backend_ImGui
+)
+
+# ---------------------------------------------------------------------------
+# 7. pugixml & PerfUI_Markup (Declarative Markup & Hot-Reload Static Library)
+# ---------------------------------------------------------------------------
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pugixml/pugixml.cpp")
+    add_library(pugixml STATIC
+        third_party/pugixml/pugixml.cpp
+        third_party/pugixml/pugixml.hpp
+        third_party/pugixml/pugiconfig.hpp
+    )
+    target_include_directories(pugixml PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/pugixml>
+        $<INSTALL_INTERFACE:include>
+    )
+else()
+    include(FetchContent)
+    FetchContent_Declare(
+        pugixml
+        GIT_REPOSITORY https://github.com/zeux/pugixml.git
+        GIT_TAG v1.14
+    )
+    FetchContent_MakeAvailable(pugixml)
+endif()
+
+add_library(PerfUI_Markup STATIC
+    include/PerfUI/Markup/MarkupTypes.h
+    include/PerfUI/Markup/WidgetRegistry.h
+    include/PerfUI/Markup/MarkupLoader.h
+    src/markup/MarkupLayoutParser.h
+    src/markup/MarkupLayoutParser.cpp
+    src/markup/WidgetRegistry.cpp
+    src/markup/MarkupLoader.cpp
+)
+
+target_include_directories(PerfUI_Markup PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+target_include_directories(PerfUI_Markup PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/markup
+)
+
+target_link_libraries(PerfUI_Markup PUBLIC
+    PerfUI_Core
+    pugixml
+)
+
+# ---------------------------------------------------------------------------
+# 8. PerfUI_Test_Markup (Markup & Hot-Reload Test Suite)
+# ---------------------------------------------------------------------------
+add_executable(PerfUI_Test_Markup
+    tests/MarkupTest.cpp
+    src/backends/mock/MockRenderBackend.h
+)
+
+target_include_directories(PerfUI_Test_Markup PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/mock
+)
+
+target_link_libraries(PerfUI_Test_Markup PRIVATE
+    PerfUI_Markup
+    PerfUI_Core
+)
+
+# ---------------------------------------------------------------------------
+# CTest Integration
+# ---------------------------------------------------------------------------
+enable_testing()
+add_test(NAME IndependenceTest COMMAND PerfUI_Test_Independence)
+add_test(NAME LayoutTest COMMAND PerfUI_Test_Layout)
+add_test(NAME ImGuiBenchmark COMMAND PerfUI_Bench_ImGui)
+add_test(NAME MarkupTest COMMAND PerfUI_Test_Markup)
 
 

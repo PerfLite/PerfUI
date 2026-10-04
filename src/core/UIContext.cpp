@@ -25,6 +25,21 @@ void UIContext::requestLayout() {
 }
 
 void UIContext::update(float deltaTime) {
+    m_uiThreadId = std::this_thread::get_id();
+    assertUIThread();
+
+    // 1. Drain queued UI-thread tasks at the start of update
+    std::vector<std::function<void()>> tasks;
+    {
+        std::lock_guard<std::mutex> lock(m_taskMutex);
+        tasks.swap(m_taskQueue);
+    }
+    for (auto& task : tasks) {
+        if (task) {
+            task();
+        }
+    }
+
     if (m_layoutDirty) {
         performLayout();
     }
@@ -454,6 +469,22 @@ void UIContext::notifyElementDestroyed(UIElement* element) {
     if (m_focusedElement == element) {
         m_focusedElement = nullptr;
     }
+}
+
+void UIContext::runOnUIThread(std::function<void()> task) {
+    if (!task) return;
+    std::lock_guard<std::mutex> lock(m_taskMutex);
+    m_taskQueue.push_back(std::move(task));
+}
+
+bool UIContext::isUIThread() const {
+    return m_uiThreadId == std::thread::id() || std::this_thread::get_id() == m_uiThreadId;
+}
+
+void UIContext::assertUIThread() const {
+#ifndef NDEBUG
+    assert(isUIThread() && "UI operation must execute on the designated UI thread!");
+#endif
 }
 
 } // namespace PerfUI

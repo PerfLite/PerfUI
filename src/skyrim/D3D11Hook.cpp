@@ -136,10 +136,18 @@ void D3D11Hook::Uninstall() {
 
     CleanupRenderTarget();
 
-    if (m_imguiInitialized.load()) {
+    if (m_imguiInitialized.load() && m_imguiContext) {
+        ImGuiContext* prevContext = ImGui::GetCurrentContext();
+        ImGui::SetCurrentContext(m_imguiContext);
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
-        ImGui::DestroyContext();
+        ImGui::DestroyContext(m_imguiContext);
+        m_imguiContext = nullptr;
+        if (prevContext && prevContext != m_imguiContext) {
+            ImGui::SetCurrentContext(prevContext);
+        } else {
+            ImGui::SetCurrentContext(nullptr);
+        }
         m_imguiInitialized.store(false);
     }
 
@@ -212,7 +220,9 @@ void D3D11Hook::InitializeImGui(IDXGISwapChain* pSwapChain) {
     CreateRenderTarget(pSwapChain);
 
     IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
+    ImGuiContext* prevContext = ImGui::GetCurrentContext();
+    m_imguiContext = ImGui::CreateContext();
+    ImGui::SetCurrentContext(m_imguiContext);
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
@@ -248,6 +258,9 @@ void D3D11Hook::InitializeImGui(IDXGISwapChain* pSwapChain) {
     });
 
     m_lastFrameTime = std::chrono::high_resolution_clock::now();
+    if (prevContext && prevContext != m_imguiContext) {
+        ImGui::SetCurrentContext(prevContext);
+    }
     m_imguiInitialized.store(true);
     SKSE::log::info("ImGui and PerfUI initialized inside Skyrim D3D11 pipeline");
 }
@@ -269,7 +282,10 @@ void D3D11Hook::CleanupRenderTarget() {
 }
 
 void D3D11Hook::RenderFrame() {
-    if (!m_imguiInitialized.load() || !m_uiVisible.load()) return;
+    if (!m_imguiInitialized.load() || !m_uiVisible.load() || !m_imguiContext) return;
+
+    ImGuiContext* prevContext = ImGui::GetCurrentContext();
+    ImGui::SetCurrentContext(m_imguiContext);
 
     auto now = std::chrono::high_resolution_clock::now();
     float dt = std::chrono::duration<float>(now - m_lastFrameTime).count();
@@ -372,6 +388,10 @@ void D3D11Hook::RenderFrame() {
     m_context->OMSetRenderTargets(1, &oldRTV, oldDSV);
     if (oldRTV) oldRTV->Release();
     if (oldDSV) oldDSV->Release();
+
+    if (prevContext && prevContext != m_imguiContext) {
+        ImGui::SetCurrentContext(prevContext);
+    }
 }
 
 HRESULT STDMETHODCALLTYPE D3D11Hook::Hooked_Present(
