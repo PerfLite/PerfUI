@@ -238,6 +238,38 @@ target_link_libraries(PerfUI_Test_Markup PRIVATE
 )
 
 # ---------------------------------------------------------------------------
+# 9. PerfUI_Test_Overlay (OverlayManager & Render Primitives Test Suite)
+# ---------------------------------------------------------------------------
+add_executable(PerfUI_Test_Overlay
+    tests/OverlayTest.cpp
+    src/backends/mock/MockRenderBackend.h
+)
+
+target_include_directories(PerfUI_Test_Overlay PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/mock
+)
+
+target_link_libraries(PerfUI_Test_Overlay PRIVATE
+    PerfUI_Core
+)
+
+# ---------------------------------------------------------------------------
+# 10. PerfUI_Test_Texture (Texture Management & Lifecycle Test Suite)
+# ---------------------------------------------------------------------------
+add_executable(PerfUI_Test_Texture
+    tests/TextureTest.cpp
+    src/backends/mock/MockRenderBackend.h
+)
+
+target_include_directories(PerfUI_Test_Texture PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/mock
+)
+
+target_link_libraries(PerfUI_Test_Texture PRIVATE
+    PerfUI_Core
+)
+
+# ---------------------------------------------------------------------------
 # CTest Integration
 # ---------------------------------------------------------------------------
 enable_testing()
@@ -245,5 +277,7 @@ add_test(NAME IndependenceTest COMMAND PerfUI_Test_Independence)
 add_test(NAME LayoutTest COMMAND PerfUI_Test_Layout)
 add_test(NAME ImGuiBenchmark COMMAND PerfUI_Bench_ImGui)
 add_test(NAME MarkupTest COMMAND PerfUI_Test_Markup)
+add_test(NAME OverlayTest COMMAND PerfUI_Test_Overlay)
+add_test(NAME TextureTest COMMAND PerfUI_Test_Texture)
 
 
