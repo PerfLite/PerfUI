@@ -122,16 +122,19 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
             }
         }
 
-        auto* imguiCtx = D3D11Hook::GetSingleton().GetImGuiContext();
-        if (imguiCtx) {
-            auto* prevCtx = ImGui::GetCurrentContext();
-            ImGui::SetCurrentContext(imguiCtx);
-            ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
-            if (prevCtx && prevCtx != imguiCtx) {
-                ImGui::SetCurrentContext(prevCtx);
+        bool isMouseMsg = (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) || msg == WM_SETCURSOR;
+        if (!isMouseMsg) {
+            auto* imguiCtx = D3D11Hook::GetSingleton().GetImGuiContext();
+            if (imguiCtx) {
+                auto* prevCtx = ImGui::GetCurrentContext();
+                ImGui::SetCurrentContext(imguiCtx);
+                ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
+                if (prevCtx && prevCtx != imguiCtx) {
+                    ImGui::SetCurrentContext(prevCtx);
+                }
+            } else {
+                ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
             }
-        } else {
-            ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam);
         }
 
         switch (msg) {

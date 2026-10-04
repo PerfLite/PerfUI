@@ -348,6 +348,18 @@ void D3D11Hook::RenderFrame() {
     ImGui::GetIO().WantSetMousePos = false;
 
     if (anyTreeVisible) {
+        // Ensure Windows hardware arrow cursor display count is >= 0 and active every frame
+        while (::ShowCursor(TRUE) < 0);
+        ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
+
+        // Poll mouse position every frame via GetCursorPos
+        POINT pt;
+        if (::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
+            float mx = static_cast<float>(pt.x);
+            float my = static_cast<float>(pt.y);
+            m_uiContext->onMouseMove({ mx, my });
+        }
+
         // Drain queued input from background hook
         auto queuedInputs = InputHook::GetSingleton().DrainInputQueue();
         for (const auto& ev : queuedInputs) {
@@ -371,25 +383,6 @@ void D3D11Hook::RenderFrame() {
                 m_uiContext->onMouseWheel(ev.wheelDelta, { ev.x, ev.y });
                 break;
             }
-        }
-
-        // Directly synchronize UIContext pointer with ImGui's Win32 mouse state
-        const auto& io = ImGui::GetIO();
-        m_uiContext->onMouseMove({ io.MousePos.x, io.MousePos.y });
-        if (io.MouseClicked[0]) {
-            m_uiContext->onMouseDown(0, { io.MousePos.x, io.MousePos.y });
-        }
-        if (io.MouseReleased[0]) {
-            m_uiContext->onMouseUp(0, { io.MousePos.x, io.MousePos.y });
-        }
-        if (io.MouseClicked[1]) {
-            m_uiContext->onMouseDown(1, { io.MousePos.x, io.MousePos.y });
-        }
-        if (io.MouseReleased[1]) {
-            m_uiContext->onMouseUp(1, { io.MousePos.x, io.MousePos.y });
-        }
-        if (io.MouseWheel != 0.0f) {
-            m_uiContext->onMouseWheel(io.MouseWheel, { io.MousePos.x, io.MousePos.y });
         }
 
         // Safely consume live quests and player stats loaded from Skyrim engine
