@@ -67,13 +67,7 @@ struct InitD3DHook {
     static void thunk() {
         func();
         SKSE::log::info("PerfUI hooks installed by: PerfUI.dll");
-        if (PerfUI::Skyrim::D3D11Hook::GetSingleton().Install()) {
-            auto* renderer = RE::BSGraphics::Renderer::GetSingleton();
-            if (renderer && renderer->data.renderWindows[0].hWnd) {
-                HWND hWnd = reinterpret_cast<HWND>(renderer->data.renderWindows[0].hWnd);
-                PerfUI::Skyrim::InputHook::GetSingleton().Install(hWnd);
-            }
-        }
+        PerfUI::Skyrim::D3D11Hook::GetSingleton().Install();
     }
     static inline REL::Relocation<decltype(thunk)> func;
 };

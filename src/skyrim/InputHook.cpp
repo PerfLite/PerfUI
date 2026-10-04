@@ -23,14 +23,21 @@ bool InputHook::Install(HWND hWnd) {
         ::SetWindowLongPtrA(m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(Hooked_WndProc))
     );
 
-    auto* inputManager = RE::BSInputDeviceManager::GetSingleton();
-    if (inputManager) {
-        inputManager->AddEventSink(this);
-    }
+    EnsureInputSink();
 
     m_installed.store(true);
     SKSE::log::info("InputHook installed successfully");
     return true;
+}
+
+void InputHook::EnsureInputSink() {
+    if (m_sinkRegistered.load()) return;
+    auto* inputManager = RE::BSInputDeviceManager::GetSingleton();
+    if (inputManager) {
+        inputManager->AddEventSink(this);
+        m_sinkRegistered.store(true);
+        SKSE::log::info("InputHook: Registered BSInputDeviceManager event sink");
+    }
 }
 
 void InputHook::Uninstall() {
@@ -43,9 +50,12 @@ void InputHook::Uninstall() {
         m_originalWndProc = nullptr;
     }
 
-    auto* inputManager = RE::BSInputDeviceManager::GetSingleton();
-    if (inputManager) {
-        inputManager->RemoveEventSink(this);
+    if (m_sinkRegistered.load()) {
+        auto* inputManager = RE::BSInputDeviceManager::GetSingleton();
+        if (inputManager) {
+            inputManager->RemoveEventSink(this);
+        }
+        m_sinkRegistered.store(false);
     }
 
     m_installed.store(false);
@@ -56,9 +66,13 @@ void InputHook::SetCaptureInput(bool capture) {
 
     // Properly adjust Windows cursor display count
     if (capture) {
+        EnsureInputSink();
         while (::ShowCursor(TRUE) < 0);
         ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
     } else {
+        m_mouseButtonDown[0] = false;
+        m_mouseButtonDown[1] = false;
+        m_mouseButtonDown[2] = false;
         while (::ShowCursor(FALSE) >= 0);
     }
 
@@ -113,6 +127,8 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
     }
 
     if (hook.m_captureInput.load()) {
+        hook.EnsureInputSink();
+
         // Force Windows hardware arrow cursor
         if (msg == WM_SETCURSOR) {
             if (LOWORD(lParam) == HTCLIENT) {
@@ -152,20 +168,69 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
             return 0;
         }
         case WM_LBUTTONDOWN:
-        case WM_LBUTTONUP:
         case WM_LBUTTONDBLCLK:
         case WM_RBUTTONDOWN:
-        case WM_RBUTTONUP:
         case WM_RBUTTONDBLCLK:
         case WM_MBUTTONDOWN:
-        case WM_MBUTTONUP:
-        case WM_MBUTTONDBLCLK:
+        case WM_MBUTTONDBLCLK: {
+            while (::ShowCursor(TRUE) < 0);
+            ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
+
+            int btn = (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) ? 0 :
+                      ((msg == WM_RBUTTONDOWN || msg == WM_RBUTTONDBLCLK) ? 1 : 2);
+
+            POINT pt;
+            if (!::GetCursorPos(&pt) || !::ScreenToClient(hWnd, &pt)) {
+                pt.x = GET_X_LPARAM(lParam);
+                pt.y = GET_Y_LPARAM(lParam);
+            }
+            hook.m_lastMousePos = pt;
+
+            auto* mc = RE::MenuCursor::GetSingleton();
+            if (mc) {
+                mc->cursorPosX = static_cast<float>(pt.x);
+                mc->cursorPosY = static_cast<float>(pt.y);
+            }
+
+            if (!hook.m_mouseButtonDown[btn]) {
+                hook.m_mouseButtonDown[btn] = true;
+                hook.PushInput({ QueuedInput::Type::MouseDown, btn, static_cast<float>(pt.x), static_cast<float>(pt.y) });
+            }
+            return 0;
+        }
+        case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONUP: {
+            while (::ShowCursor(TRUE) < 0);
+            ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
+
+            int btn = (msg == WM_LBUTTONUP) ? 0 : (msg == WM_RBUTTONUP ? 1 : 2);
+
+            POINT pt;
+            if (!::GetCursorPos(&pt) || !::ScreenToClient(hWnd, &pt)) {
+                pt.x = GET_X_LPARAM(lParam);
+                pt.y = GET_Y_LPARAM(lParam);
+            }
+            hook.m_lastMousePos = pt;
+
+            auto* mc = RE::MenuCursor::GetSingleton();
+            if (mc) {
+                mc->cursorPosX = static_cast<float>(pt.x);
+                mc->cursorPosY = static_cast<float>(pt.y);
+            }
+
+            if (hook.m_mouseButtonDown[btn]) {
+                hook.m_mouseButtonDown[btn] = false;
+                hook.PushInput({ QueuedInput::Type::MouseUp, btn, static_cast<float>(pt.x), static_cast<float>(pt.y) });
+            }
+            return 0;
+        }
         case WM_XBUTTONDOWN:
         case WM_XBUTTONUP:
         case WM_XBUTTONDBLCLK: {
             while (::ShowCursor(TRUE) < 0);
             ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
-            return 0; // Handled via DirectInput in ProcessEvent
+            return 0;
         }
         case WM_MOUSEWHEEL: {
             short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
@@ -215,8 +280,6 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
 
             // kLeftButton = 0, kRightButton = 1, kMiddleButton = 2
             // kWheelUp = 8, kWheelDown = 9
-            static bool s_mouseButtonDown[3] = { false, false, false };
-
             if (keyCode <= 2) {
                 while (::ShowCursor(TRUE) < 0);
                 ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
@@ -226,12 +289,18 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
                     m_lastMousePos = pt;
                 }
 
+                auto* mc = RE::MenuCursor::GetSingleton();
+                if (mc) {
+                    mc->cursorPosX = static_cast<float>(m_lastMousePos.x);
+                    mc->cursorPosY = static_cast<float>(m_lastMousePos.y);
+                }
+
                 bool isPressed = btnEvent->IsPressed();
-                if (isPressed && !s_mouseButtonDown[keyCode]) {
-                    s_mouseButtonDown[keyCode] = true;
+                if (isPressed && !m_mouseButtonDown[keyCode]) {
+                    m_mouseButtonDown[keyCode] = true;
                     PushInput({ QueuedInput::Type::MouseDown, static_cast<int>(keyCode), static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y) });
-                } else if (!isPressed && s_mouseButtonDown[keyCode]) {
-                    s_mouseButtonDown[keyCode] = false;
+                } else if (!isPressed && m_mouseButtonDown[keyCode]) {
+                    m_mouseButtonDown[keyCode] = false;
                     PushInput({ QueuedInput::Type::MouseUp, static_cast<int>(keyCode), static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y) });
                 }
             } else if (keyCode == 8) {

@@ -41,6 +41,8 @@ public:
         RE::BSTEventSource<RE::InputEvent*>* a_eventSource
     ) override;
 
+    void EnsureInputSink();
+
 private:
     InputHook() = default;
     ~InputHook() = default;
@@ -51,6 +53,8 @@ private:
     WNDPROC m_originalWndProc{ nullptr };
     std::atomic<bool> m_installed{ false };
     std::atomic<bool> m_captureInput{ false };
+    std::atomic<bool> m_sinkRegistered{ false };
+    bool m_mouseButtonDown[3]{ false, false, false };
 
     std::mutex m_queueLock;
     std::vector<QueuedInput> m_inputQueue;
