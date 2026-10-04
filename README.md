@@ -7,7 +7,11 @@
 [![Skyrim SE / AE](https://img.shields.io/badge/Skyrim-SE%201.5.97%20%7C%20AE%201.6%2B-555555.svg)](https://skse.silverlock.org/)
 [![Backend: Dear ImGui](https://img.shields.io/badge/Backend-Dear%20ImGui-success.svg)](https://github.com/ocornut/imgui)
 
-![PerfUI Skyrim SE Journal Demo](docs/assets/perfui_skyrim_preview.png)
+![PerfUI Smart Compass & Quest Objective Overlay](screenshots/2.png)
+
+<p align="center">
+  <img src="screenshots/1.png" alt="PerfUI Status Bars & Character Stats Overlay" />
+</p>
 
 **PerfUI** is an independent, high-performance retained-mode C++20 user interface framework built specifically for *The Elder Scrolls V: Skyrim Special Edition / Anniversary Edition*, as well as standalone DirectX 11 applications.
 
