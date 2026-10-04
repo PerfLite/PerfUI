@@ -160,6 +160,13 @@ public:
         return m_renderBackend ? m_renderBackend->getTextureSize(id) : Dimensions{ 0.0f, 0.0f };
     }
 
+    // Hotkey Management API (Stage 3 Clean Client)
+    bool registerHotkey(std::string id, uint32_t keyCode, std::function<void()> callback);
+    void unregisterHotkey(const std::string& id);
+    bool triggerHotkey(uint32_t keyCode);
+    size_t hotkeyCount() const;
+    void clearHotkeys();
+
 private:
     void performLayout();
 
@@ -190,6 +197,14 @@ private:
     ComboBox* m_activeComboBox{ nullptr };
     OverlayManager m_overlayManager;
     float m_lastDeltaTime{ 0.016f };
+
+    // Hotkeys storage
+    struct HotkeyItem {
+        uint32_t keyCode{ 0 };
+        std::function<void()> callback;
+    };
+    mutable std::mutex m_hotkeyMutex;
+    std::unordered_map<std::string, HotkeyItem> m_hotkeys;
 
     // Threading
     std::thread::id m_uiThreadId{};

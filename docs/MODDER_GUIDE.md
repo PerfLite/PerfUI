@@ -256,3 +256,89 @@ private:
 - **`[H]`** — Восстановить 15 HP.
 - **`[F10]`** — Открыть полноэкранное Главное меню.
 - **`[F11]`** — Открыть Дневник квестов.
+
+---
+
+## 11. Архитектура «Чистого клиента» (Clean Client Model)
+
+В версии PerfUI 1.0 реализована модель **«Чистого клиента»**, позволяющая создавать моды на HUD, оверлеи и интерактивные меню **без единого собственного хука DirectX 11 или WndProc**.
+
+### Преимущества модели «Чистого клиента»:
+1. **Единый владелец хуков:** В игре остаётся строго один хук `Present`, один `ResizeBuffers` и один `WndProc` (в `PerfUI.dll`). Это исключает конфликты хуков, падения при ресайзе буферов или смене полноэкранного режима.
+2. **Нулевой ImGui в коде мода:** Мод не компилирует ImGui, не создаёт второй `ImGui::Context` и не тратит лишнюю память.
+3. **Безопасная задержка загрузки:** С флагом `/DELAYLOAD:PerfUI.dll` мод никогда не упадёт при старте, если `PerfUI.dll` временно отсутствует — он сможет корректно отключить свой UI и уведомить пользователя в логе.
+
+### 11.1 Регистрация оверлеев (HUD, компас, индикаторы)
+
+Для рисования элементов HUD поверх игры используйте `PerfUI::Client::RegisterOverlay`:
+
+```cpp
+#include <PerfUI/PerfUIApi.h>
+
+// Регистрируем оверлей: имя, колбэк, z-порядок, флаг alwaysVisible
+auto overlayId = PerfUI::Client::RegisterOverlay(
+    "MyCustomCompass",
+    [](PerfUI::OverlayContext& ctx) {
+        // ctx.renderer предоставляет чистый UIRenderBackend:
+        // drawLine, drawCircle, drawRect, drawImage, drawText и др.
+        float cx = ctx.screenSize.width * 0.5f;
+        float cy = 30.0f;
+        ctx.renderer.drawCircle(PerfUI::Point(cx, cy), 16.0f, PerfUI::Color(255, 215, 0, 200));
+        ctx.renderer.drawText("N", PerfUI::Point(cx - 5.0f, cy - 8.0f), { 16.0f, PerfUI::Color::White() });
+    },
+    /*zOrder=*/10,
+    /*alwaysVisible=*/true
+);
+```
+
+### 11.2 Горячие клавиши и блокировка ввода
+
+```cpp
+// 1. Регистрация глобальной горячей клавиши (по умолчанию F7, код 0x76)
+PerfUI::Client::RegisterHotkey("MyMod_Toggle", 0x76, []() {
+    SKSE::log::info("F7 pressed!");
+});
+
+// 2. Блокировка ввода игры при открытии полноэкранного меню мода
+// При true: курсор мыши синхронизируется с аппаратным стрелочным курсором Windows,
+// а игровой ввод (камера, кнопки) блокируется через kStop в ProcessEvent.
+PerfUI::Client::CaptureInput(true);
+```
+
+### 11.3 Текстуры и спрайты без прямого DirectX 11
+
+```cpp
+// Загрузка текстуры (PNG, JPG, BMP) через PerfUI:
+PerfUI::TextureId myTex = PerfUI::Client::LoadTexture("Data/Textures/MyMod/icon.png");
+
+// Отрисовка в оверлее:
+ctx.renderer.drawImage(myTex, PerfUI::Rect(100.0f, 100.0f, 48.0f, 48.0f), PerfUI::Color::White());
+
+// Выгрузка текстуры при завершении работы:
+PerfUI::Client::DestroyTexture(myTex);
+```
+
+### 11.4 Безопасная предзагрузка PerfUI.dll по полному пути
+
+```cpp
+bool PreloadPerfUI() {
+    HMODULE hSelf = nullptr;
+    if (::GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&PreloadPerfUI),
+            &hSelf)) {
+        wchar_t selfPath[MAX_PATH];
+        DWORD len = ::GetModuleFileNameW(hSelf, selfPath, MAX_PATH);
+        if (len > 0 && len < MAX_PATH) {
+            std::filesystem::path p(selfPath);
+            std::filesystem::path perfUIPath = p.parent_path() / L"PerfUI.dll";
+            if (std::filesystem::exists(perfUIPath)) {
+                HMODULE hPerf = ::LoadLibraryExW(perfUIPath.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+                if (hPerf) return true;
+            }
+        }
+    }
+    return ::GetModuleHandleW(L"PerfUI.dll") != nullptr;
+}
+```
+

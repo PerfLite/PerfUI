@@ -54,6 +54,7 @@ private:
 
     std::mutex m_queueLock;
     std::vector<QueuedInput> m_inputQueue;
+    POINT m_lastMousePos{ 0, 0 };
 
     static constexpr uint32_t kDefaultToggleKey = VK_F11;
 };

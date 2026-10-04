@@ -57,9 +57,18 @@ void InputHook::SetCaptureInput(bool capture) {
     // Properly adjust Windows cursor display count
     if (capture) {
         while (::ShowCursor(TRUE) < 0);
+        ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
     } else {
         while (::ShowCursor(FALSE) >= 0);
     }
+
+    SKSE::GetTaskInterface()->AddTask([capture]() {
+        auto* controlMap = RE::ControlMap::GetSingleton();
+        if (controlMap) {
+            using UEFlag = RE::UserEvents::USER_EVENT_FLAG;
+            controlMap->ToggleControls(UEFlag::kAll, !capture);
+        }
+    });
 }
 
 void InputHook::PushInput(QueuedInput event) {
@@ -82,6 +91,11 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
         bool capturingKeybind = uiCtx && uiCtx->isCapturingKeybind();
 
         if (!capturingKeybind) {
+            // First check user registered hotkeys via UIContext
+            if (uiCtx && uiCtx->triggerHotkey(static_cast<uint32_t>(wParam))) {
+                return 0;
+            }
+
             if (wParam == VK_F10) {
                 D3D11Hook::GetSingleton().ToggleMainMenu();
                 return 0;
@@ -92,12 +106,22 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
 
             if (hook.m_captureInput.load() && wParam == VK_ESCAPE) {
                 D3D11Hook::GetSingleton().SetUIVisible(false);
+                hook.SetCaptureInput(false);
                 return 0;
             }
         }
     }
 
     if (hook.m_captureInput.load()) {
+        // Force Windows hardware arrow cursor
+        if (msg == WM_SETCURSOR) {
+            if (LOWORD(lParam) == HTCLIENT) {
+                while (::ShowCursor(TRUE) < 0);
+                ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
+                return TRUE;
+            }
+        }
+
         auto* imguiCtx = D3D11Hook::GetSingleton().GetImGuiContext();
         if (imguiCtx) {
             auto* prevCtx = ImGui::GetCurrentContext();
@@ -114,20 +138,31 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
         case WM_MOUSEMOVE: {
             float x = static_cast<float>(GET_X_LPARAM(lParam));
             float y = static_cast<float>(GET_Y_LPARAM(lParam));
+            hook.m_lastMousePos = { static_cast<LONG>(x), static_cast<LONG>(y) };
             hook.PushInput({ QueuedInput::Type::MouseMove, 0, x, y });
+
+            auto* mc = RE::MenuCursor::GetSingleton();
+            if (mc) {
+                mc->cursorPosX = x;
+                mc->cursorPosY = y;
+            }
             return 0;
         }
-        case WM_LBUTTONDOWN: {
-            float x = static_cast<float>(GET_X_LPARAM(lParam));
-            float y = static_cast<float>(GET_Y_LPARAM(lParam));
-            hook.PushInput({ QueuedInput::Type::MouseDown, 0, x, y });
-            return 0;
-        }
-        case WM_LBUTTONUP: {
-            float x = static_cast<float>(GET_X_LPARAM(lParam));
-            float y = static_cast<float>(GET_Y_LPARAM(lParam));
-            hook.PushInput({ QueuedInput::Type::MouseUp, 0, x, y });
-            return 0;
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+        case WM_LBUTTONDBLCLK:
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP:
+        case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+        case WM_MBUTTONDBLCLK:
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP:
+        case WM_XBUTTONDBLCLK: {
+            while (::ShowCursor(TRUE) < 0);
+            ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
+            return 0; // Handled via DirectInput in ProcessEvent
         }
         case WM_MOUSEWHEEL: {
             short zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
@@ -137,21 +172,6 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
             hook.PushInput({ QueuedInput::Type::MouseWheel, 0, static_cast<float>(pt.x), static_cast<float>(pt.y), delta });
             return 0;
         }
-        case WM_RBUTTONDOWN: {
-            float x = static_cast<float>(GET_X_LPARAM(lParam));
-            float y = static_cast<float>(GET_Y_LPARAM(lParam));
-            hook.PushInput({ QueuedInput::Type::MouseDown, 1, x, y });
-            return 0;
-        }
-        case WM_RBUTTONUP: {
-            float x = static_cast<float>(GET_X_LPARAM(lParam));
-            float y = static_cast<float>(GET_Y_LPARAM(lParam));
-            hook.PushInput({ QueuedInput::Type::MouseUp, 1, x, y });
-            return 0;
-        }
-        case WM_MBUTTONDOWN:
-        case WM_MBUTTONUP:
-            return 0; // Swallow from Skyrim
         case WM_CHAR: {
             hook.PushInput({ QueuedInput::Type::Char, 0, 0.0f, 0.0f, 0.0f, static_cast<uint32_t>(wParam), 0 });
             return 0; // Swallow from Skyrim
@@ -175,9 +195,73 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
     RE::InputEvent* const* a_event,
     RE::BSTEventSource<RE::InputEvent*>*
 ) {
-    (void)a_event;
-    // Always return kContinue to avoid breaking Skyrim's internal input event pipeline
-    return RE::BSEventNotifyControl::kContinue;
+    if (!m_captureInput.load() || !a_event) {
+        return RE::BSEventNotifyControl::kContinue;
+    }
+
+    // Walk the linked list of input events from Skyrim's DirectInput polling
+    for (auto* event = *a_event; event; event = event->next) {
+        // Mouse buttons: device == kMouse, type == kButton
+        if (event->GetDevice() == RE::INPUT_DEVICE::kMouse &&
+            event->GetEventType() == RE::INPUT_EVENT_TYPE::kButton)
+        {
+            auto* btnEvent = event->AsButtonEvent();
+            if (!btnEvent) continue;
+
+            uint32_t keyCode = btnEvent->GetIDCode();
+
+            // kLeftButton = 0, kRightButton = 1, kMiddleButton = 2
+            // kWheelUp = 8, kWheelDown = 9
+            static bool s_mouseButtonDown[3] = { false, false, false };
+
+            if (keyCode <= 2) {
+                while (::ShowCursor(TRUE) < 0);
+                ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
+
+                POINT pt;
+                if (m_hWnd && ::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
+                    m_lastMousePos = pt;
+                }
+
+                bool isPressed = btnEvent->IsPressed();
+                if (isPressed && !s_mouseButtonDown[keyCode]) {
+                    s_mouseButtonDown[keyCode] = true;
+                    PushInput({ QueuedInput::Type::MouseDown, static_cast<int>(keyCode), static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y) });
+                } else if (!isPressed && s_mouseButtonDown[keyCode]) {
+                    s_mouseButtonDown[keyCode] = false;
+                    PushInput({ QueuedInput::Type::MouseUp, static_cast<int>(keyCode), static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y) });
+                }
+            } else if (keyCode == 8) {
+                if (btnEvent->IsDown()) {
+                    PushInput({ QueuedInput::Type::MouseWheel, 0, static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y), 1.0f });
+                }
+            } else if (keyCode == 9) {
+                if (btnEvent->IsDown()) {
+                    PushInput({ QueuedInput::Type::MouseWheel, 0, static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y), -1.0f });
+                }
+            }
+        }
+
+        // DirectInput keyboard events
+        if (event->GetDevice() == RE::INPUT_DEVICE::kKeyboard &&
+            event->GetEventType() == RE::INPUT_EVENT_TYPE::kButton)
+        {
+            auto* btnEvent = event->AsButtonEvent();
+            if (!btnEvent) continue;
+
+            uint32_t scanCode = btnEvent->GetIDCode();
+            if (btnEvent->IsDown()) {
+                if (scanCode == 1) { // ESC
+                    PushInput({ QueuedInput::Type::KeyDown, 0, 0, 0, 0, 0, VK_ESCAPE });
+                } else if (scanCode == 28) { // Enter
+                    PushInput({ QueuedInput::Type::KeyDown, 0, 0, 0, 0, 0, VK_RETURN });
+                }
+            }
+        }
+    }
+
+    // Consume input completely while modal UI is open so vanilla Skyrim never processes ghost clicks or resets cursor
+    return RE::BSEventNotifyControl::kStop;
 }
 
 } // namespace PerfUI::Skyrim

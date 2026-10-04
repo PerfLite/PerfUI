@@ -369,6 +369,10 @@ void UIContext::onCharInput(uint32_t charCode) {
 }
 
 void UIContext::onKeyDown(int keyCode) {
+    if (triggerHotkey(static_cast<uint32_t>(keyCode))) {
+        return;
+    }
+
     if (m_activeComboBox && m_activeComboBox->isOpen()) {
         if (keyCode == 0x1B) { // VK_ESCAPE
             m_activeComboBox->setOpen(false);
@@ -493,6 +497,46 @@ void UIContext::assertUIThread() const {
 #ifndef NDEBUG
     assert(isUIThread() && "UI operation must execute on the designated UI thread!");
 #endif
+}
+
+bool UIContext::registerHotkey(std::string id, uint32_t keyCode, std::function<void()> callback) {
+    if (id.empty() || !callback) return false;
+    std::lock_guard<std::mutex> lock(m_hotkeyMutex);
+    m_hotkeys[std::move(id)] = HotkeyItem{ keyCode, std::move(callback) };
+    return true;
+}
+
+void UIContext::unregisterHotkey(const std::string& id) {
+    std::lock_guard<std::mutex> lock(m_hotkeyMutex);
+    m_hotkeys.erase(id);
+}
+
+bool UIContext::triggerHotkey(uint32_t keyCode) {
+    std::function<void()> cbToRun;
+    {
+        std::lock_guard<std::mutex> lock(m_hotkeyMutex);
+        for (const auto& [id, item] : m_hotkeys) {
+            if (item.keyCode == keyCode && item.callback) {
+                cbToRun = item.callback;
+                break;
+            }
+        }
+    }
+    if (cbToRun) {
+        cbToRun();
+        return true;
+    }
+    return false;
+}
+
+size_t UIContext::hotkeyCount() const {
+    std::lock_guard<std::mutex> lock(m_hotkeyMutex);
+    return m_hotkeys.size();
+}
+
+void UIContext::clearHotkeys() {
+    std::lock_guard<std::mutex> lock(m_hotkeyMutex);
+    m_hotkeys.clear();
 }
 
 } // namespace PerfUI

@@ -58,6 +58,11 @@ struct IPerfUI_v1 {
     bool (*UpdateDynamicTexture)(TextureId id, uint32_t width, uint32_t height, const uint8_t* rgbaPixels);
     void (*DestroyTexture)(TextureId id);
     Dimensions (*GetTextureSize)(TextureId id);
+
+    // Input & Hotkeys System (Phase 3 Clean Client)
+    void (*CaptureInput)(bool capture);
+    bool (*RegisterHotkey)(const char* id, uint32_t defaultKey, std::function<void()> cb);
+    void (*UnregisterHotkey)(const char* id);
 };
 
 } // namespace PerfUI::API
@@ -212,6 +217,39 @@ inline Dimensions GetTextureSize(TextureId id) {
     }
     auto* ctx = GetContext();
     return ctx ? ctx->getTextureSize(id) : Dimensions{ 0.0f, 0.0f };
+}
+
+// Input & Hotkeys System (Phase 3 Clean Client)
+inline void CaptureInput(bool capture) {
+    auto* api = GetApi();
+    if (api && api->CaptureInput) {
+        api->CaptureInput(capture);
+        return;
+    }
+}
+
+inline bool RegisterHotkey(const char* id, uint32_t defaultKey, std::function<void()> cb) {
+    auto* api = GetApi();
+    if (api && api->RegisterHotkey) {
+        return api->RegisterHotkey(id, defaultKey, std::move(cb));
+    }
+    auto* ctx = GetContext();
+    if (ctx && id && cb) {
+        return ctx->registerHotkey(id, defaultKey, std::move(cb));
+    }
+    return false;
+}
+
+inline void UnregisterHotkey(const char* id) {
+    auto* api = GetApi();
+    if (api && api->UnregisterHotkey) {
+        api->UnregisterHotkey(id);
+        return;
+    }
+    auto* ctx = GetContext();
+    if (ctx && id) {
+        ctx->unregisterHotkey(id);
+    }
 }
 
 } // namespace PerfUI::Client

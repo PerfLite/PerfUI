@@ -343,10 +343,25 @@ void D3D11Hook::RenderFrame() {
         // Drain queued input from background hook
         auto queuedInputs = InputHook::GetSingleton().DrainInputQueue();
         for (const auto& ev : queuedInputs) {
-            if (ev.type == InputHook::QueuedInput::Type::Char) {
+            switch (ev.type) {
+            case InputHook::QueuedInput::Type::Char:
                 m_uiContext->onCharInput(ev.charCode);
-            } else if (ev.type == InputHook::QueuedInput::Type::KeyDown) {
+                break;
+            case InputHook::QueuedInput::Type::KeyDown:
                 m_uiContext->onKeyDown(ev.keyCode);
+                break;
+            case InputHook::QueuedInput::Type::MouseMove:
+                m_uiContext->onMouseMove({ ev.x, ev.y });
+                break;
+            case InputHook::QueuedInput::Type::MouseDown:
+                m_uiContext->onMouseDown(ev.button, { ev.x, ev.y });
+                break;
+            case InputHook::QueuedInput::Type::MouseUp:
+                m_uiContext->onMouseUp(ev.button, { ev.x, ev.y });
+                break;
+            case InputHook::QueuedInput::Type::MouseWheel:
+                m_uiContext->onMouseWheel(ev.wheelDelta, { ev.x, ev.y });
+                break;
             }
         }
 

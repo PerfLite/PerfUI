@@ -63,6 +63,21 @@ void OnMessage(SKSE::MessagingInterface::Message* a_msg) {
     }
 }
 
+struct InitD3DHook {
+    static void thunk() {
+        func();
+        SKSE::log::info("PerfUI hooks installed by: PerfUI.dll");
+        if (PerfUI::Skyrim::D3D11Hook::GetSingleton().Install()) {
+            auto* renderer = RE::BSGraphics::Renderer::GetSingleton();
+            if (renderer && renderer->data.renderWindows[0].hWnd) {
+                HWND hWnd = reinterpret_cast<HWND>(renderer->data.renderWindows[0].hWnd);
+                PerfUI::Skyrim::InputHook::GetSingleton().Install(hWnd);
+            }
+        }
+    }
+    static inline REL::Relocation<decltype(thunk)> func;
+};
+
 } // namespace
 
 SKSEPluginInfo(
@@ -85,6 +100,14 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse) {
 
     SKSE::Init(a_skse);
     messaging->RegisterListener("SKSE", OnMessage);
+
+    // Install early D3D11 hook at BSGraphics::InitD3D to capture frame 0 on startup
+    {
+        SKSE::AllocTrampoline(512);
+        REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(75595, 77226), 0x9 };
+        InitD3DHook::func = SKSE::GetTrampoline().write_call<5>(target.address(), InitD3DHook::thunk);
+        SKSE::log::info("PerfUI: Early InitD3D hook installed successfully!");
+    }
 
     SKSE::log::info("PerfUI loaded and messaging listener registered");
     return true;
@@ -169,6 +192,24 @@ static PerfUI::Dimensions API_GetTextureSize(PerfUI::TextureId id) {
     return ctx ? ctx->getTextureSize(id) : PerfUI::Dimensions{ 0.0f, 0.0f };
 }
 
+static void API_CaptureInput(bool capture) {
+    PerfUI::Skyrim::InputHook::GetSingleton().SetCaptureInput(capture);
+}
+
+static bool API_RegisterHotkey(const char* id, uint32_t defaultKey, std::function<void()> cb) {
+    if (!id || !cb) return false;
+    auto* ctx = API_GetContext();
+    return ctx ? ctx->registerHotkey(id, defaultKey, std::move(cb)) : false;
+}
+
+static void API_UnregisterHotkey(const char* id) {
+    if (!id) return;
+    auto* ctx = API_GetContext();
+    if (ctx) {
+        ctx->unregisterHotkey(id);
+    }
+}
+
 static PerfUI::API::IPerfUI_v1 g_perfUI_API_v1{
     .version = PerfUI::API::InterfaceVersion_1,
     .GetContext = API_GetContext,
@@ -184,7 +225,10 @@ static PerfUI::API::IPerfUI_v1 g_perfUI_API_v1{
     .CreateDynamicTexture = API_CreateDynamicTexture,
     .UpdateDynamicTexture = API_UpdateDynamicTexture,
     .DestroyTexture = API_DestroyTexture,
-    .GetTextureSize = API_GetTextureSize
+    .GetTextureSize = API_GetTextureSize,
+    .CaptureInput = API_CaptureInput,
+    .RegisterHotkey = API_RegisterHotkey,
+    .UnregisterHotkey = API_UnregisterHotkey
 };
 
 extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interfaceVersion, const PerfUI::API::ClientABIInfo* a_clientAbi) {
