@@ -122,6 +122,53 @@ static void API_ToggleUI() {
     PerfUI::Skyrim::D3D11Hook::GetSingleton().ToggleUI();
 }
 
+static PerfUI::OverlayId API_RegisterOverlay(const char* name, PerfUI::OverlayCallback cb, int zOrder, bool alwaysVisible) {
+    auto* ctx = API_GetContext();
+    return ctx ? ctx->registerOverlay(name, std::move(cb), zOrder, alwaysVisible) : 0;
+}
+
+static void API_UnregisterOverlay(PerfUI::OverlayId id) {
+    auto* ctx = API_GetContext();
+    if (ctx) {
+        ctx->unregisterOverlay(id);
+    }
+}
+
+static void API_SetOverlayVisible(PerfUI::OverlayId id, bool visible) {
+    auto* ctx = API_GetContext();
+    if (ctx) {
+        ctx->setOverlayVisible(id, visible);
+    }
+}
+
+static PerfUI::TextureId API_LoadTexture(const char* filePath) {
+    if (!filePath) return 0;
+    auto* ctx = API_GetContext();
+    return ctx ? ctx->loadTexture(filePath) : 0;
+}
+
+static PerfUI::TextureId API_CreateDynamicTexture(uint32_t width, uint32_t height, const uint8_t* rgbaPixels) {
+    auto* ctx = API_GetContext();
+    return ctx ? ctx->createDynamicTexture(width, height, rgbaPixels) : 0;
+}
+
+static bool API_UpdateDynamicTexture(PerfUI::TextureId id, uint32_t width, uint32_t height, const uint8_t* rgbaPixels) {
+    auto* ctx = API_GetContext();
+    return ctx ? ctx->updateDynamicTexture(id, width, height, rgbaPixels) : false;
+}
+
+static void API_DestroyTexture(PerfUI::TextureId id) {
+    auto* ctx = API_GetContext();
+    if (ctx) {
+        ctx->destroyTexture(id);
+    }
+}
+
+static PerfUI::Dimensions API_GetTextureSize(PerfUI::TextureId id) {
+    auto* ctx = API_GetContext();
+    return ctx ? ctx->getTextureSize(id) : PerfUI::Dimensions{ 0.0f, 0.0f };
+}
+
 static PerfUI::API::IPerfUI_v1 g_perfUI_API_v1{
     .version = PerfUI::API::InterfaceVersion_1,
     .GetContext = API_GetContext,
@@ -129,7 +176,15 @@ static PerfUI::API::IPerfUI_v1 g_perfUI_API_v1{
     .PlaySound = API_PlaySound,
     .SetUIVisible = API_SetUIVisible,
     .IsUIVisible = API_IsUIVisible,
-    .ToggleUI = API_ToggleUI
+    .ToggleUI = API_ToggleUI,
+    .RegisterOverlay = API_RegisterOverlay,
+    .UnregisterOverlay = API_UnregisterOverlay,
+    .SetOverlayVisible = API_SetOverlayVisible,
+    .LoadTexture = API_LoadTexture,
+    .CreateDynamicTexture = API_CreateDynamicTexture,
+    .UpdateDynamicTexture = API_UpdateDynamicTexture,
+    .DestroyTexture = API_DestroyTexture,
+    .GetTextureSize = API_GetTextureSize
 };
 
 extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interfaceVersion, const PerfUI::API::ClientABIInfo* a_clientAbi) {

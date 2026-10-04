@@ -40,6 +40,8 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/Toast.h
     include/PerfUI/ContextMenu.h
     include/PerfUI/ModalDialog.h
+    include/PerfUI/Overlay.h
+    include/PerfUI/OverlayManager.h
     include/PerfUI/JournalWindow.h
     include/PerfUI/MainMenuWindow.h
     include/PerfUI/PerfUI.h
@@ -47,6 +49,7 @@ add_library(PerfUI_Core STATIC
     src/core/UIContext.cpp
     src/core/Theme.cpp
     src/core/ConfigManager.cpp
+    src/core/OverlayManager.cpp
     src/layout/LayoutEngine.cpp
     src/widgets/Panel.cpp
     src/widgets/Text.cpp

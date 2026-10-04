@@ -207,6 +207,34 @@ void D3D11Hook::SetUIVisible(bool visible) {
     SKSE::log::info("PerfUI visibility set to: {}", visible ? "Visible" : "Hidden");
 }
 
+void D3D11Hook::EnsureUIContext() {
+    if (m_uiContext) return;
+    m_uiContext = std::make_unique<PerfUI::UIContext>();
+    m_uiContext->setSoundCallback([](const std::string& soundId) {
+        SkyrimSoundService::PlayUISound(soundId.c_str());
+    });
+
+    m_uiContext->overlayManager().setErrorCallback([](const std::string& name, const std::string& err) {
+        SKSE::log::error("PerfUI Overlay '{}' threw exception: {}. Disabled.", name, err);
+    });
+
+    // Add retained-mode Nordic Journal Window
+    m_journalWindow = m_uiContext->root()->add<PerfUI::JournalWindow>();
+    m_journalWindow->onTrackQuest([](uint32_t formId, bool active) {
+        SkyrimQuestService::GetSingleton().SetQuestActive(formId, active);
+    });
+
+    // Add retained-mode Main Menu Window (Phase 13)
+    m_mainMenuWindow = m_uiContext->root()->add<PerfUI::MainMenuWindow>();
+    m_mainMenuWindow->setVisible(false);
+    m_mainMenuWindow->onContinueGame([this]() {
+        SetUIVisible(false);
+    });
+    m_mainMenuWindow->onQuitToDesktop([]() {
+        ::PostQuitMessage(0);
+    });
+}
+
 void D3D11Hook::InitializeImGui(IDXGISwapChain* pSwapChain) {
     if (m_imguiInitialized.load()) return;
 
@@ -230,32 +258,15 @@ void D3D11Hook::InitializeImGui(IDXGISwapChain* pSwapChain) {
 
     // Initialize backend and load sharp TrueType vector fonts before creating DirectX 11 textures
     m_renderBackend = std::make_unique<PerfUI::ImGuiRenderBackend>();
+    m_renderBackend->setD3D11Device(m_device, m_context);
     m_renderBackend->initFonts();
 
     ImGui_ImplWin32_Init(m_hWnd);
     ImGui_ImplDX11_Init(m_device, m_context);
 
     // Initialize PerfUI
-    m_uiContext = std::make_unique<PerfUI::UIContext>();
-    m_uiContext->setSoundCallback([](const std::string& soundId) {
-        SkyrimSoundService::PlayUISound(soundId.c_str());
-    });
-
-    // Add retained-mode Nordic Journal Window
-    m_journalWindow = m_uiContext->root()->add<PerfUI::JournalWindow>();
-    m_journalWindow->onTrackQuest([](uint32_t formId, bool active) {
-        SkyrimQuestService::GetSingleton().SetQuestActive(formId, active);
-    });
-
-    // Add retained-mode Main Menu Window (Phase 13)
-    m_mainMenuWindow = m_uiContext->root()->add<PerfUI::MainMenuWindow>();
-    m_mainMenuWindow->setVisible(false);
-    m_mainMenuWindow->onContinueGame([this]() {
-        SetUIVisible(false);
-    });
-    m_mainMenuWindow->onQuitToDesktop([]() {
-        ::PostQuitMessage(0);
-    });
+    EnsureUIContext();
+    m_uiContext->setRenderBackend(m_renderBackend.get());
 
     m_lastFrameTime = std::chrono::high_resolution_clock::now();
     if (prevContext && prevContext != m_imguiContext) {
@@ -282,7 +293,9 @@ void D3D11Hook::CleanupRenderTarget() {
 }
 
 void D3D11Hook::RenderFrame() {
-    if (!m_imguiInitialized.load() || !m_uiVisible.load() || !m_imguiContext) return;
+    bool uiVis = m_uiVisible.load();
+    bool hasOverlays = m_uiContext && m_uiContext->hasVisibleOverlays();
+    if (!m_imguiInitialized.load() || (!uiVis && !hasOverlays) || !m_imguiContext) return;
 
     ImGuiContext* prevContext = ImGui::GetCurrentContext();
     ImGui::SetCurrentContext(m_imguiContext);
@@ -323,49 +336,51 @@ void D3D11Hook::RenderFrame() {
     float height = static_cast<float>(clientRect.bottom - clientRect.top);
     m_uiContext->setViewportSize({ width, height });
 
-    // Draw software cursor inside Skyrim when UI is visible
-    ImGui::GetIO().MouseDrawCursor = m_uiVisible.load();
+    // Draw software cursor inside Skyrim only when modal UI is visible
+    ImGui::GetIO().MouseDrawCursor = uiVis;
 
-    // Drain queued input from background hook
-    auto queuedInputs = InputHook::GetSingleton().DrainInputQueue();
-    for (const auto& ev : queuedInputs) {
-        if (ev.type == InputHook::QueuedInput::Type::Char) {
-            m_uiContext->onCharInput(ev.charCode);
-        } else if (ev.type == InputHook::QueuedInput::Type::KeyDown) {
-            m_uiContext->onKeyDown(ev.keyCode);
+    if (uiVis) {
+        // Drain queued input from background hook
+        auto queuedInputs = InputHook::GetSingleton().DrainInputQueue();
+        for (const auto& ev : queuedInputs) {
+            if (ev.type == InputHook::QueuedInput::Type::Char) {
+                m_uiContext->onCharInput(ev.charCode);
+            } else if (ev.type == InputHook::QueuedInput::Type::KeyDown) {
+                m_uiContext->onKeyDown(ev.keyCode);
+            }
         }
-    }
 
-    // Directly synchronize UIContext pointer with ImGui's Win32 mouse state
-    const auto& io = ImGui::GetIO();
-    m_uiContext->onMouseMove({ io.MousePos.x, io.MousePos.y });
-    if (io.MouseClicked[0]) {
-        m_uiContext->onMouseDown(0, { io.MousePos.x, io.MousePos.y });
-    }
-    if (io.MouseReleased[0]) {
-        m_uiContext->onMouseUp(0, { io.MousePos.x, io.MousePos.y });
-    }
-    if (io.MouseClicked[1]) {
-        m_uiContext->onMouseDown(1, { io.MousePos.x, io.MousePos.y });
-    }
-    if (io.MouseReleased[1]) {
-        m_uiContext->onMouseUp(1, { io.MousePos.x, io.MousePos.y });
-    }
-    if (io.MouseWheel != 0.0f) {
-        m_uiContext->onMouseWheel(io.MouseWheel, { io.MousePos.x, io.MousePos.y });
-    }
+        // Directly synchronize UIContext pointer with ImGui's Win32 mouse state
+        const auto& io = ImGui::GetIO();
+        m_uiContext->onMouseMove({ io.MousePos.x, io.MousePos.y });
+        if (io.MouseClicked[0]) {
+            m_uiContext->onMouseDown(0, { io.MousePos.x, io.MousePos.y });
+        }
+        if (io.MouseReleased[0]) {
+            m_uiContext->onMouseUp(0, { io.MousePos.x, io.MousePos.y });
+        }
+        if (io.MouseClicked[1]) {
+            m_uiContext->onMouseDown(1, { io.MousePos.x, io.MousePos.y });
+        }
+        if (io.MouseReleased[1]) {
+            m_uiContext->onMouseUp(1, { io.MousePos.x, io.MousePos.y });
+        }
+        if (io.MouseWheel != 0.0f) {
+            m_uiContext->onMouseWheel(io.MouseWheel, { io.MousePos.x, io.MousePos.y });
+        }
 
-    // Safely consume live quests and player stats loaded from Skyrim engine
-    SkyrimDataBundle bundle;
-    if (SkyrimQuestService::GetSingleton().ConsumeNewData(bundle)) {
-        if (m_journalWindow) {
-            m_journalWindow->setQuests(std::move(bundle.activeQuests), std::move(bundle.completedQuests));
-            m_journalWindow->setPlayerStats(bundle.playerStats);
+        // Safely consume live quests and player stats loaded from Skyrim engine
+        SkyrimDataBundle bundle;
+        if (SkyrimQuestService::GetSingleton().ConsumeNewData(bundle)) {
+            if (m_journalWindow) {
+                m_journalWindow->setQuests(std::move(bundle.activeQuests), std::move(bundle.completedQuests));
+                m_journalWindow->setPlayerStats(bundle.playerStats);
+            }
         }
     }
 
     m_uiContext->update(dt);
-    m_uiContext->render(*m_renderBackend);
+    m_uiContext->render(*m_renderBackend, uiVis);
 
     ImGui::Render();
 
@@ -404,7 +419,7 @@ HRESULT STDMETHODCALLTYPE D3D11Hook::Hooked_Present(
         hook.InitializeImGui(pSwapChain);
     }
 
-    if (hook.m_uiVisible.load()) {
+    if (hook.m_uiVisible.load() || (hook.m_uiContext && hook.m_uiContext->hasVisibleOverlays())) {
         hook.RenderFrame();
     }
 

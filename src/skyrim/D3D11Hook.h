@@ -21,7 +21,13 @@ public:
     void SetUIVisible(bool visible);
     bool IsUIVisible() const { return m_uiVisible.load(); }
 
-    UIContext* GetContext() { return m_uiContext.get(); }
+    void EnsureUIContext();
+    UIContext* GetContext() {
+        if (!m_uiContext) {
+            EnsureUIContext();
+        }
+        return m_uiContext.get();
+    }
     ImGuiContext* GetImGuiContext() const { return m_imguiContext; }
 
 private:

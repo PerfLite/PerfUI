@@ -27,6 +27,7 @@ void UIContext::requestLayout() {
 void UIContext::update(float deltaTime) {
     m_uiThreadId = std::this_thread::get_id();
     assertUIThread();
+    m_lastDeltaTime = deltaTime;
 
     // 1. Drain queued UI-thread tasks at the start of update
     std::vector<std::function<void()>> tasks;
@@ -108,19 +109,26 @@ void UIContext::performLayout() {
     m_metrics.elementCount = CountElementsRecursive(m_root.get());
 }
 
-void UIContext::render(UIRenderBackend& backend) {
+void UIContext::render(UIRenderBackend& backend, bool renderTree) {
     m_renderBackend = &backend;
 
-    if (m_layoutDirty) {
+    if (renderTree && m_layoutDirty) {
         performLayout();
     }
 
     auto start = std::chrono::high_resolution_clock::now();
     backend.beginFrame();
-    if (m_root && m_root->isVisible()) {
+    if (renderTree && m_root && m_root->isVisible()) {
         m_root->render(backend);
     }
-    renderOverlay(backend);
+    if (renderTree) {
+        renderOverlay(backend);
+    }
+
+    // 5. Client Overlays (Clean Client Stage 1)
+    OverlayContext overlayCtx{ backend, m_viewportSize, 1.0f, m_lastDeltaTime };
+    m_overlayManager.renderOverlays(overlayCtx, renderTree);
+
     backend.endFrame();
     auto end = std::chrono::high_resolution_clock::now();
 

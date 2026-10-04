@@ -6,6 +6,7 @@
 #include "UIElement.h"
 #include "Toast.h"
 #include "ContextMenu.h"
+#include "OverlayManager.h"
 #include <memory>
 #include <vector>
 #include <string>
@@ -45,7 +46,7 @@ public:
 
     // Lifecycle
     void update(float deltaTime);
-    void render(UIRenderBackend& backend);
+    void render(UIRenderBackend& backend, bool renderTree = true);
 
     // Input Handling
     void onMouseMove(const Point& screenPos);
@@ -122,6 +123,43 @@ public:
     bool isUIThread() const;
     void assertUIThread() const;
 
+    // Client Overlays System (Phase 1 Clean Client)
+    OverlayManager& overlayManager() { return m_overlayManager; }
+    const OverlayManager& overlayManager() const { return m_overlayManager; }
+
+    OverlayId registerOverlay(const char* name, OverlayCallback cb, int zOrder = 0, bool alwaysVisible = true) {
+        return m_overlayManager.registerOverlay(name, std::move(cb), zOrder, alwaysVisible);
+    }
+    void unregisterOverlay(OverlayId id) {
+        m_overlayManager.unregisterOverlay(id);
+    }
+    void setOverlayVisible(OverlayId id, bool visible) {
+        m_overlayManager.setOverlayVisible(id, visible);
+    }
+    bool isOverlayVisible(OverlayId id) const {
+        return m_overlayManager.isOverlayVisible(id);
+    }
+    bool hasVisibleOverlays() const {
+        return m_overlayManager.hasVisibleOverlays();
+    }
+
+    // Texture Management API (Stage 2 Clean Client)
+    TextureId loadTexture(std::string_view filePath) {
+        return m_renderBackend ? m_renderBackend->loadTexture(filePath) : 0;
+    }
+    TextureId createDynamicTexture(uint32_t width, uint32_t height, const uint8_t* rgbaPixels) {
+        return m_renderBackend ? m_renderBackend->createDynamicTexture(width, height, rgbaPixels) : 0;
+    }
+    bool updateDynamicTexture(TextureId id, uint32_t width, uint32_t height, const uint8_t* rgbaPixels) {
+        return m_renderBackend ? m_renderBackend->updateDynamicTexture(id, width, height, rgbaPixels) : false;
+    }
+    void destroyTexture(TextureId id) {
+        if (m_renderBackend) m_renderBackend->destroyTexture(id);
+    }
+    Dimensions getTextureSize(TextureId id) {
+        return m_renderBackend ? m_renderBackend->getTextureSize(id) : Dimensions{ 0.0f, 0.0f };
+    }
+
 private:
     void performLayout();
 
@@ -150,6 +188,8 @@ private:
     bool m_capturingKeybind{ false };
     ContextMenu m_contextMenu;
     ComboBox* m_activeComboBox{ nullptr };
+    OverlayManager m_overlayManager;
+    float m_lastDeltaTime{ 0.016f };
 
     // Threading
     std::thread::id m_uiThreadId{};

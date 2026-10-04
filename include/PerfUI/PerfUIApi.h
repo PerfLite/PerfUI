@@ -3,10 +3,13 @@
 #include "Types.h"
 #include "UIContext.h"
 #include "Toast.h"
+#include "Overlay.h"
 #include <string>
 #include <cstdint>
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 
 namespace PerfUI::API {
@@ -43,6 +46,18 @@ struct IPerfUI_v1 {
     void (*SetUIVisible)(bool visible);
     bool (*IsUIVisible)();
     void (*ToggleUI)();
+
+    // Overlay System (Phase 1 Clean Client)
+    OverlayId (*RegisterOverlay)(const char* name, OverlayCallback cb, int zOrder, bool alwaysVisible);
+    void (*UnregisterOverlay)(OverlayId id);
+    void (*SetOverlayVisible)(OverlayId id, bool visible);
+
+    // Texture System (Phase 2 Clean Client)
+    TextureId (*LoadTexture)(const char* filePath);
+    TextureId (*CreateDynamicTexture)(uint32_t width, uint32_t height, const uint8_t* rgbaPixels);
+    bool (*UpdateDynamicTexture)(TextureId id, uint32_t width, uint32_t height, const uint8_t* rgbaPixels);
+    void (*DestroyTexture)(TextureId id);
+    Dimensions (*GetTextureSize)(TextureId id);
 };
 
 } // namespace PerfUI::API
@@ -115,6 +130,88 @@ inline void RunOnUIThread(std::function<void()> task) {
     if (ctx) {
         ctx->runOnUIThread(std::move(task));
     }
+}
+
+inline OverlayId RegisterOverlay(const char* name, OverlayCallback cb, int zOrder = 0, bool alwaysVisible = true) {
+    auto* api = GetApi();
+    if (api && api->RegisterOverlay) {
+        return api->RegisterOverlay(name, std::move(cb), zOrder, alwaysVisible);
+    }
+    auto* ctx = GetContext();
+    return ctx ? ctx->registerOverlay(name, std::move(cb), zOrder, alwaysVisible) : 0;
+}
+
+inline void UnregisterOverlay(OverlayId id) {
+    auto* api = GetApi();
+    if (api && api->UnregisterOverlay) {
+        api->UnregisterOverlay(id);
+        return;
+    }
+    auto* ctx = GetContext();
+    if (ctx) {
+        ctx->unregisterOverlay(id);
+    }
+}
+
+inline void SetOverlayVisible(OverlayId id, bool visible) {
+    auto* api = GetApi();
+    if (api && api->SetOverlayVisible) {
+        api->SetOverlayVisible(id, visible);
+        return;
+    }
+    auto* ctx = GetContext();
+    if (ctx) {
+        ctx->setOverlayVisible(id, visible);
+    }
+}
+
+// Texture System (Phase 2 Clean Client)
+inline TextureId LoadTexture(const char* filePath) {
+    auto* api = GetApi();
+    if (api && api->LoadTexture) {
+        return api->LoadTexture(filePath);
+    }
+    auto* ctx = GetContext();
+    return ctx ? ctx->loadTexture(filePath) : 0;
+}
+
+inline TextureId CreateDynamicTexture(uint32_t width, uint32_t height, const uint8_t* rgbaPixels) {
+    auto* api = GetApi();
+    if (api && api->CreateDynamicTexture) {
+        return api->CreateDynamicTexture(width, height, rgbaPixels);
+    }
+    auto* ctx = GetContext();
+    return ctx ? ctx->createDynamicTexture(width, height, rgbaPixels) : 0;
+}
+
+inline bool UpdateDynamicTexture(TextureId id, uint32_t width, uint32_t height, const uint8_t* rgbaPixels) {
+    auto* api = GetApi();
+    if (api && api->UpdateDynamicTexture) {
+        return api->UpdateDynamicTexture(id, width, height, rgbaPixels);
+    }
+    auto* ctx = GetContext();
+    return ctx ? ctx->updateDynamicTexture(id, width, height, rgbaPixels) : false;
+}
+
+inline void DestroyTexture(TextureId id) {
+    auto* api = GetApi();
+    if (api && api->DestroyTexture) {
+        api->DestroyTexture(id);
+        return;
+    }
+    auto* ctx = GetContext();
+    if (ctx) {
+        ctx->destroyTexture(id);
+    }
+}
+
+inline Dimensions GetTextureSize(TextureId id) {
+    auto* api = GetApi();
+    if (api && api->GetTextureSize) {
+        return api->GetTextureSize(id);
+    }
+    auto* ctx = GetContext();
+    return ctx ? ctx->getTextureSize(id) : Dimensions{ 0.0f, 0.0f };
 }
 
 } // namespace PerfUI::Client
