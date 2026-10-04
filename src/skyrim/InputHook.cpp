@@ -20,7 +20,7 @@ bool InputHook::Install(HWND hWnd) {
 
     m_hWnd = hWnd;
     m_originalWndProc = reinterpret_cast<WNDPROC>(
-        ::SetWindowLongPtrW(m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(Hooked_WndProc))
+        ::SetWindowLongPtrA(m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(Hooked_WndProc))
     );
 
     auto* inputManager = RE::BSInputDeviceManager::GetSingleton();
@@ -39,7 +39,7 @@ void InputHook::Uninstall() {
     SetCaptureInput(false);
 
     if (m_hWnd && m_originalWndProc) {
-        ::SetWindowLongPtrW(m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(m_originalWndProc));
+        ::SetWindowLongPtrA(m_hWnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(m_originalWndProc));
         m_originalWndProc = nullptr;
     }
 
@@ -188,7 +188,7 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
         }
     }
 
-    return ::CallWindowProcW(hook.m_originalWndProc, hWnd, msg, wParam, lParam);
+    return ::CallWindowProcA(hook.m_originalWndProc, hWnd, msg, wParam, lParam);
 }
 
 RE::BSEventNotifyControl InputHook::ProcessEvent(
