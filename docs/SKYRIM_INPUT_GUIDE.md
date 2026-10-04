@@ -195,3 +195,77 @@ if (MainMenuManager::GetSingleton().IsLoadingMenuOpen()) {
 ```
 Кадр перед блокировкой гарантированно уходит на экран залитым глубоким чёрным цветом со спинером.
 
+---
+
+## 8. Дуальная обработка кликов (DirectInput + WndProc Dual Fallback) и ленивая регистрация `BSInputDeviceManager`
+
+### 1. Критическая ловушка: Ранняя инициализация `BSInputDeviceManager`
+В функции раннего перехвата графики `BSGraphics::InitD3D` (кадр 0) синглтон `RE::BSInputDeviceManager::GetSingleton()` ещё **не создан** и возвращает `nullptr`.
+Если попытаться вызвать `AddEventSink` на этом этапе:
+- Вызов молча пропускается.
+- Флаг `m_installed` становится `true`.
+- При вызове на этапе `kDataLoaded` хук считает себя уже установленным и завершается досрочно.
+- В итоге `ProcessEvent` **никогда не вызывается**, и DirectInput-события мыши не приходят вовсе!
+
+**Железное правило:**
+Реализовать ленивую регистрацию через `EnsureInputSink()`:
+```cpp
+void InputHook::EnsureInputSink() {
+    if (m_sinkRegistered.load()) return;
+    auto* inputManager = RE::BSInputDeviceManager::GetSingleton();
+    if (inputManager) {
+        inputManager->AddEventSink(this);
+        m_sinkRegistered.store(true);
+        SKSE::log::info("InputHook: Registered BSInputDeviceManager event sink");
+    }
+}
+```
+Вызывать `EnsureInputSink()`:
+- В `InputHook::Install()` (на этапе `kDataLoaded`).
+- В `InputHook::SetCaptureInput(true)` (при открытии любого модального меню).
+- В `Hooked_WndProc` при первом сообщении в режиме захвата ввода.
+
+### 2. Дуальная обработка кликов мыши (DirectInput + Windows Messages)
+В оконном и безрамочном (Borderless) режимах Windows отправляет в `WndProc` стандартные сообщения `WM_LBUTTONDOWN`, `WM_LBUTTONUP`, `WM_LBUTTONDBLCLK`.
+В эксклюзивном полноэкранном режиме (Exclusive Fullscreen) эти сообщения могут не доходить до окна, и клики приходят исключительно через DirectInput (`BSInputDeviceManager::ProcessEvent`).
+
+Если полагаться только на один из источников или просто поглощать сообщения в `WndProc` (`return 0`), клики будут теряться в одном из режимов.
+
+**Идеальное архитектурное решение — общий массив состояния кнопок `m_mouseButtonDown[3]`:**
+- **В `Hooked_WndProc`:**
+  ```cpp
+  case WM_LBUTTONDOWN:
+  case WM_LBUTTONDBLCLK: {
+      if (!hook.m_mouseButtonDown[0]) {
+          hook.m_mouseButtonDown[0] = true;
+          hook.PushInput({ QueuedInput::Type::MouseDown, 0, x, y });
+      }
+      return 0;
+  }
+  case WM_LBUTTONUP: {
+      if (hook.m_mouseButtonDown[0]) {
+          hook.m_mouseButtonDown[0] = false;
+          hook.PushInput({ QueuedInput::Type::MouseUp, 0, x, y });
+      }
+      return 0;
+  }
+  ```
+- **В `ProcessEvent` (DirectInput):**
+  ```cpp
+  bool isPressed = btnEvent->IsPressed();
+  if (isPressed && !m_mouseButtonDown[keyCode]) {
+      m_mouseButtonDown[keyCode] = true;
+      PushInput({ QueuedInput::Type::MouseDown, keyCode, x, y });
+  } else if (!isPressed && m_mouseButtonDown[keyCode]) {
+      m_mouseButtonDown[keyCode] = false;
+      PushInput({ QueuedInput::Type::MouseUp, keyCode, x, y });
+  }
+  ```
+- При `SetCaptureInput(false)` все элементы массива сбрасываются в `false`.
+
+**Результат:**
+1. Тот обработчик, который поймал клик первым, немедленно отправляет событие в очередь.
+2. Второй обработчик видит, что флаг уже выставлен, и безопасно игнорирует дубликат.
+3. Клики мыши гарантированно работают с 0-задержкой в любом графическом режиме Skyrim SE.
+
+
