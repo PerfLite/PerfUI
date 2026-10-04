@@ -20,6 +20,7 @@ public:
     void ToggleMainMenu();
     void SetUIVisible(bool visible);
     bool IsUIVisible() const { return m_uiVisible.load(); }
+    bool HasVisibleRootWindows() const;
 
     void EnsureUIContext();
     UIContext* GetContext() {

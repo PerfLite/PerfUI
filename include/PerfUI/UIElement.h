@@ -51,6 +51,14 @@ public:
 
     void removeChild(UIElement* child);
     void clearChildren();
+    bool hasVisibleChildren() const {
+        for (const auto& child : m_children) {
+            if (child && child->isVisible()) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     // Identification & Context
     ElementId id() const { return m_id; }

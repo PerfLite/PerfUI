@@ -207,6 +207,10 @@ void D3D11Hook::SetUIVisible(bool visible) {
     SKSE::log::info("PerfUI visibility set to: {}", visible ? "Visible" : "Hidden");
 }
 
+bool D3D11Hook::HasVisibleRootWindows() const {
+    return m_uiContext && m_uiContext->root() && m_uiContext->root()->hasVisibleChildren();
+}
+
 void D3D11Hook::EnsureUIContext() {
     if (m_uiContext) return;
     m_uiContext = std::make_unique<PerfUI::UIContext>();
@@ -218,8 +222,9 @@ void D3D11Hook::EnsureUIContext() {
         SKSE::log::error("PerfUI Overlay '{}' threw exception: {}. Disabled.", name, err);
     });
 
-    // Add retained-mode Nordic Journal Window
+    // Add retained-mode Nordic Journal Window (hidden by default)
     m_journalWindow = m_uiContext->root()->add<PerfUI::JournalWindow>();
+    m_journalWindow->setVisible(false);
     m_journalWindow->onTrackQuest([](uint32_t formId, bool active) {
         SkyrimQuestService::GetSingleton().SetQuestActive(formId, active);
     });
@@ -294,8 +299,10 @@ void D3D11Hook::CleanupRenderTarget() {
 
 void D3D11Hook::RenderFrame() {
     bool uiVis = m_uiVisible.load();
+    bool hasRootWindows = HasVisibleRootWindows();
+    bool anyTreeVisible = uiVis || hasRootWindows;
     bool hasOverlays = m_uiContext && m_uiContext->hasVisibleOverlays();
-    if (!m_imguiInitialized.load() || (!uiVis && !hasOverlays) || !m_imguiContext) return;
+    if (!m_imguiInitialized.load() || (!anyTreeVisible && !hasOverlays) || !m_imguiContext) return;
 
     ImGuiContext* prevContext = ImGui::GetCurrentContext();
     ImGui::SetCurrentContext(m_imguiContext);
@@ -336,10 +343,11 @@ void D3D11Hook::RenderFrame() {
     float height = static_cast<float>(clientRect.bottom - clientRect.top);
     m_uiContext->setViewportSize({ width, height });
 
-    // Draw software cursor inside Skyrim only when modal UI is visible
-    ImGui::GetIO().MouseDrawCursor = uiVis;
+    // Use Windows hardware cursor - never draw duplicate ImGui software cursor
+    ImGui::GetIO().MouseDrawCursor = false;
+    ImGui::GetIO().WantSetMousePos = false;
 
-    if (uiVis) {
+    if (anyTreeVisible) {
         // Drain queued input from background hook
         auto queuedInputs = InputHook::GetSingleton().DrainInputQueue();
         for (const auto& ev : queuedInputs) {
@@ -395,7 +403,7 @@ void D3D11Hook::RenderFrame() {
     }
 
     m_uiContext->update(dt);
-    m_uiContext->render(*m_renderBackend, uiVis);
+    m_uiContext->render(*m_renderBackend, anyTreeVisible);
 
     ImGui::Render();
 
@@ -434,7 +442,8 @@ HRESULT STDMETHODCALLTYPE D3D11Hook::Hooked_Present(
         hook.InitializeImGui(pSwapChain);
     }
 
-    if (hook.m_uiVisible.load() || (hook.m_uiContext && hook.m_uiContext->hasVisibleOverlays())) {
+    bool anyTreeVisible = hook.m_uiVisible.load() || hook.HasVisibleRootWindows();
+    if (anyTreeVisible || (hook.m_uiContext && hook.m_uiContext->hasVisibleOverlays())) {
         hook.RenderFrame();
     }
 
