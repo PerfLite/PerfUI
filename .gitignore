@@ -17,6 +17,7 @@ out/
 # CMake artifacts
 CMakeSettings.json
 CMakeUserPresets.json
+Testing/
 
 # Crash dumps and logs
 *.log
