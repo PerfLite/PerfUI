@@ -387,7 +387,19 @@ void UIContext::onKeyDown(int keyCode) {
     }
 
     if (m_focusedElement) {
-        m_focusedElement->onKeyDown(keyCode);
+        UIElement* curr = m_focusedElement;
+        while (curr) {
+            if (curr->onKeyDown(keyCode)) {
+                return;
+            }
+            curr = curr->parent();
+        }
+    } else if (m_root) {
+        for (const auto& child : m_root->children()) {
+            if (child && child->isVisible() && child->onKeyDown(keyCode)) {
+                return;
+            }
+        }
     }
 }
 

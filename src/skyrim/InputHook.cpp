@@ -75,14 +75,6 @@ void InputHook::SetCaptureInput(bool capture) {
         m_mouseButtonDown[2] = false;
         while (::ShowCursor(FALSE) >= 0);
     }
-
-    SKSE::GetTaskInterface()->AddTask([capture]() {
-        auto* controlMap = RE::ControlMap::GetSingleton();
-        if (controlMap) {
-            using UEFlag = RE::UserEvents::USER_EVENT_FLAG;
-            controlMap->ToggleControls(UEFlag::kAll, !capture);
-        }
-    });
 }
 
 void InputHook::PushInput(QueuedInput event) {
@@ -117,12 +109,6 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
 
             // F11 / toggleHotkey disabled as requested by user
             (void)wParam;
-
-            if (hook.m_captureInput.load() && wParam == VK_ESCAPE) {
-                D3D11Hook::GetSingleton().SetUIVisible(false);
-                hook.SetCaptureInput(false);
-                return 0;
-            }
         }
     }
 
@@ -314,22 +300,6 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
             }
         }
 
-        // DirectInput keyboard events
-        if (event->GetDevice() == RE::INPUT_DEVICE::kKeyboard &&
-            event->GetEventType() == RE::INPUT_EVENT_TYPE::kButton)
-        {
-            auto* btnEvent = event->AsButtonEvent();
-            if (!btnEvent) continue;
-
-            uint32_t scanCode = btnEvent->GetIDCode();
-            if (btnEvent->IsDown()) {
-                if (scanCode == 1) { // ESC
-                    PushInput({ QueuedInput::Type::KeyDown, 0, 0, 0, 0, 0, VK_ESCAPE });
-                } else if (scanCode == 28) { // Enter
-                    PushInput({ QueuedInput::Type::KeyDown, 0, 0, 0, 0, 0, VK_RETURN });
-                }
-            }
-        }
     }
 
     // Consume input completely while modal UI is open so vanilla Skyrim never processes ghost clicks or resets cursor
