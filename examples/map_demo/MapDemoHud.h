@@ -17,7 +17,7 @@
 namespace PerfUI::Examples {
 
 /**
- * @brief Демонстрация MapCanvas: игрок идёт по кругу, вокруг десять маркеров.
+ * @brief Демонстрация MapCanvas: игрок идёт по кругу, вокруг тринадцать маркеров.
  *
  * Данные подаются через VectorMapDataSource — ровно так же, как мод подаст их из игры,
  * только значения меняются симуляцией, а не движком. Никаких зависимостей от Skyrim.
@@ -46,16 +46,29 @@ public:
               .radarRange(kStartRange)
               .showDistances(true)
               .showGrid(false)
-              .rotateWithPlayer(true);
+              .rotateWithPlayer(true)
+              .metersPerPixel(2.0f)
+              .clusterPixelSize(26.0f)
+              .zoomLimits(0.25f, 200.0f)
+              .clampToBounds(-400.0f, -400.0f, 400.0f, 900.0f)
+              .followPlayer(true);
         m_map->onMarkerClicked([this](const MapMarker& marker) { selectMarker(marker.id); });
+        m_map->onBackground([this]() {
+            if (auto* ctx = context()) {
+                ctx->showToast("MapCanvas", "выход: режим «назад» передан хосту", ToastType::Info, 1.5f);
+            }
+        });
 
+        // Высота фиксирована: measure() у переносимого текста даёт одну строку, а без неё
+        // двух-трёхстрочный статус и подсказка вылезали бы за нижний край панели.
         m_status = add<Text>("");
         m_status->color(Color(200, 205, 215, 255)).fontSize(13.0f).wrap(true);
-        m_status->layout().width(kBlockWidth);
+        m_status->layout().width(kBlockWidth).height(36.0f);
 
-        m_hint = add<Text>("M режим · R вращение · G сетка · D дистанции · T цель · +/− радиус · клик по маркеру — выбрать");
+        m_hint = add<Text>("M режим · R вращение · G сетка · D дистанции · T цель · +/− радиус или масштаб · "
+                           "C на игроке · F следование · стрелки — камера · клик по маркеру — выбрать");
         m_hint->color(Color(130, 140, 155, 255)).fontSize(11.5f).wrap(true);
-        m_hint->layout().width(kBlockWidth);
+        m_hint->layout().width(kBlockWidth).height(54.0f);
 
         seedMarkers();
         m_source.setPlayer(0.0f, 0.0f, 0.0f);
@@ -103,12 +116,23 @@ public:
         // Коды — виртуальные клавиши (WM_KEYDOWN wParam), чтобы не тянуть windows.h в пример.
         case 0xBB:  // VK_OEM_PLUS: «=» и «+»
         case 0x6B:  // VK_ADD
-            setRange(m_map->radarRange() * 1.5f);
+            plusKey();
             break;
         case 0xBD:  // VK_OEM_MINUS: «-»
         case 0x6D:  // VK_SUBTRACT
-            setRange(m_map->radarRange() / 1.5f);
+            minusKey();
             break;
+        case 'C':
+            m_map->centerOnPlayer();
+            break;
+        case 'F':
+            m_map->followPlayer(!m_map->isFollowingPlayer());
+            break;
+        // 37..40 — стрелки: в World двигают камеру, как правый стик.
+        case 37: m_map->onAction(NavDirection::Left); break;
+        case 38: m_map->onAction(NavDirection::Up); break;
+        case 39: m_map->onAction(NavDirection::Right); break;
+        case 40: m_map->onAction(NavDirection::Down); break;
         default:
             return false;
         }
@@ -164,6 +188,10 @@ private:
             { 8, "Лагерь охотников", MapMarkerKind::Custom, -250.0f, 150.0f },
             { 9, "Башнецвет", MapMarkerKind::Location, 260.0f, 20.0f },
             { 10, "Храм Сердца", MapMarkerKind::Quest, 40.0f, 780.0f },
+            // Густая группа вокруг «Речного перехода»: на неё и смотрим кластеризацию при отдалении.
+            { 11, "Кострище", MapMarkerKind::Enemy, 96.0f, 66.0f },
+            { 12, "Пещера медведя", MapMarkerKind::Location, 104.0f, 58.0f },
+            { 13, "Привал охотников", MapMarkerKind::Custom, 98.0f, 52.0f },
         };
 
         m_markers.clear();
@@ -219,26 +247,57 @@ private:
         selectMarker(m_markers[next].id);
     }
 
-    void setRange(float meters) {
-        m_map->radarRange(std::clamp(meters, 40.0f, 1500.0f));
+    // «+»: в World — приблизить (меньше метров на пиксель), в радаре — больше радиус обзора.
+    void plusKey() {
+        if (m_map->mode() == MapMode::World) {
+            m_map->zoomBy(0.75f);
+            return;
+        }
+        m_map->radarRange(std::clamp(m_map->radarRange() * 1.5f, 40.0f, 1500.0f));
+    }
+
+    void minusKey() {
+        if (m_map->mode() == MapMode::World) {
+            m_map->zoomBy(1.0f / 0.75f);
+            return;
+        }
+        m_map->radarRange(std::clamp(m_map->radarRange() / 1.5f, 40.0f, 1500.0f));
     }
 
     void refreshStatus() {
         if (!m_map || !m_status) return;
         const auto player = m_source.player();
-        char buf[192];
+
+        char detail[96];
+        if (m_map->mode() == MapMode::World) {
+            std::snprintf(detail, sizeof(detail), "масштаб %.2f м/px · сетка %.0f м · кластеров %zu · %s",
+                          m_map->metersPerPixel(),
+                          m_map->gridStepMeters(),
+                          m_map->clusterCount(),
+                          m_map->isFollowingPlayer() ? "за игроком" : "свободная камера");
+        } else {
+            std::snprintf(detail, sizeof(detail), "радиус %.0f м · курс %.0f°",
+                          m_map->radarRange(), player.headingDeg);
+        }
+
+        char buf[256];
         std::snprintf(buf, sizeof(buf),
-                      "%s · радиус %.0f м · курс %.0f° · целей %zu/%zu · пересчётов %llu%s",
+                      "%s · %s · целей %zu/%zu · пересчётов %llu%s",
                       m_map->mode() == MapMode::Radar
                           ? (m_map->rotatesWithPlayer() ? "Радар" : "Радар, север вверх")
                           : "Мир",
-                      m_map->radarRange(),
-                      player.headingDeg,
+                      detail,
                       m_map->projectedCount(),
                       m_markers.size(),
                       static_cast<unsigned long long>(m_map->recomputeCount()),
                       m_selection.empty() ? "" : (" · " + m_selection).c_str());
         m_status->text(buf);
+
+        if (m_title) {
+            m_title->text(m_map->mode() == MapMode::World
+                              ? "MapCanvas — карта мира"
+                              : "MapCanvas — режим радара");
+        }
     }
 
     static float square(float v) { return v * v; }
