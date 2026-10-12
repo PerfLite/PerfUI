@@ -8,6 +8,7 @@
 #include "PerfUI/Markup/MarkupLoader.h"
 #include "PerfUI/Markup/WidgetRegistry.h"
 #include "PerfUI/LayoutEngine.h"
+#include "PerfUI/MapCanvas.h"
 #include "../src/backends/mock/MockRenderBackend.h"
 
 #include <iostream>
@@ -374,6 +375,45 @@ int main() {
         TEST_ASSERT(approxEqual(xmlBtn1->bounds().height, manualBtn1->bounds().height), "Btn1 heights match (30px)");
         TEST_ASSERT(approxEqual(xmlBtn2->bounds().y, manualBtn2->bounds().y), "Btn2 Y positions match");
         TEST_ASSERT(approxEqual(xmlBtn2->bounds().height, manualBtn2->bounds().height), "Btn2 heights match (40px)");
+    }
+
+    // -------------------------------------------------------------
+    // Test 9: MapCanvas tag registration
+    // -------------------------------------------------------------
+    std::cout << "\nTest 9: MapCanvas markup tag...\n";
+    {
+        TEST_ASSERT(WidgetRegistry::instance().hasWidget("MapCanvas"), "MapCanvas tag registered");
+
+        PerfUI::UIContext context;
+        context.setViewportSize({ 800.0f, 600.0f });
+        PerfUI::MarkupLoader loader(context);
+
+        const std::string_view xml = R"(
+<UI>
+  <Panel name="MapHost" direction="column" width="400" padding="10">
+    <MapCanvas name="Radar" width="320" height="200" mode="world" radar-range="450" show-grid="true" show-distances="false"/>
+  </Panel>
+</UI>
+)";
+
+        UIElement* root = loader.loadString(xml);
+        TEST_ASSERT(root != nullptr, "Panel with MapCanvas loaded");
+
+        auto* map = dynamic_cast<PerfUI::MapCanvas*>(loader.findByName("Radar"));
+        TEST_ASSERT(map != nullptr, "MapCanvas element created by tag");
+        if (map) {
+            // Источник не назначен: рендер обязан пройти без исключения и без вылета.
+            PerfUI::MockRenderBackend mock;
+            context.render(mock);
+
+            TEST_ASSERT(map->mode() == PerfUI::MapMode::World, "mode=\"world\" applied");
+            TEST_ASSERT(approxEqual(map->radarRange(), 450.0f), "radar-range=\"450\" applied");
+            TEST_ASSERT(map->showsGrid(), "show-grid=\"true\" applied");
+            TEST_ASSERT(!map->showsDistances(), "show-distances=\"false\" applied");
+            TEST_ASSERT(approxEqual(map->bounds().width, 320.0f), "MapCanvas honours width=\"320\"");
+            TEST_ASSERT(approxEqual(map->bounds().height, 200.0f), "MapCanvas honours height=\"200\"");
+            TEST_ASSERT(map->projectedCount() == 0, "Canvas without data source projects nothing");
+        }
     }
 
     // -------------------------------------------------------------

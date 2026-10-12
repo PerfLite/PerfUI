@@ -11,6 +11,7 @@
 #include "PerfUI/TabBar.h"
 #include "PerfUI/ComboBox.h"
 #include "PerfUI/TextInput.h"
+#include "PerfUI/MapCanvas.h"
 
 #include <sstream>
 
@@ -382,7 +383,35 @@ void WidgetRegistry::registerBuiltinWidgets() {
         return ti.release();
     });
 
+    // 12. MapCanvas. Источник данных (IMapDataSource) модом назначается из C++:
+    // в разметке описывается только внешний вид карты.
+    registerWidget("MapCanvas", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "MapCanvas";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        auto map = std::make_unique<MapCanvas>(std::move(name));
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "mode") {
+                map->mode(v == "world" ? MapMode::World : MapMode::Radar);
+            } else if (k == "radar-range") {
+                map->radarRange(parseNumberOrToken(v, 300.0f));
+            } else if (k == "show-grid") {
+                map->showGrid(parseBool(v, true));
+            } else if (k == "show-distances") {
+                map->showDistances(parseBool(v, true));
+            } else if (k == "rotate-with-player") {
+                map->rotateWithPlayer(parseBool(v, true));
+            }
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(map));
+        }
+        return map.release();
+    });
+
     m_builtinsRegistered = true;
 }
-
 } // namespace PerfUI
