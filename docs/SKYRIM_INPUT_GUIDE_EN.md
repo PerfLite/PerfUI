@@ -192,3 +192,121 @@ if (MainMenuManager::GetSingleton().IsLoadingMenuOpen()) {
 }
 ```
 The frame prior to disk blocking is guaranteed to display a solid black loading screen.
+
+---
+
+## 8. Dual Click Handling (DirectInput + WndProc Dual Fallback) and Lazy `BSInputDeviceManager` Registration
+
+### 1. Critical pitfall: early `BSInputDeviceManager` initialization
+Inside the early graphics interception point `BSGraphics::InitD3D` (frame 0) the
+`RE::BSInputDeviceManager::GetSingleton()` instance is **not created yet** and returns `nullptr`.
+If you try to call `AddEventSink` at that stage:
+- The call is silently skipped.
+- The `m_installed` flag still becomes `true`.
+- When `Install()` runs again at `kDataLoaded`, the hook thinks it is already installed and returns early.
+- As a result `ProcessEvent` is **never called**, so DirectInput mouse events never arrive at all!
+
+**Iron rule:** register lazily via `EnsureInputSink()`:
+```cpp
+void InputHook::EnsureInputSink() {
+    if (m_sinkRegistered.load()) return;
+    auto* inputManager = RE::BSInputDeviceManager::GetSingleton();
+    if (inputManager) {
+        inputManager->AddEventSink(this);
+        m_sinkRegistered.store(true);
+        SKSE::log::info("InputHook: Registered BSInputDeviceManager event sink");
+    }
+}
+```
+Call `EnsureInputSink()`:
+- In `InputHook::Install()` (at `kDataLoaded`).
+- In `InputHook::SetCaptureInput(true)` (whenever a modal menu opens).
+- In `Hooked_WndProc` on the first message while input capture is active.
+
+### 2. Dual mouse click handling (DirectInput + Windows Messages)
+In windowed and borderless modes Windows delivers plain `WM_LBUTTONDOWN`, `WM_LBUTTONUP`,
+`WM_LBUTTONDBLCLK` messages to `WndProc`. In exclusive fullscreen those messages may never reach
+the window, and clicks arrive exclusively through DirectInput (`BSInputDeviceManager::ProcessEvent`).
+
+Relying on only one source, or simply swallowing messages in `WndProc` (`return 0`), loses clicks
+in one of the two display modes.
+
+**The right architecture is a shared button state array `m_mouseButtonDown[3]`:**
+- **In `Hooked_WndProc`:**
+  ```cpp
+  case WM_LBUTTONDOWN:
+  case WM_LBUTTONDBLCLK: {
+      if (!hook.m_mouseButtonDown[0]) {
+          hook.m_mouseButtonDown[0] = true;
+          hook.PushInput({ QueuedInput::Type::MouseDown, 0, x, y });
+      }
+      return 0;
+  }
+  case WM_LBUTTONUP: {
+      if (hook.m_mouseButtonDown[0]) {
+          hook.m_mouseButtonDown[0] = false;
+          hook.PushInput({ QueuedInput::Type::MouseUp, 0, x, y });
+      }
+      return 0;
+  }
+  ```
+- **In `ProcessEvent` (DirectInput):**
+  ```cpp
+  bool isPressed = btnEvent->IsPressed();
+  if (isPressed && !m_mouseButtonDown[keyCode]) {
+      m_mouseButtonDown[keyCode] = true;
+      PushInput({ QueuedInput::Type::MouseDown, keyCode, x, y });
+  } else if (!isPressed && m_mouseButtonDown[keyCode]) {
+      m_mouseButtonDown[keyCode] = false;
+      PushInput({ QueuedInput::Type::MouseUp, keyCode, x, y });
+  }
+  ```
+- On `SetCaptureInput(false)` every element of the array is reset to `false`.
+
+**Result:**
+1. Whichever handler catches the click first pushes the event into the queue immediately.
+2. The second handler sees the flag already set and safely ignores the duplicate.
+3. Mouse clicks are guaranteed to work with zero delay in any Skyrim SE display mode.
+
+> **Important:** the dual fallback applies to **mouse buttons only**. The DirectInput keyboard
+> branch (`scanCode == 1` for ESC, `28` for Enter) was removed from `ProcessEvent`, see section 9.
+
+---
+
+## 9. Single `ControlMap` Owner and the WndProc-Only Keyboard Path
+
+### 1. `ToggleControls` is a toggle, not a setter
+`RE::ControlMap::ToggleControls(UEFlag::kAll, !capture)` used to be called from two places:
+`D3D11Hook::SetUIVisible()` and `InputHook::SetCaptureInput()` — and the former calls the latter.
+Two identical calls in a row flip the flags twice, i.e. put them back where they started: the menu
+is open while the game keeps receiving WASD, camera movement and weapon swings.
+
+**Rule:** the `ToggleControls` call lives **only** in `D3D11Hook::SetUIVisible()`, marshalled through
+`SKSE::GetTaskInterface()->AddTask` because `ControlMap` may only be touched from the game thread.
+`InputHook::SetCaptureInput()` is responsible for the `ShowCursor` counter and the `m_captureInput`
+flag, nothing else.
+
+### 2. Keyboard arrives through `WndProc` only
+While the UI is open, `Hooked_WndProc` swallows `WM_KEYDOWN / WM_SYSKEYDOWN / WM_KEYUP / WM_CHAR`
+(`return 0`) and pushes the codes into the `InputHook` queue, which `Hooked_Present` drains into
+`UIContext::onKeyDown()`. `BSInputDeviceManager::ProcessEvent` returns `kStop` in the same period,
+so DirectInput keys never reach the game and no duplicates are produced.
+
+### 3. Bubbling up the tree
+`UIContext::onKeyDown()` offers the key to registered hotkeys first, then to an open `ComboBox`,
+then to the active modal. From there the key travels **up the parent chain** from the focused
+element; when nothing has focus it is offered to the visible children of the root. This lets a
+container react to a key none of its children consumed — and is the price paid for removing key
+handling from the hook.
+
+### 4. Consequences worth knowing
+- **ESC no longer closes the menu at hook level.** Closing is now the widget's job: its `onKeyDown()`
+  must return `true`. Currently ESC is handled by `ComboBox` (closing the dropdown), `ModalDialog`,
+  `TextInput` and `SettingsView` (cancelling a rebind), but **not** by `JournalWindow` /
+  `MainMenuWindow`. Menus close via their exit button, `VK_F10` (main menu toggle), or
+  `SetUIVisible(false)` from mod code.
+- **Exclusive fullscreen:** keyboard messages may fail to reach the window there, exactly like clicks
+  (see section 8). Since DirectInput keys are no longer intercepted, keyboard navigation in that mode
+  needs its own fallback following the same pattern as the mouse one.
+- Always verify against `SKSE\Plugins\PerfUI.log`: the line
+  `InputHook: Registered BSInputDeviceManager event sink` must appear before the first click.
