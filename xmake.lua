@@ -152,3 +152,19 @@ target("PerfUI_Test_Texture")
         "tests/TextureTest.cpp"
     )
 
+target("PerfUI_Test_MapCanvas")
+    set_kind("binary")
+    set_languages("c++20")
+    add_defines("PERFUI_STATIC")
+    add_syslinks("user32")
+    if is_plat("windows") then
+        add_cxflags("/utf-8", { force = true })
+    end
+    add_includedirs("include", "src/backends/mock", "src")
+    add_files(
+        "src/core/*.cpp",
+        "src/layout/*.cpp",
+        "src/widgets/*.cpp",
+        "tests/MapCanvasTest.cpp"
+    )
+

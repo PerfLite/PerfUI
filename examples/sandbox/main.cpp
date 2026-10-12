@@ -11,6 +11,7 @@
 
 #include "PerfUI/PerfUI.h"
 #include "../../src/backends/imgui/ImGuiRenderBackend.h"
+#include "../map_demo/MapDemoHud.h"
 #include "../modder_custom_hud/CustomHealthBar.h"
 
 // Forward declare message handler from imgui_impl_win32.cpp
@@ -34,6 +35,7 @@ static std::unique_ptr<PerfUI::ImGuiRenderBackend> g_renderBackend;
 static PerfUI::JournalWindow* g_journalWindow = nullptr;
 static PerfUI::MainMenuWindow* g_mainMenuWindow = nullptr;
 static PerfUI::Examples::CustomHealthBar* g_customHud = nullptr;
+static PerfUI::Examples::MapDemoHud* g_mapDemo = nullptr;
 static float g_simulatedHealth = 100.0f;
 
 // Simple custom test component to demonstrate retained rendering
@@ -170,6 +172,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     g_customHud = g_uiContext->root()->add<PerfUI::Examples::CustomHealthBar>();
     g_customHud->setScreenPosition(PerfUI::Point{ 30.0f, 630.0f });
     g_customHud->setVisible(false); // start hidden, press F8 to reveal
+
+    // MapCanvas demo (radar with a simulated walking player), toggled via F9
+    g_mapDemo = g_uiContext->root()->add<PerfUI::Examples::MapDemoHud>();
+    g_mapDemo->setVisible(false);
 
     g_mainMenuWindow->onContinueGame([]() {
         if (g_mainMenuWindow && g_journalWindow) {
@@ -366,6 +372,16 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     g_customHud->setVisible(showHud);
                     if (g_uiContext) {
                         g_uiContext->showToast("Modder Custom HUD [F8]", showHud ? "Custom Health Bar Visible (Press H to heal, J to damage)" : "Custom Health Bar Hidden", PerfUI::ToastType::Info, 2.5f);
+                    }
+                }
+                return 0;
+            }
+            if (wParam == VK_F9) {
+                if (g_mapDemo) {
+                    bool showMap = !g_mapDemo->isVisible();
+                    g_mapDemo->setVisible(showMap);
+                    if (g_uiContext) {
+                        g_uiContext->showToast("MapCanvas demo [F9]", showMap ? "Radar with simulated player" : "Map demo hidden", PerfUI::ToastType::Info, 2.5f);
                     }
                 }
                 return 0;

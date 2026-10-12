@@ -40,6 +40,7 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/Toast.h
     include/PerfUI/ContextMenu.h
     include/PerfUI/ModalDialog.h
+    include/PerfUI/MapCanvas.h
     include/PerfUI/Overlay.h
     include/PerfUI/OverlayManager.h
     include/PerfUI/JournalWindow.h
@@ -67,6 +68,7 @@ add_library(PerfUI_Core STATIC
     src/widgets/ContextMenu.cpp
     src/widgets/ModalDialog.cpp
     src/widgets/JournalWindow.cpp
+    src/widgets/MapCanvas.cpp
     src/widgets/MainMenuWindow.cpp
 )
 
@@ -270,6 +272,22 @@ target_link_libraries(PerfUI_Test_Texture PRIVATE
 )
 
 # ---------------------------------------------------------------------------
+# 11. PerfUI_Test_MapCanvas (Radar Widget Projection & Data-Source Test Suite)
+# ---------------------------------------------------------------------------
+add_executable(PerfUI_Test_MapCanvas
+    tests/MapCanvasTest.cpp
+    src/backends/mock/MockRenderBackend.h
+)
+
+target_include_directories(PerfUI_Test_MapCanvas PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/mock
+)
+
+target_link_libraries(PerfUI_Test_MapCanvas PRIVATE
+    PerfUI_Core
+)
+
+# ---------------------------------------------------------------------------
 # CTest Integration
 # ---------------------------------------------------------------------------
 enable_testing()
@@ -279,5 +297,6 @@ add_test(NAME ImGuiBenchmark COMMAND PerfUI_Bench_ImGui)
 add_test(NAME MarkupTest COMMAND PerfUI_Test_Markup)
 add_test(NAME OverlayTest COMMAND PerfUI_Test_Overlay)
 add_test(NAME TextureTest COMMAND PerfUI_Test_Texture)
+add_test(NAME MapCanvasTest COMMAND PerfUI_Test_MapCanvas)
 
 
