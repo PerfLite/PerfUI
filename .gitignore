@@ -32,3 +32,7 @@ PerfUI_Config.json
 
 # Local deployment scripts
 deploy.ps1
+
+# Generated SDK deliverables (headers + import lib) produced by `xmake build PerfUI`,
+# published as a GitHub Release archive rather than tracked in source control
+sdk/
