@@ -63,6 +63,10 @@ struct IPerfUI_v1 {
     void (*CaptureInput)(bool capture);
     bool (*RegisterHotkey)(const char* id, uint32_t defaultKey, std::function<void()> cb);
     void (*UnregisterHotkey)(const char* id);
+
+    // Must be set before SetUIVisible. Modal (default) swallows the whole input; overlay keeps
+    // the keyboard and the game controls alive so the world stays playable under the panel.
+    void (*SetOverlayMode)(bool overlay);
 };
 
 } // namespace PerfUI::API
@@ -249,6 +253,14 @@ inline void UnregisterHotkey(const char* id) {
     auto* ctx = GetContext();
     if (ctx && id) {
         ctx->unregisterHotkey(id);
+    }
+}
+
+// Мод, чьё окно — оверлей поверх живого мира, обязан позвать это до SetUIVisible(true).
+inline void SetOverlayMode(bool overlay) {
+    auto* api = GetApi();
+    if (api && api->SetOverlayMode) {
+        api->SetOverlayMode(overlay);
     }
 }
 

@@ -501,6 +501,11 @@ void UIContext::runOnUIThread(std::function<void()> task) {
     m_taskQueue.push_back(std::move(task));
 }
 
+bool UIContext::hasPendingTasks() const {
+    std::lock_guard<std::mutex> lock(m_taskMutex);
+    return !m_taskQueue.empty();
+}
+
 bool UIContext::isUIThread() const {
     return m_uiThreadId == std::thread::id() || std::this_thread::get_id() == m_uiThreadId;
 }

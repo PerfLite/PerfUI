@@ -204,6 +204,10 @@ static void API_UnregisterHotkey(const char* id) {
     }
 }
 
+static void API_SetOverlayMode(bool overlay) {
+    PerfUI::Skyrim::D3D11Hook::GetSingleton().SetOverlayMode(overlay);
+}
+
 static PerfUI::API::IPerfUI_v1 g_perfUI_API_v1{
     .version = PerfUI::API::InterfaceVersion_1,
     .GetContext = API_GetContext,
@@ -222,7 +226,8 @@ static PerfUI::API::IPerfUI_v1 g_perfUI_API_v1{
     .GetTextureSize = API_GetTextureSize,
     .CaptureInput = API_CaptureInput,
     .RegisterHotkey = API_RegisterHotkey,
-    .UnregisterHotkey = API_UnregisterHotkey
+    .UnregisterHotkey = API_UnregisterHotkey,
+    .SetOverlayMode = API_SetOverlayMode
 };
 
 extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interfaceVersion, const PerfUI::API::ClientABIInfo* a_clientAbi) {

@@ -122,6 +122,7 @@ public:
     void runOnUIThread(std::function<void()> task);
     bool isUIThread() const;
     void assertUIThread() const;
+    bool hasPendingTasks() const;
 
     // Client Overlays System (Phase 1 Clean Client)
     OverlayManager& overlayManager() { return m_overlayManager; }

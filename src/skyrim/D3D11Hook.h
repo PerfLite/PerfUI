@@ -20,6 +20,11 @@ public:
     void ToggleMainMenu();
     void SetUIVisible(bool visible);
     bool IsUIVisible() const { return m_uiVisible.load(); }
+
+    // Оверлей (колонка журнала QuestUI) в отличие от модального меню не имеет права ни глушить
+    // клавиатуру игры, ни отключать её управление: под открытой колонкой должны работать Map,
+    // Esc и движение. Вызывается клиентом перед SetUIVisible.
+    void SetOverlayMode(bool overlay) { m_overlayMode.store(overlay); }
     bool HasVisibleRootWindows() const;
 
     void EnsureUIContext();
@@ -65,6 +70,7 @@ private:
     std::atomic<bool> m_installed{ false };
     std::atomic<bool> m_imguiInitialized{ false };
     std::atomic<bool> m_uiVisible{ false };
+    std::atomic<bool> m_overlayMode{ false };
 
     HWND m_hWnd{ nullptr };
     ID3D11Device* m_device{ nullptr };

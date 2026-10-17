@@ -33,6 +33,10 @@ public:
     void SetCaptureInput(bool capture);
     bool IsCaptureInput() const { return m_captureInput.load(); }
 
+    // Ложь в режиме оверлея: дерево забирает только мышь, клавиатура остаётся игре. Иначе под
+    // открытой колонкой журнала не работают Map, Esc и остальные игровые клавиши.
+    void SetCaptureKeyboard(bool capture) { m_captureKeyboard.store(capture); }
+
     void PushInput(QueuedInput event);
     std::vector<QueuedInput> DrainInputQueue();
 
@@ -53,6 +57,7 @@ private:
     WNDPROC m_originalWndProc{ nullptr };
     std::atomic<bool> m_installed{ false };
     std::atomic<bool> m_captureInput{ false };
+    std::atomic<bool> m_captureKeyboard{ true };
     std::atomic<bool> m_sinkRegistered{ false };
     bool m_mouseButtonDown[3]{ false, false, false };
 

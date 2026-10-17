@@ -189,6 +189,16 @@ void D3D11Hook::ToggleMainMenu() {
 void D3D11Hook::SetUIVisible(bool visible) {
     m_uiVisible.store(visible);
     InputHook::GetSingleton().SetCaptureInput(visible);
+    // В режиме оверлея мышь остаётся дереву, а клавиатура — игре.
+    InputHook::GetSingleton().SetCaptureKeyboard(!(visible && m_overlayMode.load()));
+
+    // m_uiVisible включает лишь захват ввода: RenderFrame рисует дерево, пока хоть одно
+    // корневое окно видимо. Без скрытия окон «закрытие» оставляло меню поверх игры, уже
+    // не реагирующее на мышь - выйти из него было нельзя.
+    if (!visible) {
+        if (m_journalWindow) m_journalWindow->setVisible(false);
+        if (m_mainMenuWindow) m_mainMenuWindow->setVisible(false);
+    }
 
     SkyrimSoundService::PlayUISound(visible ? "UIJournalOpen" : "UIJournalClose");
 
@@ -196,11 +206,14 @@ void D3D11Hook::SetUIVisible(bool visible) {
         SkyrimQuestService::GetSingleton().RequestQuestRefresh();
     }
 
-    SKSE::GetTaskInterface()->AddTask([visible]() {
+    SKSE::GetTaskInterface()->AddTask([visible, this]() {
         auto* controlMap = RE::ControlMap::GetSingleton();
         if (controlMap) {
             using UEFlag = RE::UserEvents::USER_EVENT_FLAG;
-            controlMap->ToggleControls(UEFlag::kAll, !visible);
+            // Оверлей не имеет права отключать игровое управление: игрок читает журнал и
+            // по-прежнему ходит, открывает карту и меню.
+            const bool controlsEnabled = !visible || m_overlayMode.load();
+            controlMap->ToggleControls(UEFlag::kAll, controlsEnabled);
         }
     });
 
@@ -302,7 +315,10 @@ void D3D11Hook::RenderFrame() {
     bool hasRootWindows = HasVisibleRootWindows();
     bool anyTreeVisible = uiVis || hasRootWindows;
     bool hasOverlays = m_uiContext && m_uiContext->hasVisibleOverlays();
-    if (!m_imguiInitialized.load() || (!anyTreeVisible && !hasOverlays) || !m_imguiContext) return;
+    // Tasks queued via UIContext::runOnUIThread are drained inside update(), so a frame
+    // with pending tasks must render even when nothing is visible - otherwise the queue stalls.
+    bool hasPendingTasks = m_uiContext && m_uiContext->hasPendingTasks();
+    if (!m_imguiInitialized.load() || (!anyTreeVisible && !hasOverlays && !hasPendingTasks) || !m_imguiContext) return;
 
     ImGuiContext* prevContext = ImGui::GetCurrentContext();
     ImGui::SetCurrentContext(m_imguiContext);
@@ -436,7 +452,9 @@ HRESULT STDMETHODCALLTYPE D3D11Hook::Hooked_Present(
     }
 
     bool anyTreeVisible = hook.m_uiVisible.load() || hook.HasVisibleRootWindows();
-    if (anyTreeVisible || (hook.m_uiContext && hook.m_uiContext->hasVisibleOverlays())) {
+    bool hasOverlays = hook.m_uiContext && hook.m_uiContext->hasVisibleOverlays();
+    bool hasPendingTasks = hook.m_uiContext && hook.m_uiContext->hasPendingTasks();
+    if (anyTreeVisible || hasOverlays || hasPendingTasks) {
         hook.RenderFrame();
     }
 

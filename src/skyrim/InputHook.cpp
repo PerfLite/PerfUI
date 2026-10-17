@@ -302,8 +302,25 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
 
     }
 
-    // Consume input completely while modal UI is open so vanilla Skyrim never processes ghost clicks or resets cursor
-    return RE::BSEventNotifyControl::kStop;
+    if (m_captureKeyboard.load()) {
+        // Modal: consume input completely so vanilla Skyrim never processes ghost clicks or
+        // resets the cursor.
+        return RE::BSEventNotifyControl::kStop;
+    }
+
+    // Overlay mode: the list is shared by every device and a sink cannot drop one event without
+    // dropping the whole list, so non-keyboard events are disarmed in place instead. An empty
+    // user event maps to no handler in the game, while real keys keep flowing to the map, the
+    // pause menu and everything else the player expects to work under a corner overlay.
+    for (auto* event = *a_event; event; event = event->next) {
+        if (event->GetDevice() == RE::INPUT_DEVICE::kKeyboard) continue;
+
+        if (auto* idEvent = event->AsIDEvent()) {
+            idEvent->userEvent = RE::BSFixedString{};
+        }
+    }
+
+    return RE::BSEventNotifyControl::kContinue;
 }
 
 } // namespace PerfUI::Skyrim
