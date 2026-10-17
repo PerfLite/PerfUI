@@ -172,4 +172,12 @@ bool UIElement::onContextMenu(const Point& localPoint) {
     return false;
 }
 
+BoxStyle UIElement::resolveBoxStyle(WidgetState state, const BoxStyle& fallback) const {
+    return m_style.resolveBox(state, fallback);
+}
+
+TextStyle UIElement::resolveTextStyle(WidgetState state, const TextStyle& fallback) const {
+    return m_style.resolveText(state, fallback);
+}
+
 } // namespace PerfUI

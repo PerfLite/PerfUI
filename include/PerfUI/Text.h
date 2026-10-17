@@ -19,6 +19,9 @@ public:
     const TextStyle& style() const { return m_style; }
     TextStyle& style() { markLayoutDirty(); return m_style; }
 
+    const TextStyle& textStyle() const { return m_style; }
+    TextStyle& textStyle() { markLayoutDirty(); return m_style; }
+
     Text& color(Color c) { m_style.color = c; return *this; }
     Text& fontSize(float size) { m_style.fontSize = size; markLayoutDirty(); return *this; }
     Text& bold(bool isBold = true) { m_style.bold = isBold; markLayoutDirty(); return *this; }

@@ -58,6 +58,12 @@ public:
         return *this;
     }
 
+    using UIElement::style;
+    Button& style(WidgetStyle s) {
+        m_style = std::move(s);
+        return *this;
+    }
+
 
     void update(float deltaTime) override;
     void measure(Dimensions availableSize) override;

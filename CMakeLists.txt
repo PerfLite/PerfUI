@@ -19,12 +19,19 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/Types.h
     include/PerfUI/Layout.h
     include/PerfUI/LayoutEngine.h
+    include/PerfUI/Style.h
     include/PerfUI/UIRenderBackend.h
     include/PerfUI/UIElement.h
     include/PerfUI/UIContext.h
     include/PerfUI/Panel.h
     include/PerfUI/Text.h
+    include/PerfUI/Label.h
     include/PerfUI/Button.h
+    include/PerfUI/Divider.h
+    include/PerfUI/Spacer.h
+    include/PerfUI/Switch.h
+    include/PerfUI/RadioButton.h
+    include/PerfUI/RadioGroup.h
     include/PerfUI/ScrollView.h
     include/PerfUI/Checkbox.h
     include/PerfUI/ProgressBar.h
@@ -54,7 +61,13 @@ add_library(PerfUI_Core STATIC
     src/layout/LayoutEngine.cpp
     src/widgets/Panel.cpp
     src/widgets/Text.cpp
+    src/widgets/Label.cpp
     src/widgets/Button.cpp
+    src/widgets/Divider.cpp
+    src/widgets/Spacer.cpp
+    src/widgets/Switch.cpp
+    src/widgets/RadioButton.cpp
+    src/widgets/RadioGroup.cpp
     src/widgets/ScrollView.cpp
     src/widgets/Checkbox.cpp
     src/widgets/ProgressBar.cpp
@@ -288,6 +301,23 @@ target_link_libraries(PerfUI_Test_MapCanvas PRIVATE
 )
 
 # ---------------------------------------------------------------------------
+# 12. PerfUI_Test_Style (Design System, Tokens, Styles, Animations & Components)
+# ---------------------------------------------------------------------------
+add_executable(PerfUI_Test_Style
+    tests/StyleSystemTest.cpp
+    src/backends/mock/MockRenderBackend.h
+)
+
+target_include_directories(PerfUI_Test_Style PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/mock
+)
+
+target_link_libraries(PerfUI_Test_Style PRIVATE
+    PerfUI_Markup
+    PerfUI_Core
+)
+
+# ---------------------------------------------------------------------------
 # CTest Integration
 # ---------------------------------------------------------------------------
 enable_testing()
@@ -298,5 +328,6 @@ add_test(NAME MarkupTest COMMAND PerfUI_Test_Markup)
 add_test(NAME OverlayTest COMMAND PerfUI_Test_Overlay)
 add_test(NAME TextureTest COMMAND PerfUI_Test_Texture)
 add_test(NAME MapCanvasTest COMMAND PerfUI_Test_MapCanvas)
+add_test(NAME StyleSystemTest COMMAND PerfUI_Test_Style)
 
 

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Types.h"
+#include "Style.h"
+#include <string>
 
 namespace PerfUI {
 
@@ -43,19 +45,36 @@ struct ThemeColors {
     Color selectionFill{ 212, 175, 55, 40 };
 };
 
+struct ComponentThemes {
+    WidgetStyle button;
+    WidgetStyle panel;
+    WidgetStyle checkbox;
+    WidgetStyle switchToggle;
+    WidgetStyle slider;
+    WidgetStyle radio;
+    WidgetStyle text;
+    WidgetStyle progressBar;
+    WidgetStyle divider;
+};
+
 class PERFUI_API Theme {
 public:
     static Theme& MutableCurrent();
     static const Theme& Current();
+    static void SetCurrent(const Theme& theme);
     static void ApplyPreset(const std::string& presetName);
 
-    static Theme NordicFantasy() {
-        return Theme();
-    }
+    // Theme Presets
+    static Theme NordicFantasy();
+    static Theme DarkFantasy();
+    static Theme Minimalist();
+    static Theme VanillaSkyrim();
+    static Theme Futuristic();
 
     ThemeColors colors;
     ThemeMetrics metrics;
     ThemeTypography typography;
+    ComponentThemes components;
 };
 
 } // namespace PerfUI

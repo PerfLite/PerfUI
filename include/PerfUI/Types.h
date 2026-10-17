@@ -125,6 +125,8 @@ struct Color {
                (static_cast<uint32_t>(g) << 8)  |
                (static_cast<uint32_t>(r));
     }
+
+    constexpr bool operator==(const Color& other) const = default;
 };
 
 enum class LayoutDirection {

@@ -2,6 +2,7 @@
 
 #include "Types.h"
 #include "Layout.h"
+#include "Style.h"
 #include "UIRenderBackend.h"
 #include <vector>
 #include <memory>
@@ -118,6 +119,14 @@ public:
     LayoutProps& layout() { return m_layout; }
     const LayoutProps& layout() const { return m_layout; }
 
+    // Styling System
+    WidgetStyle& style() { return m_style; }
+    const WidgetStyle& style() const { return m_style; }
+    UIElement& style(WidgetStyle s) { m_style = std::move(s); return *this; }
+
+    BoxStyle resolveBoxStyle(WidgetState state, const BoxStyle& fallback = BoxStyle{}) const;
+    TextStyle resolveTextStyle(WidgetState state, const TextStyle& fallback = TextStyle{}) const;
+
     // Dirty flags
     bool isLayoutDirty() const { return m_layoutDirty; }
     void markLayoutDirty();
@@ -167,6 +176,7 @@ protected:
     bool m_pressed{ false };
 
     bool m_layoutDirty{ true };
+    WidgetStyle m_style{};
     std::string m_tooltip;
     std::vector<std::string> m_classes;
     std::function<bool(const Point&)> m_onContextMenu;

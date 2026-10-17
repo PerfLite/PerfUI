@@ -31,6 +31,12 @@ public:
         return *this;
     }
 
+    bool clipChildren() const { return m_clipChildren; }
+    Panel& clipChildren(bool clip) { m_clipChildren = clip; return *this; }
+
+    using UIElement::style;
+    Panel& style(WidgetStyle s) { m_style = std::move(s); return *this; }
+
     void render(UIRenderBackend& backend) override;
 
 private:
@@ -43,6 +49,8 @@ private:
     Color m_shadowColor{ 0, 0, 0, 160 };
     float m_shadowBlur{ 16.0f };
     Point m_shadowOffset{ 0.0f, 6.0f };
+
+    bool m_clipChildren{ false };
 };
 
 } // namespace PerfUI

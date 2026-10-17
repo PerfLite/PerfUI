@@ -12,6 +12,12 @@
 #include "PerfUI/ComboBox.h"
 #include "PerfUI/TextInput.h"
 #include "PerfUI/MapCanvas.h"
+#include "PerfUI/Divider.h"
+#include "PerfUI/Spacer.h"
+#include "PerfUI/Switch.h"
+#include "PerfUI/RadioButton.h"
+#include "PerfUI/RadioGroup.h"
+#include "PerfUI/Label.h"
 
 #include <sstream>
 
@@ -61,16 +67,18 @@ void WidgetRegistry::registerBuiltinWidgets() {
         auto panel = std::make_unique<Panel>(name);
 
         for (const auto& [k, v] : attrs) {
-            if (k == "bg" || k == "background") {
+            if (k == "bg" || k == "background" || k == "bg-color") {
                 panel->backgroundColor(parseColorOrToken(v));
-            } else if (k == "border") {
+            } else if (k == "border" || k == "border-color") {
                 panel->borderColor(parseColorOrToken(v));
             } else if (k == "border-width") {
                 panel->borderWidth(parseNumberOrToken(v));
-            } else if (k == "radius") {
+            } else if (k == "radius" || k == "corner-radius") {
                 panel->cornerRadius(parseNumberOrToken(v));
             } else if (k == "shadow") {
                 panel->shadow(parseBool(v, true));
+            } else if (k == "clip-children" || k == "clipChildren") {
+                panel->clipChildren(parseBool(v, true));
             }
         }
 
@@ -410,6 +418,152 @@ void WidgetRegistry::registerBuiltinWidgets() {
             return parent->addChild(std::move(map));
         }
         return map.release();
+    });
+
+    // 13. Divider
+    registerWidget("Divider", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "Divider";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        LayoutDirection orientation = LayoutDirection::Horizontal;
+        auto itOri = attrs.find("orientation");
+        if (itOri != attrs.end()) {
+            if (itOri->second == "vertical") orientation = LayoutDirection::Vertical;
+        }
+
+        auto div = std::make_unique<Divider>(orientation, std::move(name));
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "thickness") {
+                div->thickness(parseNumberOrToken(v, 1.0f));
+            } else if (k == "color") {
+                div->color(parseColorOrToken(v));
+            }
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(div));
+        }
+        return div.release();
+    });
+
+    // 14. Spacer
+    registerWidget("Spacer", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "Spacer";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        float size = 0.0f;
+        float flex = 0.0f;
+        auto itSize = attrs.find("size");
+        if (itSize != attrs.end()) size = parseNumberOrToken(itSize->second, 0.0f);
+        auto itFlex = attrs.find("flex");
+        if (itFlex != attrs.end()) flex = parseNumberOrToken(itFlex->second, 0.0f);
+
+        auto sp = std::make_unique<Spacer>(size, flex, std::move(name));
+
+        if (parent) {
+            return parent->addChild(std::move(sp));
+        }
+        return sp.release();
+    });
+
+    // 15. Switch
+    registerWidget("Switch", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "Switch";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        bool checked = false;
+        auto itCh = attrs.find("checked");
+        if (itCh != attrs.end()) checked = parseBool(itCh->second, false);
+
+        auto sw = std::make_unique<Switch>(checked, std::move(name));
+
+        if (parent) {
+            return parent->addChild(std::move(sw));
+        }
+        return sw.release();
+    });
+
+    // 16. RadioButton
+    registerWidget("RadioButton", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "RadioButton";
+        std::string labelText = "Option";
+        int val = 0;
+        bool selected = false;
+
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+        auto itLabel = attrs.find("label");
+        if (itLabel != attrs.end()) labelText = itLabel->second;
+        auto itVal = attrs.find("value");
+        if (itVal != attrs.end()) val = static_cast<int>(parseNumberOrToken(itVal->second, 0.0f));
+        auto itSel = attrs.find("selected");
+        if (itSel != attrs.end()) selected = parseBool(itSel->second, false);
+
+        auto rb = std::make_unique<RadioButton>(val, labelText, std::move(name));
+        rb->setSelected(selected);
+
+        if (parent) {
+            return parent->addChild(std::move(rb));
+        }
+        return rb.release();
+    });
+
+    // 17. RadioGroup
+    registerWidget("RadioGroup", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "RadioGroup";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        auto rg = std::make_unique<RadioGroup>(std::move(name));
+        auto itSel = attrs.find("selected");
+        if (itSel != attrs.end()) {
+            rg->select(static_cast<int>(parseNumberOrToken(itSel->second, 0.0f)));
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(rg));
+        }
+        return rg.release();
+    });
+
+    // 18. Label
+    registerWidget("Label", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "Label";
+        std::string textContent = "";
+        LabelVariant variant = LabelVariant::Body;
+
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+        auto itText = attrs.find("text");
+        if (itText != attrs.end()) textContent = itText->second;
+
+        auto itVar = attrs.find("variant");
+        if (itVar != attrs.end()) {
+            if (itVar->second == "heading" || itVar->second == "title") variant = LabelVariant::Heading;
+            else if (itVar->second == "caption" || itVar->second == "small") variant = LabelVariant::Caption;
+            else if (itVar->second == "accent") variant = LabelVariant::Accent;
+        }
+
+        auto lbl = std::make_unique<Label>(textContent, variant, std::move(name));
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "color") {
+                lbl->color(parseColorOrToken(v));
+            } else if (k == "font-size" || k == "fontSize") {
+                lbl->fontSize(parseNumberOrToken(v, 14.0f));
+            } else if (k == "bold") {
+                lbl->bold(parseBool(v, true));
+            }
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(lbl));
+        }
+        return lbl.release();
     });
 
     m_builtinsRegistered = true;

@@ -168,3 +168,22 @@ target("PerfUI_Test_MapCanvas")
         "tests/MapCanvasTest.cpp"
     )
 
+target("PerfUI_Test_Style")
+    set_kind("binary")
+    set_languages("c++20")
+    add_defines("PERFUI_STATIC")
+    add_syslinks("user32")
+    if is_plat("windows") then
+        add_cxflags("/utf-8", { force = true })
+    end
+    add_includedirs("include", "src/backends/mock", "third_party/pugixml", "src/markup", "src")
+    add_files(
+        "src/core/*.cpp",
+        "src/layout/*.cpp",
+        "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
+        "tests/StyleSystemTest.cpp"
+    )
+
+

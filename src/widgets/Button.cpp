@@ -1,5 +1,6 @@
 #include "PerfUI/Button.h"
 #include "PerfUI/UIContext.h"
+#include "PerfUI/Theme.h"
 #include <algorithm>
 
 namespace PerfUI {
@@ -62,32 +63,52 @@ void Button::update(float deltaTime) {
 void Button::render(UIRenderBackend& backend) {
     if (!isVisible()) return;
 
-    float t = m_hoverAnim.value();
-    Color bg = Color::Lerp(m_normalBg, m_hoverBg, t);
-    Color border = Color::Lerp(m_normalBorder, m_hoverBorder, t);
-    Color textCol = Color::Lerp(m_normalTextColor, m_hoverTextColor, t);
-
     WidgetState state = currentState();
-    if (state == WidgetState::Pressed) {
-        bg = m_pressBg;
-        border = m_pressBorder;
-        textCol = m_pressTextColor;
-    } else if (state == WidgetState::Focused) {
-        border = m_focusBorder;
+    const auto& themeBtn = Theme::Current().components.button;
+    BoxStyle themeBox = themeBtn.resolveBox(state);
+    BoxStyle resolvedBox = resolveBoxStyle(state, themeBox);
+
+    Color bg = resolvedBox.backgroundColor.value_or(m_normalBg);
+    Color border = resolvedBox.borderColor.value_or(m_normalBorder);
+    float radius = resolvedBox.cornerRadius.value_or(m_cornerRadius);
+    float borderW = resolvedBox.borderWidth.value_or(m_borderWidth);
+
+    float t = m_hoverAnim.value();
+    if (!m_style.box.hover.has_value() && !m_style.box.pressed.has_value() && !m_style.box.normal.has_value()) {
+        Color baseBg = Color::Lerp(m_normalBg, m_hoverBg, t);
+        Color baseBorder = Color::Lerp(m_normalBorder, m_hoverBorder, t);
+        if (state == WidgetState::Pressed) {
+            bg = m_pressBg;
+            border = m_pressBorder;
+        } else if (state == WidgetState::Focused) {
+            border = m_focusBorder;
+        } else {
+            bg = baseBg;
+            border = baseBorder;
+        }
     }
 
-    // Smooth hover glow based on animation
-    if (t > 0.01f) {
+    if (resolvedBox.shadow.has_value()) {
+        backend.drawShadow(m_bounds, radius, resolvedBox.shadow->color, resolvedBox.shadow->blur, resolvedBox.shadow->offset);
+    } else if (t > 0.01f) {
         Color glow = Color::FocusGlow();
         glow.a = static_cast<uint8_t>(static_cast<float>(glow.a) * t);
-        backend.drawShadow(m_bounds, m_cornerRadius, glow, 8.0f * t, { 0.0f, 2.0f * t });
+        backend.drawShadow(m_bounds, radius, glow, 8.0f * t, { 0.0f, 2.0f * t });
     }
 
-    backend.drawRoundedRect(m_bounds, bg, m_cornerRadius, border, m_borderWidth);
+    backend.drawRoundedRect(m_bounds, bg, radius, border, borderW);
 
     if (!m_label.empty()) {
-        TextStyle renderStyle = m_textStyle;
-        renderStyle.color = textCol;
+        TextStyle themeText = themeBtn.resolveText(state, m_textStyle);
+        TextStyle renderStyle = resolveTextStyle(state, themeText);
+
+        if (!m_style.text.hover.has_value() && !m_style.text.normal.has_value()) {
+            Color textCol = Color::Lerp(m_normalTextColor, m_hoverTextColor, t);
+            if (state == WidgetState::Pressed) {
+                textCol = m_pressTextColor;
+            }
+            renderStyle.color = textCol;
+        }
 
         Dimensions textDim = backend.measureText(m_label, renderStyle);
         float textX = m_bounds.x + (std::max)(0.0f, (m_bounds.width - textDim.width) * 0.5f);
