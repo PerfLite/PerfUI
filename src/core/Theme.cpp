@@ -31,8 +31,7 @@ static Theme CreateNordicFantasyTheme() {
     t.components.button.text.hover = TextStyleOverride{}.col(Color::White()).size(14.0f);
     t.components.button.text.pressed = TextStyleOverride{}.col(Color::White()).size(14.0f);
 
-    t.components.panel.box.normal = BoxStyle{}.bg(t.colors.surfaceElevated).border(t.colors.borderSubtle, 1.0f).radius(8.0f)
-                                     .dropShadow(Color(0, 0, 0, 160), 16.0f, { 0.0f, 6.0f });
+    t.components.panel.box.normal = BoxStyle{};
 
     t.components.switchToggle.box.normal = BoxStyle{}.bg(Color(48, 54, 61, 200)).radius(12.0f);
     t.components.switchToggle.box.selected = BoxStyle{}.bg(t.colors.borderFocus).radius(12.0f);
@@ -87,8 +86,7 @@ Theme Theme::DarkFantasy() {
     t.components.button.text.hover = TextStyleOverride{}.col(Color::White()).size(14.0f);
     t.components.button.text.pressed = TextStyleOverride{}.col(Color::White()).size(14.0f);
 
-    t.components.panel.box.normal = BoxStyle{}.bg(t.colors.surfaceElevated).border(t.colors.borderSubtle, 1.0f).radius(6.0f)
-                                     .dropShadow(Color(0, 0, 0, 200), 20.0f, { 0.0f, 6.0f });
+    t.components.panel.box.normal = BoxStyle{};
 
     t.components.switchToggle.box.normal = BoxStyle{}.bg(Color(45, 30, 40, 200)).radius(12.0f);
     t.components.switchToggle.box.selected = BoxStyle{}.bg(t.colors.borderFocus).radius(12.0f);
@@ -125,8 +123,7 @@ Theme Theme::Minimalist() {
     t.components.button.text.normal = TextStyleOverride{}.col(t.colors.textPrimary).size(14.0f);
     t.components.button.text.hover = TextStyleOverride{}.col(Color::White()).size(14.0f);
 
-    t.components.panel.box.normal = BoxStyle{}.bg(t.colors.surfaceElevated).border(t.colors.borderSubtle, 1.0f).radius(4.0f)
-                                     .dropShadow(Color(0, 0, 0, 120), 10.0f, { 0.0f, 4.0f });
+    t.components.panel.box.normal = BoxStyle{};
 
     t.components.switchToggle.box.normal = BoxStyle{}.bg(Color(45, 45, 50, 220)).radius(12.0f);
     t.components.switchToggle.box.selected = BoxStyle{}.bg(t.colors.borderFocus).radius(12.0f);
@@ -163,8 +160,7 @@ Theme Theme::VanillaSkyrim() {
     t.components.button.text.normal = TextStyleOverride{}.col(t.colors.textPrimary).size(14.0f);
     t.components.button.text.hover = TextStyleOverride{}.col(Color::White()).size(14.0f);
 
-    t.components.panel.box.normal = BoxStyle{}.bg(t.colors.surfaceElevated).border(t.colors.borderSubtle, 1.0f).radius(2.0f)
-                                     .dropShadow(Color(0, 0, 0, 180), 14.0f, { 0.0f, 5.0f });
+    t.components.panel.box.normal = BoxStyle{};
 
     t.components.switchToggle.box.normal = BoxStyle{}.bg(Color(65, 58, 50, 200)).radius(12.0f);
     t.components.switchToggle.box.selected = BoxStyle{}.bg(t.colors.borderFocus).radius(12.0f);
@@ -201,8 +197,7 @@ Theme Theme::Futuristic() {
     t.components.button.text.normal = TextStyleOverride{}.col(t.colors.textPrimary).size(14.0f);
     t.components.button.text.hover = TextStyleOverride{}.col(Color::White()).size(14.0f);
 
-    t.components.panel.box.normal = BoxStyle{}.bg(t.colors.surfaceElevated).border(t.colors.borderSubtle, 1.0f).radius(3.0f)
-                                     .dropShadow(Color(0, 180, 255, 80), 16.0f, { 0.0f, 4.0f });
+    t.components.panel.box.normal = BoxStyle{};
 
     t.components.switchToggle.box.normal = BoxStyle{}.bg(Color(25, 45, 70, 200)).radius(12.0f);
     t.components.switchToggle.box.selected = BoxStyle{}.bg(t.colors.borderFocus).radius(12.0f);

@@ -16,15 +16,23 @@ void Panel::render(UIRenderBackend& backend) {
     BoxStyle themeBox = themePanel.resolveBox(state);
     BoxStyle resolvedBox = resolveBoxStyle(state, themeBox);
 
-    Color bg = resolvedBox.backgroundColor.value_or(m_backgroundColor);
-    Color border = resolvedBox.borderColor.value_or(m_borderColor);
-    float borderW = resolvedBox.borderWidth.value_or(m_borderWidth);
-    float radius = resolvedBox.cornerRadius.value_or(m_cornerRadius);
+    Color bg = m_backgroundColor.has_value() 
+        ? *m_backgroundColor 
+        : resolvedBox.backgroundColor.value_or(Color::Transparent());
+    Color border = m_borderColor.has_value() 
+        ? *m_borderColor 
+        : resolvedBox.borderColor.value_or(Color::Transparent());
+    float borderW = m_borderWidth.has_value() 
+        ? *m_borderWidth 
+        : resolvedBox.borderWidth.value_or(0.0f);
+    float radius = m_cornerRadius.has_value() 
+        ? *m_cornerRadius 
+        : resolvedBox.cornerRadius.value_or(0.0f);
 
-    if (resolvedBox.shadow.has_value()) {
-        backend.drawShadow(m_bounds, radius, resolvedBox.shadow->color, resolvedBox.shadow->blur, resolvedBox.shadow->offset);
-    } else if (m_hasShadow && m_shadowColor.a > 0) {
+    if (m_hasShadow && m_shadowColor.a > 0) {
         backend.drawShadow(m_bounds, radius, m_shadowColor, m_shadowBlur, m_shadowOffset);
+    } else if (resolvedBox.shadow.has_value() && !m_backgroundColor.has_value()) {
+        backend.drawShadow(m_bounds, radius, resolvedBox.shadow->color, resolvedBox.shadow->blur, resolvedBox.shadow->offset);
     }
 
     if (bg.a > 0 || (border.a > 0 && borderW > 0.0f)) {

@@ -190,7 +190,7 @@ void D3D11Hook::SetUIVisible(bool visible) {
     m_uiVisible.store(visible);
     InputHook::GetSingleton().SetCaptureInput(visible);
     // В режиме оверлея мышь остаётся дереву, а клавиатура — игре.
-    InputHook::GetSingleton().SetCaptureKeyboard(!(visible && m_overlayMode.load()));
+    InputHook::GetSingleton().SetCaptureKeyboard(visible && !m_overlayMode.load());
 
     // m_uiVisible включает лишь захват ввода: RenderFrame рисует дерево, пока хоть одно
     // корневое окно видимо. Без скрытия окон «закрытие» оставляло меню поверх игры, уже

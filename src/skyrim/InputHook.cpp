@@ -233,11 +233,17 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
         case WM_SYSKEYDOWN:
         case WM_KEYDOWN: {
             hook.PushInput({ QueuedInput::Type::KeyDown, 0, 0.0f, 0.0f, 0.0f, 0, static_cast<int>(wParam) });
+            if (!hook.m_captureKeyboard.load()) {
+                break; // In overlay mode, allow keys to pass to Skyrim!
+            }
             return 0; // Swallow from Skyrim
         }
         case WM_KEYUP:
         case WM_SYSKEYUP:
         case WM_DEADCHAR:
+            if (!hook.m_captureKeyboard.load()) {
+                break; // In overlay mode, allow keys to pass to Skyrim!
+            }
             return 0; // Swallow from Skyrim
         }
     }
