@@ -13,6 +13,11 @@ public:
 
     const std::string& text() const { return m_text; }
     TextArea& text(std::string t);
+    TextArea& append(std::string_view extra) {
+        m_text.append(extra.data(), extra.size());
+        markLayoutDirty();
+        return *this;
+    }
 
     float fontSize() const { return m_textStyle.fontSize; }
     TextArea& fontSize(float s) { m_textStyle.fontSize = s; markLayoutDirty(); return *this; }
