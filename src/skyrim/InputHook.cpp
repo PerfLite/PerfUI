@@ -246,6 +246,14 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
             }
             return 0; // Swallow from Skyrim
         }
+    } else {
+        // While PerfUI is NOT capturing input, suppress Windows OS arrow in Skyrim client area
+        // to prevent double cursors when transitioning to MapMenu, JournalMenu, etc.
+        if (msg == WM_SETCURSOR && LOWORD(lParam) == HTCLIENT) {
+            while (::ShowCursor(FALSE) >= 0);
+            ::SetCursor(nullptr);
+            return TRUE;
+        }
     }
 
     return ::CallWindowProcA(hook.m_originalWndProc, hWnd, msg, wParam, lParam);
