@@ -13,6 +13,7 @@
 #include "../../src/backends/imgui/ImGuiRenderBackend.h"
 #include "../map_demo/MapDemoHud.h"
 #include "../modder_custom_hud/CustomHealthBar.h"
+#include "DesignSystemShowcase.h"
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -36,6 +37,7 @@ static PerfUI::JournalWindow* g_journalWindow = nullptr;
 static PerfUI::MainMenuWindow* g_mainMenuWindow = nullptr;
 static PerfUI::Examples::CustomHealthBar* g_customHud = nullptr;
 static PerfUI::Examples::MapDemoHud* g_mapDemo = nullptr;
+static PerfUI::Examples::DesignSystemShowcase* g_showcaseWindow = nullptr;
 static float g_simulatedHealth = 100.0f;
 
 // Simple custom test component to demonstrate retained rendering
@@ -176,6 +178,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     // MapCanvas demo (radar with a simulated walking player), toggled via F9
     g_mapDemo = g_uiContext->root()->add<PerfUI::Examples::MapDemoHud>();
     g_mapDemo->setVisible(false);
+
+    // Design System & Components showcase (toggled via F7)
+    g_showcaseWindow = g_uiContext->root()->add<PerfUI::Examples::DesignSystemShowcase>();
+    g_showcaseWindow->setBounds(PerfUI::Rect{ 80.0f, 40.0f, 1120.0f, 640.0f });
+    g_showcaseWindow->setVisible(false);
 
     g_mainMenuWindow->onContinueGame([]() {
         if (g_mainMenuWindow && g_journalWindow) {
@@ -364,6 +371,26 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_KEYDOWN: {
             if (g_uiContext && g_uiContext->isCapturingKeybind()) {
                 g_uiContext->onKeyDown(static_cast<int>(wParam));
+                return 0;
+            }
+            if (wParam == VK_F5) {
+                static int s_themeIdx = 0;
+                const char* themes[] = { "Nordic Fantasy", "Dark Fantasy", "Minimalist", "Vanilla Skyrim", "Futuristic" };
+                s_themeIdx = (s_themeIdx + 1) % 5;
+                PerfUI::Theme::ApplyPreset(themes[s_themeIdx]);
+                if (g_uiContext) {
+                    g_uiContext->showToast("Theme Preset [F5]", themes[s_themeIdx], PerfUI::ToastType::Success, 2.0f);
+                }
+                return 0;
+            }
+            if (wParam == VK_F7) {
+                if (g_showcaseWindow) {
+                    bool show = !g_showcaseWindow->isVisible();
+                    g_showcaseWindow->setVisible(show);
+                    if (g_uiContext) {
+                        g_uiContext->showToast("Showcase Window [F7]", show ? "Design System & Components Showcase Visible" : "Showcase Hidden", PerfUI::ToastType::Info, 2.5f);
+                    }
+                }
                 return 0;
             }
             if (wParam == VK_F8) {
