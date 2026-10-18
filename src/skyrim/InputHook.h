@@ -33,8 +33,8 @@ public:
     void SetCaptureInput(bool capture);
     bool IsCaptureInput() const { return m_captureInput.load(); }
 
-    // Ложь в режиме оверлея: дерево забирает только мышь, клавиатура остаётся игре. Иначе под
-    // открытой колонкой журнала не работают Map, Esc и остальные игровые клавиши.
+    // False in overlay mode: the UI captures only mouse input while keyboard events remain with the game.
+    // Otherwise Map, Esc, and gameplay keys wouldn't work when docked.
     void SetCaptureKeyboard(bool capture) { m_captureKeyboard.store(capture); }
 
     void PushInput(QueuedInput event);

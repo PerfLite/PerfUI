@@ -54,12 +54,12 @@ int main() {
         const std::string_view xml = R"(
 <UI>
   <Panel name="Main" direction="column" width="400" padding="16" gap="8">
-    <Text text="Настройки" font="title"/>
+    <Text text="Settings" font="title"/>
     <Slider name="Volume" min="0" max="100" bind="settings.volume"/>
-    <Checkbox label="Показывать профайлер" bind="settings.showProfiler"/>
+    <Checkbox label="Show profiler" bind="settings.showProfiler"/>
     <Panel direction="row" gap="8" justify="end">
-      <Button text="Отмена" onClick="cancel"/>
-      <Button text="Сохранить" onClick="save" class="primary"/>
+      <Button text="Cancel" onClick="cancel"/>
+      <Button text="Save" onClick="save" class="primary"/>
     </Panel>
   </Panel>
 </UI>
@@ -402,7 +402,7 @@ int main() {
         auto* map = dynamic_cast<PerfUI::MapCanvas*>(loader.findByName("Radar"));
         TEST_ASSERT(map != nullptr, "MapCanvas element created by tag");
         if (map) {
-            // Источник не назначен: рендер обязан пройти без исключения и без вылета.
+            // Source is not assigned: rendering must proceed without throwing or crashing.
             PerfUI::MockRenderBackend mock;
             context.render(mock);
 

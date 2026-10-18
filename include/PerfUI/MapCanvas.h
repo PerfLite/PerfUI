@@ -20,35 +20,35 @@ enum class MapMarkerKind {
 };
 
 struct MapMarker {
-    std::uint64_t id{ 0 };              // уникальный в пределах карты
+    std::uint64_t id{ 0 };              // Unique within the map
     std::string label;
     MapMarkerKind kind{ MapMarkerKind::Custom };
-    float x{ 0.0f };                    // метры, +X = восток
-    float y{ 0.0f };                    // метры, +Y = север
-    bool active{ false };               // текущая цель выбранного задания
+    float x{ 0.0f };                    // Meters, +X = East
+    float y{ 0.0f };                    // Meters, +Y = North
+    bool active{ false };               // Active objective of selected quest
     bool discovered{ true };
-    bool sameSpace{ true };             // false: цель в другом пространстве — на карте не рисуется
-    Color color{ Color::Transparent() }; // alpha == 0: цвет берётся из темы по kind
+    bool sameSpace{ true };             // false: target is in another space - not rendered on map
+    Color color{ Color::Transparent() }; // alpha == 0: color is taken from theme by kind
 };
 
 struct MapPlayerState {
     float x{ 0.0f };
     float y{ 0.0f };
-    float headingDeg{ 0.0f };           // 0 = север, растёт по часовой стрелке
+    float headingDeg{ 0.0f };           // 0 = north, clockwise
 };
 
-// Виджет не знает про игру: данные приходят через этот интерфейс.
-// markers() должен возвращать снимок, валидный на время рендера кадра.
+// The widget is game-agnostic: data arrives through this interface.
+// markers() must return a snapshot valid during the frame render.
 class IMapDataSource {
 public:
     virtual ~IMapDataSource() = default;
 
     virtual MapPlayerState player() const = 0;
     virtual std::span<const MapMarker> markers() const = 0;
-    virtual std::uint64_t revision() const = 0;  // меняется при любом изменении данных
+    virtual std::uint64_t revision() const = 0;  // increments on any data change
 };
 
-// Готовый источник для тестов, примеров и одно-потоковых сценариев.
+// Ready-to-use data source for tests, samples, and single-threaded scenarios.
 class PERFUI_API VectorMapDataSource final : public IMapDataSource {
 public:
     MapPlayerState player() const override { return m_player; }
@@ -89,49 +89,47 @@ enum class MapMode {
     World
 };
 
-// Радар-карта (этап 1) и схематичная карта мира (этап 2).
-// MapMode::World до этапа 2 рисуется как радар с rotateWithPlayer = false, то есть север вверх.
+// Radar map and world map canvas.
+// MapMode::World renders north-up with full camera pan and zoom.
 class PERFUI_API MapCanvas final : public UIElement {
 public:
     explicit MapCanvas(std::string name = "MapCanvas");
 
-    MapCanvas& setDataSource(IMapDataSource* src);   // не владеет; nullptr безопасен
+    MapCanvas& setDataSource(IMapDataSource* src);   // non-owning; nullptr safe
     MapCanvas& mode(MapMode m);
-    MapCanvas& radarRange(float meters);             // радиус радара, по умолчанию 300 м
+    MapCanvas& radarRange(float meters);             // radar range, default 300m
     MapCanvas& showDistances(bool on);
     MapCanvas& showGrid(bool on);
-    MapCanvas& rotateWithPlayer(bool on);            // только Radar, по умолчанию true
+    MapCanvas& rotateWithPlayer(bool on);            // Radar only, default true
     MapCanvas& onMarkerClicked(std::function<void(const MapMarker&)> cb);
 
-    // --- Этап 2: World-режим, камера, кластеры ---
-    // Все значения координат — в метрах той же системы, что и MapMarker.
+    // --- World mode, camera, clusters ---
+    // All coordinate values are in meters matching MapMarker coordinates.
 
-    // Область, в которую можно водить камеру. Выход за неё отрезается,
-    // чтобы нельзя было утащить карту в пустоту.
+    // Camera bounding box. Clamps panning to prevent moving into void.
     MapCanvas& clampToBounds(float minX, float minY, float maxX, float maxY);
     MapCanvas& clearBounds();
     bool hasBounds() const { return m_hasBounds; }
 
-    MapCanvas& metersPerPixel(float meters);       // зум: сколько метров в одном пикселе
+    MapCanvas& metersPerPixel(float meters);       // zoom: meters per pixel
     float metersPerPixel() const { return m_metersPerPixel; }
     MapCanvas& zoomLimits(float minMetersPerPixel, float maxMetersPerPixel);
 
-    MapCanvas& cameraCenter(Point meters);         // центр окна камеры, метры
+    MapCanvas& cameraCenter(Point meters);         // camera center in meters
     Point cameraCenter() const { return m_camera; }
 
-    MapCanvas& followPlayer(bool on);              // камера ездит за игроком, пока включено
+    MapCanvas& followPlayer(bool on);              // camera follows player while enabled
     bool isFollowingPlayer() const { return m_followPlayer; }
 
-    // Маркеры, чьи экранные позиции ближе этого расстояния, рисуются одним значком с числом.
-    // 0 — кластеризация выключена. Только World.
+    // Markers closer than this pixel distance are grouped into clusters. 0 = disabled. World only.
     MapCanvas& clusterPixelSize(float pixels);
     float clusterPixelSize() const { return m_clusterPx; }
 
-    MapCanvas& onBackground(std::function<void()> cb);   // «назад» с геймпада / Esc
+    MapCanvas& onBackground(std::function<void()> cb);   // gamepad back / Esc callback
 
     void centerOnPlayer();
     void centerOn(Point meters);
-    void zoomBy(float factor, const Point* anchorLocalPx = nullptr);   // factor > 1 — отдаляем
+    void zoomBy(float factor, const Point* anchorLocalPx = nullptr);   // factor > 1 zooms out
     void panPixels(Point deltaPx);
     void panMeters(Point deltaMeters);
 
@@ -142,14 +140,14 @@ public:
     bool showsGrid() const { return m_showGrid; }
     bool rotatesWithPlayer() const { return m_rotateWithPlayer; }
 
-    // Диагност для тестов и профилирования.
+    // Diagnostics for tests and profiling.
     std::size_t recomputeCount() const { return m_recomputeCount; }
     std::size_t projectedCount() const { return m_projected.size(); }
     std::size_t clusterCount() const { return m_clusters.size(); }
-    float gridStepMeters() const { return m_gridStep; }   // 0 — не рисуем сетку
+    float gridStepMeters() const { return m_gridStep; }   // 0 = no grid
 
-    // World: зона кнопки «центрировать на игроке» в координатах вьюпорта.
-    // Публично: чтобы хост и тесты могли попасть по кнопке, не угадывая её размеры.
+    // World: rect of "center on player" button in viewport coordinates.
+    // Public for host and tests to hit-test accurately.
     [[nodiscard]] Rect recenterButtonRect() const;
 
     void update(float deltaTime) override;
@@ -163,15 +161,15 @@ public:
     bool onKeyDown(int keyCode) override;
 
 private:
-    // Ссылок на объекты источника между кадрами не держим: маркеры копируются в m_snapshot,
-    // а проекция указывает на них индексом.
+    // No external source pointers retained across frames: markers copied to m_snapshot,
+    // projections reference them by index.
     struct Projected {
         std::size_t marker{ 0 };
         Point screen{};
         float distanceMeters{ 0.0f };
-        float bearingDeg{ 0.0f };      // азимут от севера, [0, 360)
-        float screenAngleDeg{ 0.0f };  // угол от «верха экрана» по часовой
-        bool onEdge{ false };          // дальше радиуса — рисуем стрелку на границе
+        float bearingDeg{ 0.0f };      // bearing from north, [0, 360)
+        float screenAngleDeg{ 0.0f };  // angle clockwise from screen top
+        bool onEdge{ false };          // beyond radius: drawn as arrow on edge
     };
 
     struct CacheKey {
@@ -188,7 +186,7 @@ private:
         float clusterPx{ 0.0f };
         Rect boundsMeters{};
 
-        // Point/Rect не имеют operator==, поэтому сравнение по полям вручную.
+        // Point/Rect lack operator==; compare fields manually.
         bool operator==(const CacheKey& o) const {
             return source == o.source && revision == o.revision &&
                    width == o.width && height == o.height && mode == o.mode &&
@@ -203,7 +201,7 @@ private:
     struct Cluster {
         Point screen{};
         std::size_t count{ 0 };
-        std::size_t marker{ 0 };   // представитель для подписи и клика
+        std::size_t marker{ 0 };   // representative for label and click
     };
 
     [[nodiscard]] Point center() const;
@@ -212,10 +210,10 @@ private:
     [[nodiscard]] TextStyle labelStyle() const;
     [[nodiscard]] static Color colorFor(const MapMarker& marker);
 
-    [[nodiscard]] Rect viewRect() const;                  // World: рабочая область внутри рамки
+    [[nodiscard]] Rect viewRect() const;                  // World: active viewport within border
     [[nodiscard]] Point worldToScreen(Point meters) const;
     [[nodiscard]] Point screenToWorld(Point pixels) const;
-    [[nodiscard]] float pickGridStep() const;             // метры; 0 — сетку не рисуем
+    [[nodiscard]] float pickGridStep() const;             // meters; 0 = no grid
     void clampCamera();
     void moveCameraMeters(Point deltaMeters);
     static Point clampRayToRect(Point from, Point to, const Rect& rect);
@@ -235,8 +233,7 @@ private:
     void drawActiveLink(UIRenderBackend& backend);
     void drawOffSpaceBadge(UIRenderBackend& backend);
     void drawRecenterButton(UIRenderBackend& backend);
-    // Оба хит-теста ждут точку в координатах вьюпорта (как и Projected::screen),
-    // а не локальную точку события — смещение делает вызывающий.
+    // Both hit-tests expect viewport coordinates (matching Projected::screen).
     [[nodiscard]] const Projected* hitMarker(const Point& viewportPoint) const;
     [[nodiscard]] const Cluster* hitCluster(const Point& viewportPoint) const;
 
@@ -249,14 +246,14 @@ private:
     std::function<void(const MapMarker&)> m_onMarkerClicked;
     std::function<void()> m_onBack;
 
-    // Камера World-режима: центр в метрах и «метров на пиксель».
+    // World mode camera: center in meters and meters-per-pixel.
     Point m_camera{};
     float m_metersPerPixel{ 2.0f };
     float m_minMetersPerPixel{ 0.25f };
     float m_maxMetersPerPixel{ 200.0f };
     bool m_followPlayer{ true };
     bool m_hasBounds{ false };
-    Rect m_boundsMeters{};                    // x,y = min; width,height = размер области в метрах
+    Rect m_boundsMeters{};                    // x,y = min; width,height = area size in meters
     float m_clusterPx{ 26.0f };
     float m_gridStep{ 0.0f };
 
@@ -266,7 +263,7 @@ private:
     static constexpr float kDragClickTolerancePx = 6.0f;
 
     AnimatedFloat m_pulse{ 0.0f, 3.0f };
-    float m_playerAngleDeg{ 0.0f };  // угол стрелки игрока на экране, от «верха» по часовой
+    float m_playerAngleDeg{ 0.0f };  // player screen arrow angle, clockwise from top
 
     CacheKey m_key;
     const void* m_snapshotSource{ nullptr };
@@ -274,8 +271,8 @@ private:
     std::vector<MapMarker> m_snapshot;
     std::vector<Projected> m_projected;
     std::vector<Cluster> m_clusters;
-    long m_active{ -1 };          // индекс в m_projected
-    long m_offSpaceActive{ -1 };  // индекс в m_snapshot
+    long m_active{ -1 };          // index in m_projected
+    long m_offSpaceActive{ -1 };  // index in m_snapshot
     std::size_t m_recomputeCount{ 0 };
 };
 

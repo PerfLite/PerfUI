@@ -401,8 +401,8 @@ void WidgetRegistry::registerBuiltinWidgets() {
         return ti.release();
     });
 
-    // 12. MapCanvas. Источник данных (IMapDataSource) модом назначается из C++:
-    // в разметке описывается только внешний вид карты.
+    // 12. MapCanvas. Data source (IMapDataSource) is assigned by the mod in C++;
+    // the markup configures only visual map styling.
     registerWidget("MapCanvas", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
         std::string name = "MapCanvas";
         auto itName = attrs.find("name");

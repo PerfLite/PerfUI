@@ -17,10 +17,10 @@
 namespace PerfUI::Examples {
 
 /**
- * @brief Демонстрация MapCanvas: игрок идёт по кругу, вокруг тринадцать маркеров.
+ * @brief MapCanvas demo: player walks in a circle with thirteen markers around.
  *
- * Данные подаются через VectorMapDataSource — ровно так же, как мод подаст их из игры,
- * только значения меняются симуляцией, а не движком. Никаких зависимостей от Skyrim.
+ * Data is provided via VectorMapDataSource - exactly as a mod would feed from the game,
+ * except values are updated by simulation rather than the game engine. No Skyrim dependencies.
  */
 class MapDemoHud final : public Panel {
 public:
@@ -35,7 +35,7 @@ public:
         shadow(true, Color(0, 0, 0, 180), 18.0f, { 0.0f, 6.0f });
         layout().direction(LayoutDirection::Vertical).padding(14.0f, 12.0f).gap(8.0f);
 
-        m_title = add<Text>("MapCanvas — режим радара");
+        m_title = add<Text>("MapCanvas — Radar Mode");
         m_title->color(Color::NordicGold()).fontSize(16.0f).bold(true);
         m_title->layout().width(kBlockWidth);
 
@@ -55,18 +55,18 @@ public:
         m_map->onMarkerClicked([this](const MapMarker& marker) { selectMarker(marker.id); });
         m_map->onBackground([this]() {
             if (auto* ctx = context()) {
-                ctx->showToast("MapCanvas", "выход: режим «назад» передан хосту", ToastType::Info, 1.5f);
+                ctx->showToast("MapCanvas", "Exit: Back action forwarded to host", ToastType::Info, 1.5f);
             }
         });
 
-        // Высота фиксирована: measure() у переносимого текста даёт одну строку, а без неё
-        // двух-трёхстрочный статус и подсказка вылезали бы за нижний край панели.
+        // Fixed height: measure() on wrapped text yields a single line, and without it
+        // multiline status and hint would overflow the panel bottom boundary.
         m_status = add<Text>("");
         m_status->color(Color(200, 205, 215, 255)).fontSize(13.0f).wrap(true);
         m_status->layout().width(kBlockWidth).height(36.0f);
 
-        m_hint = add<Text>("M режим · R вращение · G сетка · D дистанции · T цель · +/− радиус или масштаб · "
-                           "C на игроке · F следование · стрелки — камера · клик по маркеру — выбрать");
+        m_hint = add<Text>("M mode · R rotate · G grid · D distances · T target · +/− range/zoom · "
+                           "C on player · F follow · arrows - camera · click marker - select");
         m_hint->color(Color(130, 140, 155, 255)).fontSize(11.5f).wrap(true);
         m_hint->layout().width(kBlockWidth).height(54.0f);
 
@@ -79,11 +79,11 @@ public:
         Panel::update(deltaTime);
         if (!isVisible()) return;
 
-        // Игрок идёт по окружности радиуса kWalkRadius вокруг начала координат.
+        // Player walks along a circle of radius kWalkRadius around origin.
         m_walkPhase += deltaTime * kWalkSpeedRadPerSec;
         const float cx = kWalkRadius * std::cos(m_walkPhase);
         const float cy = kWalkRadius * std::sin(m_walkPhase);
-        // Скорость — касательная: d/dt (R cos t, R sin t) = (−sin t, cos t).
+        // Velocity is tangent: d/dt (R cos t, R sin t) = (-sin t, cos t).
         const float vx = -std::sin(m_walkPhase);
         const float vy = std::cos(m_walkPhase);
         m_source.setPlayer(cx, cy, normalizeDeg(std::atan2(vx, vy) * kRadToDeg));
@@ -113,12 +113,12 @@ public:
         case 'T':
             cycleActive();
             break;
-        // Коды — виртуальные клавиши (WM_KEYDOWN wParam), чтобы не тянуть windows.h в пример.
-        case 0xBB:  // VK_OEM_PLUS: «=» и «+»
+        // Codes are virtual keycodes (WM_KEYDOWN wParam) to avoid pulling windows.h into demo.
+        case 0xBB:  // VK_OEM_PLUS: "=" and "+"
         case 0x6B:  // VK_ADD
             plusKey();
             break;
-        case 0xBD:  // VK_OEM_MINUS: «-»
+        case 0xBD:  // VK_OEM_MINUS: "-"
         case 0x6D:  // VK_SUBTRACT
             minusKey();
             break;
@@ -128,7 +128,7 @@ public:
         case 'F':
             m_map->followPlayer(!m_map->isFollowingPlayer());
             break;
-        // 37..40 — стрелки: в World двигают камеру, как правый стик.
+        // 37..40 - arrows: in World mode they pan camera like right stick.
         case 37: m_map->onAction(NavDirection::Left); break;
         case 38: m_map->onAction(NavDirection::Up); break;
         case 39: m_map->onAction(NavDirection::Right); break;
@@ -142,7 +142,7 @@ public:
 
     MapCanvas* map() const { return m_map; }
 
-    // Самостоятельная позиция на экране: прижат к правому верхнему углу вьюпорта.
+    // Self-contained screen position: docked to top-right viewport corner.
     void arrange(const Rect& finalRect) override {
         const float w = desiredSize().width;
         const float h = desiredSize().height;
@@ -178,20 +178,20 @@ private:
         };
 
         static constexpr Seed seeds[] = {
-            { 1, "Речной переход", MapMarkerKind::Location, 90.0f, 60.0f },
-            { 2, "Разбойный лагерь", MapMarkerKind::Enemy, -130.0f, 40.0f },
-            { 3, "Старая шахта", MapMarkerKind::Location, 40.0f, -170.0f },
-            { 4, "Драконий курган", MapMarkerKind::Enemy, 200.0f, -120.0f },
-            { 5, "Ферма Ветреная", MapMarkerKind::Location, -210.0f, -90.0f },
-            { 6, "Храм Меридии", MapMarkerKind::Location, -60.0f, 220.0f },
-            { 7, "Крытый дом", MapMarkerKind::Custom, 150.0f, 180.0f },
-            { 8, "Лагерь охотников", MapMarkerKind::Custom, -250.0f, 150.0f },
-            { 9, "Башнецвет", MapMarkerKind::Location, 260.0f, 20.0f },
-            { 10, "Храм Сердца", MapMarkerKind::Quest, 40.0f, 780.0f },
-            // Густая группа вокруг «Речного перехода»: на неё и смотрим кластеризацию при отдалении.
-            { 11, "Кострище", MapMarkerKind::Enemy, 96.0f, 66.0f },
-            { 12, "Пещера медведя", MapMarkerKind::Location, 104.0f, 58.0f },
-            { 13, "Привал охотников", MapMarkerKind::Custom, 98.0f, 52.0f },
+            { 1, "River Crossing", MapMarkerKind::Location, 90.0f, 60.0f },
+            { 2, "Bandit Camp", MapMarkerKind::Enemy, -130.0f, 40.0f },
+            { 3, "Old Mine", MapMarkerKind::Location, 40.0f, -170.0f },
+            { 4, "Dragon Mound", MapMarkerKind::Enemy, 200.0f, -120.0f },
+            { 5, "Windy Farm", MapMarkerKind::Location, -210.0f, -90.0f },
+            { 6, "Temple of Meridia", MapMarkerKind::Location, -60.0f, 220.0f },
+            { 7, "Sheltered House", MapMarkerKind::Custom, 150.0f, 180.0f },
+            { 8, "Hunter Camp", MapMarkerKind::Custom, -250.0f, 150.0f },
+            { 9, "Towerbloom", MapMarkerKind::Location, 260.0f, 20.0f },
+            { 10, "Heart Temple", MapMarkerKind::Quest, 40.0f, 780.0f },
+            // Dense cluster around 'River Crossing': used to test clustering at distance.
+            { 11, "Campfire", MapMarkerKind::Enemy, 96.0f, 66.0f },
+            { 12, "Bear Cave", MapMarkerKind::Location, 104.0f, 58.0f },
+            { 13, "Hunter Rest", MapMarkerKind::Custom, 98.0f, 52.0f },
         };
 
         m_markers.clear();
@@ -226,12 +226,12 @@ private:
         if (it != m_markers.end()) {
             const auto player = m_source.player();
             char buf[128];
-            std::snprintf(buf, sizeof(buf), "%s · %.0f м", it->label.c_str(),
+            std::snprintf(buf, sizeof(buf), "%s · %.0f m", it->label.c_str(),
                           std::sqrt(square(it->x - player.x) + square(it->y - player.y)));
             m_selection = buf;
         }
         if (auto* ctx = context()) {
-            ctx->showToast("Цель выбрана", m_selection, ToastType::Info, 2.0f);
+            ctx->showToast("Target selected", m_selection, ToastType::Info, 2.0f);
         }
         refreshStatus();
     }
@@ -247,7 +247,7 @@ private:
         selectMarker(m_markers[next].id);
     }
 
-    // «+»: в World — приблизить (меньше метров на пиксель), в радаре — больше радиус обзора.
+    // "+": in World - zoom in (fewer meters per pixel), in Radar - larger view range.
     void plusKey() {
         if (m_map->mode() == MapMode::World) {
             m_map->zoomBy(0.75f);
@@ -270,22 +270,22 @@ private:
 
         char detail[96];
         if (m_map->mode() == MapMode::World) {
-            std::snprintf(detail, sizeof(detail), "масштаб %.2f м/px · сетка %.0f м · кластеров %zu · %s",
+            std::snprintf(detail, sizeof(detail), "scale %.2f m/px · grid %.0f m · clusters %zu · %s",
                           m_map->metersPerPixel(),
                           m_map->gridStepMeters(),
                           m_map->clusterCount(),
-                          m_map->isFollowingPlayer() ? "за игроком" : "свободная камера");
+                          m_map->isFollowingPlayer() ? "following" : "free camera");
         } else {
-            std::snprintf(detail, sizeof(detail), "радиус %.0f м · курс %.0f°",
+            std::snprintf(detail, sizeof(detail), "range %.0f m · heading %.0f°",
                           m_map->radarRange(), player.headingDeg);
         }
 
         char buf[256];
         std::snprintf(buf, sizeof(buf),
-                      "%s · %s · целей %zu/%zu · пересчётов %llu%s",
+                      "%s · %s · targets %zu/%zu · recalculations %llu%s",
                       m_map->mode() == MapMode::Radar
-                          ? (m_map->rotatesWithPlayer() ? "Радар" : "Радар, север вверх")
-                          : "Мир",
+                          ? (m_map->rotatesWithPlayer() ? "Radar" : "Radar, North up")
+                          : "World",
                       detail,
                       m_map->projectedCount(),
                       m_markers.size(),
@@ -295,8 +295,8 @@ private:
 
         if (m_title) {
             m_title->text(m_map->mode() == MapMode::World
-                              ? "MapCanvas — карта мира"
-                              : "MapCanvas — режим радара");
+                              ? "MapCanvas — World Map"
+                              : "MapCanvas — Radar Mode");
         }
     }
 

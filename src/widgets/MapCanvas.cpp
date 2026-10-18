@@ -28,14 +28,14 @@ float bearingTo(float dx, float dy) {
 }
 
 void formatMeters(char* buf, std::size_t size, float meters) {
-    std::snprintf(buf, size, "%d м", static_cast<int>(std::lroundf(meters)));
+    std::snprintf(buf, size, "%d m", static_cast<int>(std::lroundf(meters)));
 }
 
 void formatCount(char* buf, std::size_t size, std::size_t count) {
     std::snprintf(buf, size, "%d", static_cast<int>(count));
 }
 
-// Подпись шага сетки: целые метры без «.0» и без лишних нулей.
+// Grid step label: integer meters without trailing zeros.
 void formatAxis(char* buf, std::size_t size, float meters) {
     if (std::fabs(meters) < 0.5f) {
         std::snprintf(buf, size, "0");
@@ -63,7 +63,7 @@ PerfUI::Point directionVector(float angleDeg) {
 
 MapCanvas::MapCanvas(std::string name)
     : UIElement(std::move(name)) {
-    // В графе фокуса карта — один элемент: стик двигает камеру, а не обходит маркеры.
+    // In the focus graph, the map is a single element: stick pans camera rather than traversing markers.
     setFocusable(true);
 }
 
@@ -162,20 +162,20 @@ void MapCanvas::centerOnPlayer() {
     if (!m_source) return;
     const MapPlayerState player = m_source->player();
     m_camera = Point{ player.x, player.y };
-    m_followPlayer = true;   // вернулись к игроку — снова идём за ним
+    m_followPlayer = true;   // returned to player — follow player again
     clampCamera();
 }
 
 void MapCanvas::centerOn(Point meters) {
     m_camera = meters;
-    m_followPlayer = false;   // явная навигация пользователя важнее автоследования
+    m_followPlayer = false;   // explicit user navigation takes priority over auto-follow
     clampCamera();
 }
 
 void MapCanvas::zoomBy(float factor, const Point* anchorLocalPx) {
     if (!(factor > 0.0f) || m_metersPerPixel <= 0.0f) return;
 
-    // Точка под якорем должна остаться на месте: помним мир под курсором до смены масштаба.
+    // The point under anchor should remain in place: remember world under cursor before zooming.
     const Point anchorPx = anchorLocalPx ? *anchorLocalPx : center();
     const Point anchorWorld = screenToWorld(anchorPx);
     const Point c = center();
@@ -198,14 +198,14 @@ void MapCanvas::panMeters(Point deltaMeters) {
 }
 
 void MapCanvas::panPixels(Point deltaPx) {
-    // Палец тянет карту за собой: центр камеры уходит в противоположную сторону.
+    // Dragging pulls map along: camera center moves in opposite direction.
     panMeters(Point{ deltaPx.x * m_metersPerPixel, -deltaPx.y * m_metersPerPixel });
 }
 
 void MapCanvas::update(float deltaTime) {
     UIElement::update(deltaTime);
 
-    // Пульсация «пинг-понг»: тик к 1, по достижении — обратно к 0.
+    // Ping-pong pulse animation: tick to 1, then back to 0.
     if (m_pulse.isAtTarget()) {
         m_pulse.setTarget(m_pulse.target() > 0.5f ? 0.0f : 1.0f);
     }
@@ -288,7 +288,7 @@ Rect MapCanvas::recenterButtonRect() const {
     const float scale = scaleFactor();
     const float size = 28.0f * scale;
     const Rect view = viewRect();
-    // Правый верхний угол: там нет ни подписей осей (низ и лево), ни бейджа «в другом месте».
+    // Top-right corner: keeps clear of axis labels (bottom/left) and off-space badge.
     return Rect{ view.x + view.width - size - 6.0f * scale, view.y + 6.0f * scale, size, size };
 }
 
@@ -307,8 +307,8 @@ Point MapCanvas::screenToWorld(Point pixels) const {
 void MapCanvas::clampCamera() {
     if (!m_hasBounds || m_boundsMeters.width <= 0.0f || m_boundsMeters.height <= 0.0f) return;
 
-    // Видимая половина окна в метрах; за край области уходить нельзя, но если область
-    // меньше окна — держим её по центру, иначе камера «залипнет» на одной границе.
+    // Visible window half in meters; cannot exceed bounds, but if bounds are smaller
+    // than window, keep centered to prevent sticking to an edge.
     const Rect view = viewRect();
     const float halfW = view.width * 0.5f * m_metersPerPixel;
     const float halfH = view.height * 0.5f * m_metersPerPixel;
@@ -327,8 +327,8 @@ void MapCanvas::clampCamera() {
 }
 
 Point MapCanvas::clampRayToRect(Point from, Point to, const Rect& rect) {
-    // Пересечение отрезка from→to с границей окна. Если начало внутри — нужна точка выхода (tMax),
-    // если снаружи — точка входа (tMin). Отрезок, который окно не задевает вовсе, прижимаем к краю.
+    // Segment from->to intersection with window boundary. If inside, find exit (tMax);
+    // if outside, find entry (tMin). Segments missing the window entirely are clamped to edge.
     float tMin = 0.0f;
     float tMax = 1.0f;
     const Point d = to - from;
@@ -339,7 +339,7 @@ Point MapCanvas::clampRayToRect(Point from, Point to, const Rect& rect) {
     const float v[2] = { d.x, d.y };
 
     for (int axis = 0; axis < 2; ++axis) {
-        if (std::fabs(v[axis]) < 1e-6f) continue;   // параллельно оси — ограничение даёт только lo/hi ниже
+        if (std::fabs(v[axis]) < 1e-6f) continue;   // parallel to axis — bounded only by lo/hi below
 
         float t1 = (lo[axis] - o[axis]) / v[axis];
         float t2 = (hi[axis] - o[axis]) / v[axis];
@@ -362,7 +362,7 @@ Point MapCanvas::clampRayToRect(Point from, Point to, const Rect& rect) {
 float MapCanvas::pickGridStep() const {
     if (!m_showGrid || m_mode != MapMode::World || m_metersPerPixel <= 0.0f) return 0.0f;
 
-    // Шаг подбираем так, чтобы линии стояли не реже ~64 px друг от друга.
+    // Select step so grid lines maintain at least ~64 px separation.
     static constexpr float steps[] = { 10.0f, 20.0f, 50.0f, 100.0f, 250.0f,
                                        500.0f, 1000.0f, 2500.0f, 5000.0f, 10000.0f };
     const float minSpacingPx = 64.0f;
@@ -469,30 +469,29 @@ void MapCanvas::recomputeWorld() {
         pr.marker = i;
         pr.distanceMeters = std::sqrtf(dx * dx + dy * dy);
         pr.bearingDeg = bearingTo(dx, dy);
-        pr.screenAngleDeg = pr.bearingDeg;   // World всегда «север вверх»
+        pr.screenAngleDeg = pr.bearingDeg;   // World mode is always north-up
         pr.screen = worldToScreen(Point{ marker.x, marker.y });
         pr.onEdge = !view.contains(pr.screen);
 
         if (marker.active) {
-            // Цель держим на карте всегда: вне окна — стрелка на границе.
+            // Always keep target on map: outside window, show indicator at edge.
             if (pr.onEdge) pr.screen = clampRayToRect(playerScreen, pr.screen, view);
             m_projected.push_back(pr);
             if (m_active < 0) m_active = static_cast<long>(m_projected.size() - 1);
             continue;
         }
 
-        if (pr.onEdge) continue;   // прочее за пределами окна не рисуем и не кластеризуем
+        if (pr.onEdge) continue;   // skip drawing/clustering markers outside window
         m_projected.push_back(pr);
     }
 
     if (m_clusterPx <= 0.0f || m_projected.size() < 2) return;
 
-    // Активную цель кластеризация не трогает: она должна оставаться кликабельной и видимой.
+    // Active target is excluded from clustering to stay visible and clickable.
     const long activeIdx = m_active;
 
-    // Пространственный хэш: клетка равна радиусу кластера, соседи ищутся в окрестности 3×3.
-    // Чистая сетка без этого разбила бы метки в 12 px друг от друга по разные стороны границы
-    // клетки — кластеры то появлялись, то пропадали при минимальном сдвиге камеры.
+    // Spatial hash: cell matches cluster radius; neighbours searched in 3x3 neighbourhood.
+    // Prevents clustering flickering when camera moves across grid cell edges.
     const auto cellOf = [this](const Point& p) {
         return Point{ std::floor(p.x / m_clusterPx), std::floor(p.y / m_clusterPx) };
     };
@@ -511,8 +510,8 @@ void MapCanvas::recomputeWorld() {
     const float radiusSq = m_clusterPx * m_clusterPx;
     std::vector<bool> consumed(m_projected.size(), false);
 
-    // Жадно: первый незанятый маркер становится центром кластера и забирает всех соседей
-    // в радиусе. Порядок m_projected — порядок маркеров, так что результат детерминирован.
+    // Greedy: first unassigned marker becomes cluster seed and absorbs neighbours
+    // within radius. Order is deterministic.
     for (std::size_t seed = 0; seed < m_projected.size(); ++seed) {
         if (consumed[seed] || static_cast<long>(seed) == activeIdx) continue;
 
@@ -535,7 +534,7 @@ void MapCanvas::recomputeWorld() {
             }
         }
 
-        if (members.empty()) continue;   // одиночка: рисуем его как обычно
+        if (members.empty()) continue;   // single marker: render normally
 
         consumed[seed] = true;
         Point sum = origin;
@@ -563,7 +562,7 @@ void MapCanvas::recomputeWorld() {
         if (!consumed[idx]) remaining.push_back(m_projected[idx]);
     }
 
-    // Индекс активной цели мог сдвинуться — ищем её заново по индексу маркера.
+    // Active target index may have shifted — locate by marker index.
     const long wantedMarker = activeIdx >= 0
                                   ? static_cast<long>(m_projected[static_cast<std::size_t>(activeIdx)].marker)
                                   : -1L;
@@ -685,7 +684,7 @@ void MapCanvas::drawWorldGrid(UIRenderBackend& backend) {
     const TextStyle style = labelStyle();
     char buf[32];
 
-    // Мировые координаты левого/верхнего и правого/нижнего края окна.
+    // World coordinates of top-left and bottom-right viewport bounds.
     const Point leftTop = screenToWorld(view.topLeft());
     const Point rightBottom = screenToWorld(Point{ view.x + view.width, view.y + view.height });
 
@@ -699,7 +698,7 @@ void MapCanvas::drawWorldGrid(UIRenderBackend& backend) {
         backend.drawText(buf, Point{ px + 2.0f, view.y + view.height - style.fontSize * 1.3f }, style);
     }
 
-    // Экранная Y растёт вниз, поэтому «верх» окна — это максимальная мировая Y.
+    // Screen Y grows downward, so top of window corresponds to maximum world Y.
     const float firstY = std::floor(rightBottom.y / step) * step;
     for (float worldY = firstY; worldY <= leftTop.y + step; worldY += step) {
         const float py = worldToScreen(Point{ 0.0f, worldY }).y;
@@ -711,7 +710,7 @@ void MapCanvas::drawWorldGrid(UIRenderBackend& backend) {
     }
 }
 
-// Линия «игрок → активная цель» с расстоянием посередине (World).
+// Line from player to active target with midpoint distance (World).
 void MapCanvas::drawActiveLink(UIRenderBackend& backend) {
     if (m_active < 0 || !m_source) return;
 
@@ -737,7 +736,7 @@ void MapCanvas::drawPlayer(UIRenderBackend& backend) {
     const float scale = scaleFactor();
     const float size = 9.0f * scale;
 
-    // Radar: игрок всегда в центре диска. World: в своей проекции, камера может быть где угодно.
+    // Radar: player centered. World: projected according to world position, camera anywhere.
     Point c = center();
     if (m_mode == MapMode::World) {
         if (!m_source) return;
@@ -777,7 +776,7 @@ void MapCanvas::drawMarkers(UIRenderBackend& backend) {
             const float arrowWidth = (marker.active ? 6.5f : 4.5f) * scale;
             const Point dir = directionVector(pr.screenAngleDeg);
             const Point perp = perpendicular(pr.screenAngleDeg);
-            // Radar: стрелка на окружности. World: pr.screen уже притянут к границе окна.
+            // Radar: arrow on circumference. World: pr.screen is already clamped to window edge.
             const Point tip = m_mode == MapMode::World
                 ? pr.screen
                 : Point{ c.x + dir.x * (radius - 2.0f * scale), c.y + dir.y * (radius - 2.0f * scale) };
@@ -838,7 +837,7 @@ void MapCanvas::drawClusters(UIRenderBackend& backend) {
     }
 }
 
-// Подписи: сначала ближайшие к игроку; перекрывающиеся пропускаем, чтобы не выводить кашу.
+// Labels: nearest to player first; overlapping labels omitted to prevent clutter.
 void MapCanvas::drawLabels(UIRenderBackend& backend) {
     if (m_projected.empty()) return;
 
@@ -860,7 +859,7 @@ void MapCanvas::drawLabels(UIRenderBackend& backend) {
     std::vector<Rect> placed;
     placed.reserve(kMaxLabels);
 
-    // Значки кластеров занимают место на карте — подпись не должна на них залезать.
+    // Cluster badges occupy space — labels should not overlap them.
     for (const Cluster& cluster : m_clusters) {
         const float half = (std::max)(8.0f, m_clusterPx * 0.5f);
         placed.push_back(Rect{ cluster.screen.x - half, cluster.screen.y - half, half * 2.0f, half * 2.0f });
@@ -913,7 +912,7 @@ void MapCanvas::drawActiveTarget(UIRenderBackend& backend) {
     const float radius = radiusPx();
     const float scale = scaleFactor();
 
-    // Пунктир «от игрока к цели» нужен радару; в World ту же роль играет drawActiveLink.
+    // Dashed line from player to target for radar; drawActiveLink serves this role in World mode.
     if (m_mode != MapMode::World && m_radarRange > 0.0f) {
         const float reach = pr.onEdge ? radius - 13.0f * scale : (pr.distanceMeters / m_radarRange) * radius;
         const float dash = 5.0f * scale;
@@ -948,8 +947,8 @@ void MapCanvas::drawOffSpaceBadge(UIRenderBackend& backend) {
     const float scale = scaleFactor();
 
     std::string text = marker.label.empty()
-        ? std::string("Цель в другом месте")
-        : marker.label + " — в другом месте";
+        ? std::string("Target in another location")
+        : marker.label + " — in another location";
 
     const TextStyle style = labelStyle();
     const Dimensions size = backend.measureText(text, style);
@@ -961,7 +960,7 @@ void MapCanvas::drawOffSpaceBadge(UIRenderBackend& backend) {
     backend.drawText(text, pos, TextStyle{ th.colors.textSecondary, style.fontSize, false, false });
 }
 
-// Кнопка «центрировать на игроке»: видна, когда камера смотрит в другую точку мира.
+// "Center on player" button: visible when camera is panned away from player.
 void MapCanvas::drawRecenterButton(UIRenderBackend& backend) {
     if (m_followPlayer || !m_source) return;
 
@@ -971,8 +970,7 @@ void MapCanvas::drawRecenterButton(UIRenderBackend& backend) {
 
     backend.drawRoundedRect(b, th.colors.surfaceActive, 6.0f * scale, th.colors.borderFocus, 1.2f * scale);
 
-    // Значок: мишень (кольцо + точка). Линий и треугольников не рисуем — их жёстко
-    // проверяют тесты линии «игрок → цель» и стрелок у границы.
+    // Target icon (ring + dot). Kept clean to avoid collision with edge arrows.
     const Point c{ b.x + b.width * 0.5f, b.y + b.height * 0.5f };
     backend.drawCircle(c, 6.5f * scale, Color::Transparent(), th.colors.textPrimary, 1.5f * scale);
     backend.drawCircle(c, 1.8f * scale, th.colors.textPrimary);
@@ -990,7 +988,7 @@ const MapCanvas::Projected* MapCanvas::hitMarker(const Point& localPoint) const 
     float bestDistSq = 0.0f;
 
     for (const Projected& pr : m_projected) {
-        // У дальней цели кликабельна стрелка на границе, а не её реальная позиция «за горизонтом».
+        // Distant target edge indicator is clickable rather than its off-screen position.
         const Point target = pr.onEdge
             ? (m_mode == MapMode::World ? pr.screen : along(c, pr.screenAngleDeg, clickRadius))
             : pr.screen;
@@ -1032,7 +1030,7 @@ bool MapCanvas::onPointerDown(const Point& localPoint) {
         return false;
     }
 
-    // Отвечаем true и в Radar: без этого UIContext нешет onPointerUp на этот элемент.
+    // Return true in Radar mode as well so UIContext routes onPointerUp to this element.
     if (m_mode == MapMode::World) {
         m_dragging = true;
         m_lastDrag = localPoint;
@@ -1048,7 +1046,7 @@ void MapCanvas::onPointerMove(const Point& localPoint) {
     m_lastDrag = localPoint;
     m_dragTravel = m_dragTravel + delta;
 
-    // Потянули руками — автоследование за игроком отключается, пока не нажмут «центрировать».
+    // Manual pan disables auto-follow until "recenter" is pressed.
     if (m_followPlayer && std::fabs(m_dragTravel.x) + std::fabs(m_dragTravel.y) > kDragClickTolerancePx) {
         m_followPlayer = false;
     }
@@ -1062,15 +1060,14 @@ bool MapCanvas::onPointerUp(const Point& localPoint) {
     m_dragging = false;
     UIElement::onPointerUp(localPoint);
 
-    // Тап без смещения — это клик по маркеру; перетаскивание клик не производит.
+    // Tap without movement is a marker click; dragging does not trigger click.
     if (wasDragging) {
         const float travel = std::fabs(m_dragTravel.x) + std::fabs(m_dragTravel.y);
         m_dragTravel = Point{};
         if (travel > kDragClickTolerancePx) return true;
     }
 
-    // Позиции проекции — в координатах вьюпорта, а локальная точка события — относительно
-    // виджета: без сдвига на bounds() клик мимо маркера на смещённом виджете не совпал бы никогда.
+    // Projected positions are in viewport coords; adjust by bounds() for correct hit detection.
     const Point absolute = localPoint + m_bounds.topLeft();
 
     if (m_mode == MapMode::World) {
@@ -1079,7 +1076,7 @@ bool MapCanvas::onPointerUp(const Point& localPoint) {
             return true;
         }
         if (const Cluster* cluster = hitCluster(absolute)) {
-            // Клик по скоплению наводится на него и приближается: иначе мелкие метки не разобрать.
+            // Clicking a cluster centers and zooms in for clarity.
             centerOn(screenToWorld(cluster->screen));
             zoomBy(0.5f);
             return true;
@@ -1096,7 +1093,7 @@ bool MapCanvas::onPointerUp(const Point& localPoint) {
 bool MapCanvas::onMouseWheel(float delta, const Point& localPoint) {
     if (m_mode != MapMode::World || delta == 0.0f) return false;
 
-    const float factor = delta > 0.0f ? 0.8f : 1.25f;   // колесо «на себя» — приближаем
+    const float factor = delta > 0.0f ? 0.8f : 1.25f;   // zoom in / out
     const Point absolute = localPoint + m_bounds.topLeft();
     zoomBy(factor, &absolute);
     if (m_followPlayer) centerOnPlayer();
@@ -1106,7 +1103,7 @@ bool MapCanvas::onMouseWheel(float delta, const Point& localPoint) {
 bool MapCanvas::onAction(NavDirection dir) {
     if (m_mode != MapMode::World || !isVisible()) return false;
 
-    // Правило: направление стика = куда камера едет в мире (вверх = север, вправо = восток).
+    // Stick navigation: camera pans in world space (up = north, right = east).
     const float stepMeters = 48.0f * m_metersPerPixel;
     switch (dir) {
     case NavDirection::Up:    moveCameraMeters(Point{ 0.0f, stepMeters }); break;
@@ -1118,7 +1115,7 @@ bool MapCanvas::onAction(NavDirection dir) {
 }
 
 bool MapCanvas::onKeyDown(int keyCode) {
-    // 0x08 = VK_BACK: «назад» с геймпада приходит как этот код.
+    // 0x08 = VK_BACK: gamepad back button maps to this code.
     if (keyCode != 0x08 || !m_onBack || m_mode != MapMode::World) return false;
 
     m_onBack();

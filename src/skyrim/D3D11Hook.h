@@ -21,9 +21,9 @@ public:
     void SetUIVisible(bool visible);
     bool IsUIVisible() const { return m_uiVisible.load(); }
 
-    // Оверлей (колонка журнала QuestUI) в отличие от модального меню не имеет права ни глушить
-    // клавиатуру игры, ни отключать её управление: под открытой колонкой должны работать Map,
-    // Esc и движение. Вызывается клиентом перед SetUIVisible.
+    // Overlay mode (e.g., docked quest column) unlike modal menus leaves game keyboard
+    // and movement controls enabled so Map, Esc, and movement keys function properly.
+    // Called by the client prior to SetUIVisible.
     void SetOverlayMode(bool overlay) { m_overlayMode.store(overlay); }
     bool HasVisibleRootWindows() const;
 

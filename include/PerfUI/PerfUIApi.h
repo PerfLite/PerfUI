@@ -256,7 +256,7 @@ inline void UnregisterHotkey(const char* id) {
     }
 }
 
-// Мод, чьё окно — оверлей поверх живого мира, обязан позвать это до SetUIVisible(true).
+// Call before SetUIVisible(true) if the window is an overlay on top of the live game world.
 inline void SetOverlayMode(bool overlay) {
     auto* api = GetApi();
     if (api && api->SetOverlayMode) {

@@ -189,12 +189,11 @@ void D3D11Hook::ToggleMainMenu() {
 void D3D11Hook::SetUIVisible(bool visible) {
     m_uiVisible.store(visible);
     InputHook::GetSingleton().SetCaptureInput(visible);
-    // В режиме оверлея мышь остаётся дереву, а клавиатура — игре.
+    // In overlay mode, mouse stays with the UI tree while keyboard events go to the game.
     InputHook::GetSingleton().SetCaptureKeyboard(visible && !m_overlayMode.load());
 
-    // m_uiVisible включает лишь захват ввода: RenderFrame рисует дерево, пока хоть одно
-    // корневое окно видимо. Без скрытия окон «закрытие» оставляло меню поверх игры, уже
-    // не реагирующее на мышь - выйти из него было нельзя.
+    // m_uiVisible toggles input capture: RenderFrame draws the tree while any root
+    // window is visible. Hide windows on close so they do not linger on screen.
     if (!visible) {
         if (m_journalWindow) m_journalWindow->setVisible(false);
         if (m_mainMenuWindow) m_mainMenuWindow->setVisible(false);
@@ -210,8 +209,8 @@ void D3D11Hook::SetUIVisible(bool visible) {
         auto* controlMap = RE::ControlMap::GetSingleton();
         if (controlMap) {
             using UEFlag = RE::UserEvents::USER_EVENT_FLAG;
-            // Никогда не выключаем kAll в ControlMap, иначе в движке ломаются прыжки и спринт.
-            // Модальная изоляция полностью обеспечивается возвратом kStop в InputHook::ProcessEvent.
+            // Never disable kAll in ControlMap, otherwise engine jump and sprint controls break.
+            // Modal input isolation is handled cleanly via returning kStop in InputHook::ProcessEvent.
             controlMap->ToggleControls(UEFlag::kAll, true);
         }
     });
