@@ -146,6 +146,73 @@ auto* card = panel->add<PerfUI::Panel>();
 card->clipChildren(true); // Все выходящие за границы card элементы будут аккуратно обрезаны
 ```
 
+### 7. `ItemSlot`
+Игровой слот инвентаря для предметов и снаряжения.
+- Поддержка редкости предмета (`ItemRarity`: `Common`, `Fine`, `Superior`, `Epic`, `Legendary`) с автоматической окраской контуров и фонов.
+- Отображение количества предметов в стаке (badge с тенью).
+- Индикатор экипированного предмета (ромбовидный маркер `equipped`).
+- Обработчики клика, перетаскивания и тултипы.
+```cpp
+auto* slot = grid->add<PerfUI::ItemSlot>(52.0f);
+slot->setItem("textures/items/iron_sword.png", 1, PerfUI::ItemRarity::Superior);
+slot->setEquipped(true);
+slot->onClick([] {
+    EquipOrUseItem();
+});
+```
+
+### 8. `KeybindSelector`
+Интерактивный селектор клавиши для меню настроек модов (MCM):
+- Режим прослушивания нажатия (listening state) с пульсирующей подсказкой «Press any key...».
+- Отмена при нажатии `Esc` или клике вне элемента.
+- Преобразование DirectX / Windows Virtual Key кодов в человекочитаемые названия клавиш (`KeyCodeToString`).
+- Callback `onKeyChanged(uint32_t newKey)`.
+```cpp
+auto* binder = panel->add<PerfUI::KeybindSelector>(VK_F4);
+binder->onKeyChanged([](uint32_t key) {
+    SaveHotkeyToIni(key);
+});
+```
+
+### 9. `Accordion` и `AccordionSection`
+Складной контейнер с анимированным раскрытием/схлопыванием:
+- Плавная интерполяция высоты с отсечением через Scissor rect.
+- Индикатор-шеврон (`▼` / `►`).
+- Опциональный режим `exclusive(true)` (при открытии секции остальные автоматически сворачиваются).
+```cpp
+auto* accordion = panel->add<PerfUI::Accordion>();
+accordion->exclusive(true);
+
+auto* sec1 = accordion->addSection("Основные настройки", true);
+sec1->content()->add<PerfUI::Switch>(true);
+
+auto* sec2 = accordion->addSection("Дополнительно");
+sec2->content()->add<PerfUI::Button>("Сброс параметров");
+```
+
+### 10. `SearchableList`
+Универсальный компонент поиска и фильтрации элементов в реальном времени:
+- Встроенный `TextInput` и `ScrollView`.
+- Регистронезависимый поиск по подстроке.
+- Быстрый выбор элементов с подсветкой и callback `onItemSelected(index, text)`.
+```cpp
+auto* list = panel->add<PerfUI::SearchableList>();
+list->setItems({ "Эбонитовый меч", "Даэдрический топор", "Железный кинжал", "Стеклянный лук" });
+list->onItemSelected([](size_t idx, const std::string& item) {
+    SelectWeapon(item);
+});
+```
+
+### 11. `TextArea`
+Многострочный текстовый блок с поддержкой прокрутки:
+- Автоматическая разбивка строк и скроллинг колесиком мыши.
+- Scissor-rect отсечение текста, не влезающего в область видимости.
+- Индикатор вертикального скроллбара.
+```cpp
+auto* textLog = panel->add<PerfUI::TextArea>("Первая строка лога...\nВторая строка...");
+textLog->append("\nСобытие выполнено успешно.");
+```
+
 ---
 
 ## 🎬 Анимации и Easing (`Animation.h`)

@@ -18,6 +18,11 @@
 #include "PerfUI/RadioButton.h"
 #include "PerfUI/RadioGroup.h"
 #include "PerfUI/Label.h"
+#include "PerfUI/ItemSlot.h"
+#include "PerfUI/KeybindSelector.h"
+#include "PerfUI/Accordion.h"
+#include "PerfUI/SearchableList.h"
+#include "PerfUI/TextArea.h"
 
 #include <sstream>
 
@@ -564,6 +569,143 @@ void WidgetRegistry::registerBuiltinWidgets() {
             return parent->addChild(std::move(lbl));
         }
         return lbl.release();
+    });
+
+    // 19. ItemSlot
+    registerWidget("ItemSlot", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "ItemSlot";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        auto slot = std::make_unique<ItemSlot>(std::move(name));
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "count") {
+                slot->count(static_cast<int>(parseNumberOrToken(v, 1.0f)));
+            } else if (k == "rarity") {
+                if (v == "fine" || v == "green") slot->rarity(ItemRarity::Fine);
+                else if (v == "superior" || v == "blue") slot->rarity(ItemRarity::Superior);
+                else if (v == "epic" || v == "purple") slot->rarity(ItemRarity::Epic);
+                else if (v == "legendary" || v == "gold") slot->rarity(ItemRarity::Legendary);
+                else slot->rarity(ItemRarity::Common);
+            } else if (k == "equipped") {
+                slot->equipped(parseBool(v, false));
+            } else if (k == "selected") {
+                slot->selected(parseBool(v, false));
+            }
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(slot));
+        }
+        return slot.release();
+    });
+
+    // 20. KeybindSelector
+    registerWidget("KeybindSelector", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "KeybindSelector";
+        std::string labelText = "Keybind";
+        uint32_t keyCode = 0;
+
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+        auto itLabel = attrs.find("label");
+        if (itLabel != attrs.end()) labelText = itLabel->second;
+        auto itKey = attrs.find("key");
+        if (itKey != attrs.end()) keyCode = static_cast<uint32_t>(parseNumberOrToken(itKey->second, 0.0f));
+
+        auto kb = std::make_unique<KeybindSelector>(keyCode, labelText, std::move(name));
+
+        if (parent) {
+            return parent->addChild(std::move(kb));
+        }
+        return kb.release();
+    });
+
+    // 21. Accordion
+    registerWidget("Accordion", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "Accordion";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        auto acc = std::make_unique<Accordion>(std::move(name));
+
+        auto itEx = attrs.find("exclusive");
+        if (itEx != attrs.end()) {
+            acc->exclusive(parseBool(itEx->second, false));
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(acc));
+        }
+        return acc.release();
+    });
+
+    // 22. AccordionSection
+    registerWidget("AccordionSection", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "AccordionSection";
+        std::string title = "Section";
+        bool expanded = false;
+
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+        auto itTitle = attrs.find("title");
+        if (itTitle != attrs.end()) title = itTitle->second;
+        auto itExp = attrs.find("expanded");
+        if (itExp != attrs.end()) expanded = parseBool(itExp->second, false);
+
+        auto sec = std::make_unique<AccordionSection>(title, nullptr, expanded, std::move(name));
+
+        if (parent) {
+            return parent->addChild(std::move(sec));
+        }
+        return sec.release();
+    });
+
+    // 23. SearchableList
+    registerWidget("SearchableList", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "SearchableList";
+        std::string placeholder = "Search...";
+
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+        auto itPl = attrs.find("placeholder");
+        if (itPl != attrs.end()) placeholder = itPl->second;
+
+        auto sl = std::make_unique<SearchableList>(placeholder, std::move(name));
+
+        if (parent) {
+            return parent->addChild(std::move(sl));
+        }
+        return sl.release();
+    });
+
+    // 24. TextArea
+    registerWidget("TextArea", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "TextArea";
+        std::string textContent = "";
+
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+        auto itText = attrs.find("text");
+        if (itText != attrs.end()) textContent = itText->second;
+
+        auto ta = std::make_unique<TextArea>(textContent, std::move(name));
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "read-only" || k == "readOnly") {
+                ta->readOnly(parseBool(v, true));
+            } else if (k == "font-size" || k == "fontSize") {
+                ta->fontSize(parseNumberOrToken(v, 14.0f));
+            } else if (k == "color") {
+                ta->textColor(parseColorOrToken(v));
+            }
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(ta));
+        }
+        return ta.release();
     });
 
     m_builtinsRegistered = true;

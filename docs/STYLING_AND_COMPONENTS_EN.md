@@ -88,6 +88,73 @@ Hardware scissor-rect clipping for container children:
 panel->clipChildren(true);
 ```
 
+### 7. `ItemSlot`
+Inventory slot widget designed for items, armor, weapons, and spells:
+- Full `ItemRarity` support (`Common`, `Fine`, `Superior`, `Epic`, `Legendary`) with corresponding border & background palettes.
+- Stack count badge with shadow.
+- Equipped diamond badge indicator.
+- Click, hover, and interaction callbacks.
+```cpp
+auto* slot = grid->add<PerfUI::ItemSlot>(52.0f);
+slot->setItem("textures/items/ebony_sword.png", 1, PerfUI::ItemRarity::Epic);
+slot->setEquipped(true);
+slot->onClick([] {
+    EquipItem();
+});
+```
+
+### 8. `KeybindSelector`
+Interactive key binding selector for mod configuration menus (MCM):
+- Listening state with pulsing prompt ("Press any key...").
+- Cancellation on `Esc` key or clicking outside.
+- Virtual Key code to human-readable string conversion (`KeyCodeToString`).
+- Callback `onKeyChanged(uint32_t newKey)`.
+```cpp
+auto* binder = panel->add<PerfUI::KeybindSelector>(VK_F4);
+binder->onKeyChanged([](uint32_t key) {
+    SaveHotkey(key);
+});
+```
+
+### 9. `Accordion` & `AccordionSection`
+Collapsible container with smooth animated unfolding/collapsing transitions:
+- Animated height interpolation with hardware Scissor rect clipping.
+- Arrow indicator chevron (`▼` / `►`).
+- Optional `exclusive(true)` accordion mode where opening one section folds others.
+```cpp
+auto* accordion = panel->add<PerfUI::Accordion>();
+accordion->exclusive(true);
+
+auto* sec1 = accordion->addSection("General", true);
+sec1->content()->add<PerfUI::Switch>(true);
+
+auto* sec2 = accordion->addSection("Advanced");
+sec2->content()->add<PerfUI::Button>("Reset Defaults");
+```
+
+### 10. `SearchableList`
+Fast real-time filtering list with an integrated search box:
+- Built-in `TextInput` header and `ScrollView`.
+- Case-insensitive substring filtering.
+- Item selection callback with hover and selection highlighting.
+```cpp
+auto* list = panel->add<PerfUI::SearchableList>();
+list->setItems({ "Ebony Sword", "Daedric Battleaxe", "Iron Dagger", "Glass Bow" });
+list->onItemSelected([](size_t idx, const std::string& item) {
+    SelectItem(item);
+});
+```
+
+### 11. `TextArea`
+Multiline scrollable text block:
+- Automatic line wrapping and mouse wheel scrolling.
+- Hardware Scissor-rect clipping.
+- Integrated scrollbar rendering.
+```cpp
+auto* textLog = panel->add<PerfUI::TextArea>("Initial log line...\nNext line...");
+textLog->append("\nOperation succeeded.");
+```
+
 ---
 
 ## 📝 XML Markup Support

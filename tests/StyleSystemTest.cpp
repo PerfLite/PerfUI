@@ -227,6 +227,87 @@ void TestNewComponents() {
     TEST_ASSERT(hasPushClip, "MockRenderBackend recorded PushClip");
     TEST_ASSERT(hasPopClip, "MockRenderBackend recorded PopClip");
 
+    // 7. ItemSlot
+    ItemSlot slot("TestSlot");
+    slot.count(5).rarity(ItemRarity::Legendary).equipped(true);
+    TEST_ASSERT(slot.count() == 5, "ItemSlot count is 5");
+    TEST_ASSERT(slot.rarity() == ItemRarity::Legendary, "ItemSlot rarity is Legendary");
+    TEST_ASSERT(slot.isEquipped() == true, "ItemSlot is equipped");
+    TEST_ASSERT(slot.getRarityBorderColor() == Color(245, 185, 45, 255), "ItemSlot legendary border color");
+
+    bool slotClicked = false;
+    slot.onClick([&]() { slotClicked = true; });
+    slot.onPointerDown(Point{ 10.0f, 10.0f });
+    TEST_ASSERT(slotClicked == true, "ItemSlot clicked");
+
+    backend.beginFrame();
+    slot.setBounds(Rect{ 0.0f, 0.0f, 50.0f, 50.0f });
+    slot.render(backend);
+    backend.endFrame();
+    TEST_ASSERT(backend.drawCallCount() >= 2, "ItemSlot renders background and badges");
+
+    // 8. KeybindSelector
+    KeybindSelector kb(0x45, "Interact", "KeybindInteract"); // 'E'
+    TEST_ASSERT(kb.keyCode() == 0x45, "Keybind is 'E'");
+    TEST_ASSERT(KeybindSelector::KeyCodeToString(0x45) == "E", "KeyCodeToString('E') is 'E'");
+    TEST_ASSERT(KeybindSelector::KeyCodeToString(0x09) == "Tab", "KeyCodeToString(Tab) is 'Tab'");
+
+    kb.startListening();
+    TEST_ASSERT(kb.isListening() == true, "Keybind listening");
+    kb.onKeyDown(0x20); // Space
+    TEST_ASSERT(!kb.isListening(), "Keybind stopped listening on key down");
+    TEST_ASSERT(kb.keyCode() == 0x20, "Keybind changed to Space (0x20)");
+    TEST_ASSERT(KeybindSelector::KeyCodeToString(kb.keyCode()) == "Space", "Keybind string is Space");
+
+    // 9. Accordion
+    Accordion accordion("TestAccordion");
+    accordion.exclusive(true);
+    TEST_ASSERT(accordion.isExclusive(), "Accordion is exclusive");
+
+    auto* sec1 = accordion.addSection("Audio", std::make_unique<Button>("Mute"), true);
+    auto* sec2 = accordion.addSection("Video", std::make_unique<Button>("V-Sync"), false);
+    TEST_ASSERT(sec1->isExpanded() == true, "sec1 is initially expanded");
+    TEST_ASSERT(sec2->isExpanded() == false, "sec2 is initially collapsed");
+
+    // Opening sec2 should close sec1 in exclusive mode
+    sec2->setExpanded(true);
+    TEST_ASSERT(sec2->isExpanded() == true, "sec2 is now expanded");
+    TEST_ASSERT(sec1->isExpanded() == false, "sec1 automatically closed in exclusive mode");
+
+    // 10. SearchableList
+    SearchableList sList("Search weapons...", "WeaponList");
+    sList.addItem(1, "Iron Sword");
+    sList.addItem(2, "Steel Dagger");
+    sList.addItem(3, "Elven Bow");
+
+    int chosenId = -1;
+    std::string chosenName;
+    sList.onItemSelected([&](int id, const std::string& name) {
+        chosenId = id;
+        chosenName = name;
+    });
+
+    sList.select(2);
+    TEST_ASSERT(chosenId == 2, "SearchableList selected id 2");
+    TEST_ASSERT(chosenName == "Steel Dagger", "SearchableList selected text 'Steel Dagger'");
+
+    // Filter
+    sList.filterItems("iron");
+    // Only item 1 is matching
+
+    // 11. TextArea
+    TextArea textArea("Line 1\nLine 2\nLine 3", "TestTextArea");
+    textArea.fontSize(14.0f);
+    textArea.measure(Dimensions{ 300.0f, 150.0f });
+    TEST_ASSERT(textArea.desiredSize().width == 300.0f, "TextArea desired width");
+    TEST_ASSERT(textArea.desiredSize().height == 150.0f, "TextArea desired height");
+
+    backend.beginFrame();
+    textArea.setBounds(Rect{ 0.0f, 0.0f, 300.0f, 150.0f });
+    textArea.render(backend);
+    backend.endFrame();
+    TEST_ASSERT(backend.drawCallCount() >= 4, "TextArea renders background and lines");
+
     std::cout << "  -> Passed TestNewComponents" << std::endl;
 }
 
@@ -244,6 +325,13 @@ void TestMarkupIntegration() {
                 <RadioButton name="Normal" value="2" label="Normal" />
                 <RadioButton name="Hard" value="3" label="Hard" />
             </RadioGroup>
+            <ItemSlot name="PotionSlot" count="3" rarity="epic" equipped="true" />
+            <KeybindSelector name="CastSpell" key="82" label="Cast" />
+            <Accordion name="MenuAccordion" exclusive="true">
+                <AccordionSection name="SecAudio" title="Audio" expanded="true" />
+            </Accordion>
+            <SearchableList name="SpellsList" placeholder="Filter..." />
+            <TextArea name="ConsoleLog" text="Hello Skyrim" />
         </Panel>
     )";
 
@@ -262,6 +350,11 @@ void TestMarkupIntegration() {
     Switch* switchWidget = nullptr;
     Spacer* spacer = nullptr;
     RadioGroup* radioGroup = nullptr;
+    ItemSlot* itemSlot = nullptr;
+    KeybindSelector* keybindSelector = nullptr;
+    Accordion* accordion = nullptr;
+    SearchableList* searchableList = nullptr;
+    TextArea* textArea = nullptr;
 
     for (const auto& child : panel->children()) {
         if (child->name() == "HeaderLabel") label = dynamic_cast<Label*>(child.get());
@@ -269,6 +362,11 @@ void TestMarkupIntegration() {
         if (child->name() == "SoundToggle") switchWidget = dynamic_cast<Switch*>(child.get());
         if (child->name() == "Gap") spacer = dynamic_cast<Spacer*>(child.get());
         if (child->name() == "DifficultyGroup") radioGroup = dynamic_cast<RadioGroup*>(child.get());
+        if (child->name() == "PotionSlot") itemSlot = dynamic_cast<ItemSlot*>(child.get());
+        if (child->name() == "CastSpell") keybindSelector = dynamic_cast<KeybindSelector*>(child.get());
+        if (child->name() == "MenuAccordion") accordion = dynamic_cast<Accordion*>(child.get());
+        if (child->name() == "SpellsList") searchableList = dynamic_cast<SearchableList*>(child.get());
+        if (child->name() == "ConsoleLog") textArea = dynamic_cast<TextArea*>(child.get());
     }
 
     TEST_ASSERT(label != nullptr, "Label parsed");
@@ -286,6 +384,23 @@ void TestMarkupIntegration() {
     TEST_ASSERT(radioGroup != nullptr, "RadioGroup parsed");
     TEST_ASSERT(radioGroup->selectedValue() == 2, "RadioGroup initial selected value parsed");
     TEST_ASSERT(radioGroup->children().size() == 3, "RadioGroup has 3 RadioButton children");
+
+    TEST_ASSERT(itemSlot != nullptr, "ItemSlot parsed from XML");
+    TEST_ASSERT(itemSlot->count() == 3, "ItemSlot count is 3");
+    TEST_ASSERT(itemSlot->rarity() == ItemRarity::Epic, "ItemSlot rarity is Epic");
+    TEST_ASSERT(itemSlot->isEquipped() == true, "ItemSlot equipped is true");
+
+    TEST_ASSERT(keybindSelector != nullptr, "KeybindSelector parsed from XML");
+    TEST_ASSERT(keybindSelector->keyCode() == 82, "KeybindSelector key is 82 ('R')");
+    TEST_ASSERT(keybindSelector->label() == "Cast", "KeybindSelector label is 'Cast'");
+
+    TEST_ASSERT(accordion != nullptr, "Accordion parsed from XML");
+    TEST_ASSERT(accordion->isExclusive() == true, "Accordion exclusive is true");
+    TEST_ASSERT(accordion->children().size() == 1, "Accordion has 1 section");
+
+    TEST_ASSERT(searchableList != nullptr, "SearchableList parsed from XML");
+    TEST_ASSERT(textArea != nullptr, "TextArea parsed from XML");
+    TEST_ASSERT(textArea->text() == "Hello Skyrim", "TextArea text parsed");
 
     std::cout << "  -> Passed TestMarkupIntegration" << std::endl;
 }

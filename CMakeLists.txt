@@ -32,6 +32,11 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/Switch.h
     include/PerfUI/RadioButton.h
     include/PerfUI/RadioGroup.h
+    include/PerfUI/ItemSlot.h
+    include/PerfUI/KeybindSelector.h
+    include/PerfUI/Accordion.h
+    include/PerfUI/SearchableList.h
+    include/PerfUI/TextArea.h
     include/PerfUI/ScrollView.h
     include/PerfUI/Checkbox.h
     include/PerfUI/ProgressBar.h
@@ -68,6 +73,11 @@ add_library(PerfUI_Core STATIC
     src/widgets/Switch.cpp
     src/widgets/RadioButton.cpp
     src/widgets/RadioGroup.cpp
+    src/widgets/ItemSlot.cpp
+    src/widgets/KeybindSelector.cpp
+    src/widgets/Accordion.cpp
+    src/widgets/SearchableList.cpp
+    src/widgets/TextArea.cpp
     src/widgets/ScrollView.cpp
     src/widgets/Checkbox.cpp
     src/widgets/ProgressBar.cpp
