@@ -167,8 +167,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     // Add our Nordic Quest Journal window and Main Menu window to the UIContext root
     g_journalWindow = g_uiContext->root()->add<PerfUI::JournalWindow>();
+    g_journalWindow->setVisible(false); // Press F11 to reveal Quest Journal
     g_mainMenuWindow = g_uiContext->root()->add<PerfUI::MainMenuWindow>();
-    g_mainMenuWindow->setVisible(false); // start with Quest Journal visible
+    g_mainMenuWindow->setVisible(false); // Press F10 to reveal Main Menu
 
     // Add third-party modder Custom HUD example (can be toggled via F8)
     g_customHud = g_uiContext->root()->add<PerfUI::Examples::CustomHealthBar>();
@@ -179,10 +180,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     g_mapDemo = g_uiContext->root()->add<PerfUI::Examples::MapDemoHud>();
     g_mapDemo->setVisible(false);
 
-    // Design System & Components showcase (toggled via F7)
+    // Design System & Components showcase (visible by default, toggled via F7)
     g_showcaseWindow = g_uiContext->root()->add<PerfUI::Examples::DesignSystemShowcase>();
     g_showcaseWindow->setBounds(PerfUI::Rect{ 80.0f, 40.0f, 1120.0f, 640.0f });
-    g_showcaseWindow->setVisible(false);
+    g_showcaseWindow->setVisible(true);
 
     g_mainMenuWindow->onContinueGame([]() {
         if (g_mainMenuWindow && g_journalWindow) {

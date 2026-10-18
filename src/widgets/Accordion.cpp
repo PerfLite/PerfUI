@@ -1,4 +1,5 @@
 #include "PerfUI/Accordion.h"
+#include "PerfUI/Panel.h"
 #include "PerfUI/Theme.h"
 #include <algorithm>
 
@@ -13,6 +14,8 @@ AccordionSection::AccordionSection(std::string title, std::unique_ptr<UIElement>
     m_animProgress.snapTo(expanded ? 1.0f : 0.0f);
     if (content) {
         setContent(std::move(content));
+    } else {
+        setContent(std::make_unique<Panel>());
     }
 }
 
