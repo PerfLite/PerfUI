@@ -206,14 +206,13 @@ void D3D11Hook::SetUIVisible(bool visible) {
         SkyrimQuestService::GetSingleton().RequestQuestRefresh();
     }
 
-    SKSE::GetTaskInterface()->AddTask([visible, this]() {
+    SKSE::GetTaskInterface()->AddTask([]() {
         auto* controlMap = RE::ControlMap::GetSingleton();
         if (controlMap) {
             using UEFlag = RE::UserEvents::USER_EVENT_FLAG;
-            // Оверлей не имеет права отключать игровое управление: игрок читает журнал и
-            // по-прежнему ходит, открывает карту и меню.
-            const bool controlsEnabled = !visible || m_overlayMode.load();
-            controlMap->ToggleControls(UEFlag::kAll, controlsEnabled);
+            // Никогда не выключаем kAll в ControlMap, иначе в движке ломаются прыжки и спринт.
+            // Модальная изоляция полностью обеспечивается возвратом kStop в InputHook::ProcessEvent.
+            controlMap->ToggleControls(UEFlag::kAll, true);
         }
     });
 
