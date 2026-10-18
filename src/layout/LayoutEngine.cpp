@@ -40,24 +40,94 @@ void LayoutEngine::Measure(UIElement* element, Dimensions availableSize) {
     float contentH = 0.0f;
     int visibleCount = 0;
 
-    for (const auto& child : element->children()) {
-        if (!child || !child->isVisible()) continue;
-        visibleCount++;
+    if (layout.direction() == LayoutDirection::Horizontal) {
+        float nonFlexW = 0.0f;
+        float totalFlex = 0.0f;
+        int visCount = 0;
 
-        child->measure(childAvail);
+        for (const auto& child : element->children()) {
+            if (!child || !child->isVisible()) continue;
+            visCount++;
+            float flex = child->layout().flexGrow();
+            if (flex <= 0.0f && child->layout().width().mode == SizeMode::Flex) {
+                flex = child->layout().width().value;
+            }
+            if (flex > 0.0f) {
+                totalFlex += flex;
+            } else {
+                child->measure(childAvail);
+                nonFlexW += child->desiredSize().width + child->layout().margin().horizontal();
+            }
+        }
 
-        const Dimensions& childDesired = child->desiredSize();
-        const Insets& margin = child->layout().margin();
-        float childTotalW = childDesired.width + margin.horizontal();
-        float childTotalH = childDesired.height + margin.vertical();
+        float totalGap = (visCount > 1) ? (layout.gap() * (visCount - 1)) : 0.0f;
+        float remainingW = (std::max)(0.0f, innerAvailW - nonFlexW - totalGap);
+        float flexPerUnit = (totalFlex > 0.0f) ? (remainingW / totalFlex) : 0.0f;
 
-        if (layout.direction() == LayoutDirection::Horizontal) {
+        for (const auto& child : element->children()) {
+            if (!child || !child->isVisible()) continue;
+            float flex = child->layout().flexGrow();
+            if (flex <= 0.0f && child->layout().width().mode == SizeMode::Flex) {
+                flex = child->layout().width().value;
+            }
+            if (flex > 0.0f) {
+                float childW = (std::max)(0.0f, (flex * flexPerUnit) - child->layout().margin().horizontal());
+                child->measure(Dimensions{ childW, innerAvailH });
+            }
+
+            const Dimensions& childDesired = child->desiredSize();
+            const Insets& margin = child->layout().margin();
+            float childTotalW = childDesired.width + margin.horizontal();
+            float childTotalH = childDesired.height + margin.vertical();
+
             contentW += childTotalW;
             contentH = (std::max)(contentH, childTotalH);
-        } else {
+        }
+        visibleCount = visCount;
+    } else {
+        float nonFlexH = 0.0f;
+        float totalFlex = 0.0f;
+        int visCount = 0;
+
+        for (const auto& child : element->children()) {
+            if (!child || !child->isVisible()) continue;
+            visCount++;
+            float flex = child->layout().flexGrow();
+            if (flex <= 0.0f && child->layout().height().mode == SizeMode::Flex) {
+                flex = child->layout().height().value;
+            }
+            if (flex > 0.0f) {
+                totalFlex += flex;
+            } else {
+                child->measure(childAvail);
+                nonFlexH += child->desiredSize().height + child->layout().margin().vertical();
+            }
+        }
+
+        float totalGap = (visCount > 1) ? (layout.gap() * (visCount - 1)) : 0.0f;
+        float remainingH = (std::max)(0.0f, innerAvailH - nonFlexH - totalGap);
+        float flexPerUnit = (totalFlex > 0.0f) ? (remainingH / totalFlex) : 0.0f;
+
+        for (const auto& child : element->children()) {
+            if (!child || !child->isVisible()) continue;
+            float flex = child->layout().flexGrow();
+            if (flex <= 0.0f && child->layout().height().mode == SizeMode::Flex) {
+                flex = child->layout().height().value;
+            }
+            if (flex > 0.0f) {
+                float childH = (std::max)(0.0f, (flex * flexPerUnit) - child->layout().margin().vertical());
+                child->measure(Dimensions{ innerAvailW, childH });
+            }
+
+            const Dimensions& childDesired = child->desiredSize();
+            const Insets& margin = child->layout().margin();
+            float childTotalW = childDesired.width + margin.horizontal();
+            float childTotalH = childDesired.height + margin.vertical();
+
             contentW = (std::max)(contentW, childTotalW);
             contentH += childTotalH;
         }
+        visibleCount = visCount;
     }
 
     if (visibleCount > 1) {
@@ -278,9 +348,10 @@ void LayoutEngine::ArrangeVertical(UIElement* element, const Rect& contentRect) 
         } else {
             childH = child->desiredSize().height;
         }
-        childH = (std::clamp)(childH, child->layout().minHeight(), child->layout().maxHeight());
-        float maxAvailableChildH = (std::max)(0.0f, (contentRect.y + contentRect.height) - (currentY + margin.top) - margin.bottom);
-        childH = (std::min)(childH, maxAvailableChildH);
+        if (flex > 0.0f) {
+            float maxAvailableChildH = (std::max)(0.0f, (contentRect.y + contentRect.height) - (currentY + margin.top) - margin.bottom);
+            childH = (std::min)(childH, maxAvailableChildH);
+        }
 
         Alignment align = element->layout().alignment();
         if (child->layout().alignment() != Alignment::Stretch) {

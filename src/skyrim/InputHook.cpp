@@ -31,12 +31,23 @@ bool InputHook::Install(HWND hWnd) {
 }
 
 void InputHook::EnsureInputSink() {
-    if (m_sinkRegistered.load()) return;
     auto* inputManager = RE::BSInputDeviceManager::GetSingleton();
-    if (inputManager) {
+    if (!inputManager) return;
+
+    if (!m_sinkRegistered.load()) {
         inputManager->AddEventSink(this);
         m_sinkRegistered.store(true);
         SKSE::log::info("InputHook: Registered BSInputDeviceManager event sink");
+    }
+
+    // Promote to the very front of the sink array so InputHook intercepts events
+    // BEFORE PlayerControls / LookHandler / MovementHandler
+    RE::BSSpinLockGuard locker(inputManager->lock);
+    auto it = std::find(inputManager->sinks.begin(), inputManager->sinks.end(),
+                        static_cast<RE::BSTEventSink<RE::InputEvent*>*>(this));
+    if (it != inputManager->sinks.end() && it != inputManager->sinks.begin()) {
+        std::rotate(inputManager->sinks.begin(), it, it + 1);
+        SKSE::log::info("InputHook: Promoted to front of input sink list (index 0)");
     }
 }
 
@@ -317,8 +328,13 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
     }
 
     if (m_captureKeyboard.load()) {
-        // Modal: consume input completely so vanilla Skyrim never processes ghost clicks or
-        // resets the cursor.
+        // Modal: clear user events across the linked list so even if any downstream sink
+        // accidentally receives the event, no gameplay action triggers in the world.
+        for (auto* event = *a_event; event; event = event->next) {
+            if (auto* idEvent = event->AsIDEvent()) {
+                idEvent->userEvent = RE::BSFixedString{};
+            }
+        }
         return RE::BSEventNotifyControl::kStop;
     }
 

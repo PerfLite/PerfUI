@@ -205,13 +205,35 @@ void D3D11Hook::SetUIVisible(bool visible) {
         SkyrimQuestService::GetSingleton().RequestQuestRefresh();
     }
 
-    SKSE::GetTaskInterface()->AddTask([]() {
+    SKSE::GetTaskInterface()->AddTask([visible, modal = !m_overlayMode.load()]() {
         auto* controlMap = RE::ControlMap::GetSingleton();
         if (controlMap) {
             using UEFlag = RE::UserEvents::USER_EVENT_FLAG;
-            // Never disable kAll in ControlMap, otherwise engine jump and sprint controls break.
-            // Modal input isolation is handled cleanly via returning kStop in InputHook::ProcessEvent.
-            controlMap->ToggleControls(UEFlag::kAll, true);
+            using UType = std::underlying_type_t<UEFlag>;
+            if (visible && modal) {
+                // Disable gameplay controls so the game world does not react while modal UI is open
+                const auto rawFlags = static_cast<UType>(UEFlag::kMovement) |
+                                      static_cast<UType>(UEFlag::kLooking) |
+                                      static_cast<UType>(UEFlag::kActivate) |
+                                      static_cast<UType>(UEFlag::kFighting) |
+                                      static_cast<UType>(UEFlag::kPOVSwitch) |
+                                      static_cast<UType>(UEFlag::kSneaking) |
+                                      static_cast<UType>(UEFlag::kJumping) |
+                                      static_cast<UType>(UEFlag::kMainFour) |
+                                      static_cast<UType>(UEFlag::kWheelZoom);
+                controlMap->ToggleControls(static_cast<UEFlag>(rawFlags), false);
+            } else {
+                // Restore gameplay controls when modal UI closes or in overlay mode
+                controlMap->ToggleControls(UEFlag::kAll, true);
+            }
+        }
+
+        auto* ui = RE::UI::GetSingleton();
+        if (ui) {
+            auto hud = ui->GetMenu<RE::HUDMenu>(RE::HUDMenu::MENU_NAME);
+            if (hud && hud->uiMovie) {
+                hud->uiMovie->SetVisible(!(visible && modal));
+            }
         }
     });
 
