@@ -78,6 +78,11 @@ add_library(PerfUI_Core STATIC
     src/widgets/Accordion.cpp
     src/widgets/SearchableList.cpp
     src/widgets/TextArea.cpp
+    src/widgets/SegmentedControl.cpp
+    src/widgets/CategoryList.cpp
+    src/widgets/QuestTracker.cpp
+    src/widgets/Notification.cpp
+    src/widgets/Sidebar.cpp
     src/widgets/ScrollView.cpp
     src/widgets/Checkbox.cpp
     src/widgets/ProgressBar.cpp

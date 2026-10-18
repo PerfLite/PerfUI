@@ -155,6 +155,81 @@ auto* textLog = panel->add<PerfUI::TextArea>("Initial log line...\nNext line..."
 textLog->append("\nOperation succeeded.");
 ```
 
+### 12. `SegmentedControl`
+Horizontal pill segmented control with smoothly animated sliding thumb indicator:
+- Physical sliding animation (`AnimatedFloat`).
+- Segment dividers between inactive items.
+- Values and labels support with `onSelectionChanged(index, text)` callback.
+```cpp
+auto* filter = panel->add<PerfUI::SegmentedControl>();
+filter->addSegment("All", "all")
+      .addSegment("Weapons", "wpn")
+      .addSegment("Armor", "arm")
+      .addSegment("Potions", "pot");
+filter->onSelectionChanged([](size_t index, const std::string& label) {
+    FilterInventory(label);
+});
+```
+
+### 13. `CategoryList`
+Vertical category selector designed for MCM (Mod Configuration Menus) and navigation menus:
+- Active left accent indicator bar (`borderFocus`).
+- Support for badges (e.g. "NEW", "3") and icons.
+- Callback `onCategoryChanged(id)`.
+```cpp
+auto* catList = panel->add<PerfUI::CategoryList>();
+catList->addCategory("general", "General Settings")
+       .addCategory("graphics", "Graphics", "", "NEW")
+       .addCategory("audio", "Audio");
+catList->onCategoryChanged([](const std::string& catId) {
+    LoadSettingsPage(catId);
+});
+```
+
+### 14. `QuestTracker`
+In-game Skyrim quest objective HUD tracker and journal component:
+- Quest title with Skyrim-style diamond quest marker.
+- Objectives list with progress counters `(current/max)`, checkmarks, and `(Optional)` flags.
+- Interactive clicks with `onObjectiveClicked(idx)`.
+```cpp
+auto* tracker = hud->add<PerfUI::QuestTracker>();
+tracker->setQuestTitle("The Way of the Voice")
+       .setQuestCategory("Main Quest")
+       .addObjective("Speak to the Greybeards")
+       .addObjective("Demonstrate Unrelenting Force", false, 0, 3)
+       .addObjective("Listen to Arngeir", false, 0, 0, true);
+```
+
+### 15. `Notification`
+Rich notification banner with progress timer and interactive action:
+- Notification levels: `NotificationLevel::Info`, `Success`, `Warning`, `Error`.
+- Accent color coding and remaining time progress bar.
+- Close button `[X]` and customizable action button.
+```cpp
+auto* notif = panel->add<PerfUI::Notification>();
+notif->setTitle("Level Up!")
+     .setMessage("Destruction skill reached level 20.")
+     .setLevel(PerfUI::NotificationLevel::Success)
+     .setAction("View Perks", [] { OpenPerkTree(); })
+     .setDuration(5.0f);
+```
+
+### 16. `Sidebar`
+Collapsible side navigation drawer:
+- Animated width transitions between compact (icons-only) and expanded states.
+- Header with toggle button (`<<` / `>>`), navigation items with badge counters.
+- Full integration with active theme styling.
+```cpp
+auto* sidebar = panel->add<PerfUI::Sidebar>();
+sidebar->setTitle("Skyrim UI")
+       .addItem("dashboard", "Dashboard")
+       .addItem("inventory", "Inventory", "", "12")
+       .addItem("spells", "Spells");
+sidebar->onItemSelected([](const std::string& id) {
+    SwitchView(id);
+});
+```
+
 ---
 
 ## 📝 XML Markup Support

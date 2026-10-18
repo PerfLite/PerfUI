@@ -308,6 +308,140 @@ void TestNewComponents() {
     backend.endFrame();
     TEST_ASSERT(backend.drawCallCount() >= 4, "TextArea renders background and lines");
 
+    // 12. SegmentedControl
+    SegmentedControl segCtrl("FilterControl");
+    segCtrl.addSegment("All", "all").addSegment("Weapons", "wpn").addSegment("Armor", "arm");
+    TEST_ASSERT(segCtrl.segmentCount() == 3, "SegmentedControl has 3 segments");
+    TEST_ASSERT(segCtrl.selectedIndex() == 0, "Default selected index is 0");
+    TEST_ASSERT(segCtrl.selectedText() == "All", "Default selected text is 'All'");
+    TEST_ASSERT(segCtrl.selectedValue() == "all", "Default selected value is 'all'");
+
+    size_t segChangedIdx = 999;
+    std::string segChangedText;
+    segCtrl.onSelectionChanged([&](size_t idx, const std::string& text) {
+        segChangedIdx = idx;
+        segChangedText = text;
+    });
+
+    segCtrl.setSelectedIndex(1);
+    TEST_ASSERT(segCtrl.selectedIndex() == 1, "Selected index is 1");
+    TEST_ASSERT(segCtrl.selectedText() == "Weapons", "Selected text is 'Weapons'");
+    TEST_ASSERT(segChangedIdx == 1, "onSelectionChanged fired with index 1");
+    TEST_ASSERT(segChangedText == "Weapons", "onSelectionChanged fired with 'Weapons'");
+
+    segCtrl.measure(Dimensions{ 300.0f, 32.0f });
+    segCtrl.arrange(Rect{ 0.0f, 0.0f, 300.0f, 32.0f });
+    backend.beginFrame();
+    segCtrl.render(backend);
+    backend.endFrame();
+    TEST_ASSERT(backend.drawCallCount() >= 4, "SegmentedControl renders track, thumb, and labels");
+
+    // 13. CategoryList
+    CategoryList catList("MCMCategories");
+    catList.addCategory("general", "General Settings")
+           .addCategory("graphics", "Graphics", "", "NEW")
+           .addCategory("audio", "Audio");
+    TEST_ASSERT(catList.count() == 3, "CategoryList has 3 items");
+    TEST_ASSERT(catList.selectedId() == "general", "Initial selected id is 'general'");
+
+    std::string catSelected;
+    catList.onCategoryChanged([&](const std::string& id) {
+        catSelected = id;
+    });
+
+    catList.selectCategory("graphics");
+    TEST_ASSERT(catList.selectedId() == "graphics", "Selected id changed to 'graphics'");
+    TEST_ASSERT(catSelected == "graphics", "onCategoryChanged fired with 'graphics'");
+
+    catList.measure(Dimensions{ 200.0f, 400.0f });
+    catList.arrange(Rect{ 0.0f, 0.0f, 200.0f, 150.0f });
+    backend.beginFrame();
+    catList.render(backend);
+    backend.endFrame();
+    TEST_ASSERT(backend.drawCallCount() >= 3, "CategoryList renders items and badge");
+
+    // 14. QuestTracker
+    QuestTracker quest("MainQuestHUD");
+    quest.setQuestTitle("The Way of the Voice")
+         .setQuestCategory("Main Quest")
+         .addObjective("Speak to the Greybeards", false)
+         .addObjective("Demonstrate Unrelenting Force", false, 0, 3)
+         .addObjective("Listen to Arngeir (Optional)", false, 0, 0, true);
+
+    TEST_ASSERT(quest.questTitle() == "The Way of the Voice", "Quest title matches");
+    TEST_ASSERT(quest.questCategory() == "Main Quest", "Quest category matches");
+    TEST_ASSERT(quest.objectiveCount() == 3, "Quest has 3 objectives");
+    TEST_ASSERT(!quest.isAllCompleted(), "Quest is not yet completed");
+
+    quest.setObjectiveCompleted(0, true);
+    quest.setObjectiveProgress(1, 3, 3); // 3 of 3 completes obj 1
+    // obj 2 is optional, so quest should now be considered all completed!
+    TEST_ASSERT(quest.isAllCompleted() == true, "Quest all non-optional objectives completed");
+
+    quest.measure(Dimensions{ 300.0f, 200.0f });
+    quest.arrange(Rect{ 10.0f, 10.0f, 300.0f, 150.0f });
+    backend.beginFrame();
+    quest.render(backend);
+    backend.endFrame();
+    TEST_ASSERT(backend.drawCallCount() >= 4, "QuestTracker renders header, diamond, and objectives");
+
+    // 15. Notification
+    Notification notif("LevelUpNotification");
+    notif.setTitle("Level Up!")
+         .setMessage("You have reached Level 25")
+         .setLevel(NotificationLevel::Success)
+         .setDuration(0.0f) // persistent
+         .setClosable(true);
+
+    bool notifClosed = false;
+    notif.onClose([&]() { notifClosed = true; });
+
+    bool actionInvoked = false;
+    notif.setAction("Open Skills", [&]() { actionInvoked = true; });
+
+    TEST_ASSERT(notif.title() == "Level Up!", "Notification title matches");
+    TEST_ASSERT(notif.level() == NotificationLevel::Success, "Notification level matches");
+    TEST_ASSERT(!notif.isDismissed(), "Notification is not dismissed");
+
+    notif.measure(Dimensions{ 320.0f, 100.0f });
+    notif.arrange(Rect{ 0.0f, 0.0f, 320.0f, 80.0f });
+    backend.beginFrame();
+    notif.render(backend);
+    backend.endFrame();
+    TEST_ASSERT(backend.drawCallCount() >= 4, "Notification renders frame, badge, text, and action button");
+
+    notif.dismiss();
+    TEST_ASSERT(notif.isDismissed() == true, "Notification is dismissed");
+    TEST_ASSERT(notifClosed == true, "Notification onClose fired");
+
+    // 16. Sidebar
+    Sidebar sidebar("ModSidebar");
+    sidebar.setTitle("Skyrim UI")
+           .addItem("home", "Overview")
+           .addItem("mods", "Mods", "", "5")
+           .addItem("settings", "Preferences");
+
+    TEST_ASSERT(sidebar.title() == "Skyrim UI", "Sidebar title matches");
+    TEST_ASSERT(sidebar.count() == 3, "Sidebar count is 3");
+    TEST_ASSERT(sidebar.selectedId() == "home", "Default selected item is 'home'");
+    TEST_ASSERT(!sidebar.isCollapsed(), "Sidebar is not collapsed");
+
+    sidebar.setCollapsed(true);
+    TEST_ASSERT(sidebar.isCollapsed() == true, "Sidebar is collapsed");
+
+    sidebar.toggleCollapsed();
+    TEST_ASSERT(sidebar.isCollapsed() == false, "Sidebar is uncollapsed via toggle");
+
+    sidebar.selectItem("mods");
+    TEST_ASSERT(sidebar.selectedId() == "mods", "Selected item is 'mods'");
+
+    sidebar.measure(Dimensions{ 220.0f, 600.0f });
+    sidebar.arrange(Rect{ 0.0f, 0.0f, 220.0f, 600.0f });
+    backend.beginFrame();
+    sidebar.render(backend);
+    backend.endFrame();
+    TEST_ASSERT(backend.drawCallCount() >= 4, "Sidebar renders background, title, toggle, and items");
+
     std::cout << "  -> Passed TestNewComponents" << std::endl;
 }
 
@@ -332,6 +466,11 @@ void TestMarkupIntegration() {
             </Accordion>
             <SearchableList name="SpellsList" placeholder="Filter..." />
             <TextArea name="ConsoleLog" text="Hello Skyrim" />
+            <SegmentedControl name="FilterTabs" selected="1" />
+            <CategoryList name="McmCats" item-height="38" />
+            <QuestTracker name="HudTracker" title="Dragon Rising" category="Main Quest" />
+            <Notification name="Alert" title="Notice" message="Mod initialized" level="success" />
+            <Sidebar name="Nav" title="Menu" collapsed="false" />
         </Panel>
     )";
 
@@ -355,6 +494,11 @@ void TestMarkupIntegration() {
     Accordion* accordion = nullptr;
     SearchableList* searchableList = nullptr;
     TextArea* textArea = nullptr;
+    SegmentedControl* segmentedControl = nullptr;
+    CategoryList* categoryList = nullptr;
+    QuestTracker* questTracker = nullptr;
+    Notification* notification = nullptr;
+    Sidebar* sidebar = nullptr;
 
     for (const auto& child : panel->children()) {
         if (child->name() == "HeaderLabel") label = dynamic_cast<Label*>(child.get());
@@ -367,6 +511,11 @@ void TestMarkupIntegration() {
         if (child->name() == "MenuAccordion") accordion = dynamic_cast<Accordion*>(child.get());
         if (child->name() == "SpellsList") searchableList = dynamic_cast<SearchableList*>(child.get());
         if (child->name() == "ConsoleLog") textArea = dynamic_cast<TextArea*>(child.get());
+        if (child->name() == "FilterTabs") segmentedControl = dynamic_cast<SegmentedControl*>(child.get());
+        if (child->name() == "McmCats") categoryList = dynamic_cast<CategoryList*>(child.get());
+        if (child->name() == "HudTracker") questTracker = dynamic_cast<QuestTracker*>(child.get());
+        if (child->name() == "Alert") notification = dynamic_cast<Notification*>(child.get());
+        if (child->name() == "Nav") sidebar = dynamic_cast<Sidebar*>(child.get());
     }
 
     TEST_ASSERT(label != nullptr, "Label parsed");
@@ -401,6 +550,22 @@ void TestMarkupIntegration() {
     TEST_ASSERT(searchableList != nullptr, "SearchableList parsed from XML");
     TEST_ASSERT(textArea != nullptr, "TextArea parsed from XML");
     TEST_ASSERT(textArea->text() == "Hello Skyrim", "TextArea text parsed");
+
+    TEST_ASSERT(segmentedControl != nullptr, "SegmentedControl parsed from XML");
+    TEST_ASSERT(categoryList != nullptr, "CategoryList parsed from XML");
+    TEST_ASSERT(categoryList->itemHeight() == 38.0f, "CategoryList item-height is 38");
+
+    TEST_ASSERT(questTracker != nullptr, "QuestTracker parsed from XML");
+    TEST_ASSERT(questTracker->questTitle() == "Dragon Rising", "QuestTracker title is Dragon Rising");
+    TEST_ASSERT(questTracker->questCategory() == "Main Quest", "QuestTracker category is Main Quest");
+
+    TEST_ASSERT(notification != nullptr, "Notification parsed from XML");
+    TEST_ASSERT(notification->title() == "Notice", "Notification title is Notice");
+    TEST_ASSERT(notification->level() == NotificationLevel::Success, "Notification level is Success");
+
+    TEST_ASSERT(sidebar != nullptr, "Sidebar parsed from XML");
+    TEST_ASSERT(sidebar->title() == "Menu", "Sidebar title is Menu");
+    TEST_ASSERT(sidebar->isCollapsed() == false, "Sidebar collapsed is false");
 
     std::cout << "  -> Passed TestMarkupIntegration" << std::endl;
 }

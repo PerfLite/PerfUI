@@ -213,6 +213,81 @@ auto* textLog = panel->add<PerfUI::TextArea>("Первая строка лога
 textLog->append("\nСобытие выполнено успешно.");
 ```
 
+### 12. `SegmentedControl`
+Горизонтальный сегментированный переключатель (pill selector) с плавно скользящим индикатором выбора:
+- Анимированный бегунок активного сегмента (`AnimatedFloat`).
+- Разделительные линии между неактивными элементами.
+- Поддержка значений и подписей, callback `onSelectionChanged(index, text)`.
+```cpp
+auto* filter = panel->add<PerfUI::SegmentedControl>();
+filter->addSegment("Все", "all")
+      .addSegment("Оружие", "wpn")
+      .addSegment("Броня", "arm")
+      .addSegment("Зелья", "pot");
+filter->onSelectionChanged([](size_t index, const std::string& label) {
+    FilterInventory(label);
+});
+```
+
+### 13. `CategoryList`
+Список категорий для меню настроек модов (MCM) и навигационных панелей:
+- Активный левый индикатор темы оформления (`borderFocus`).
+- Поддержка бейджей (например, "NEW", "3") и иконок.
+- Callback `onCategoryChanged(id)`.
+```cpp
+auto* catList = panel->add<PerfUI::CategoryList>();
+catList->addCategory("general", "Общие настройки")
+       .addCategory("graphics", "Графика", "", "NEW")
+       .addCategory("audio", "Звук");
+catList->onCategoryChanged([](const std::string& catId) {
+    LoadSettingsPage(catId);
+});
+```
+
+### 14. `QuestTracker`
+Игровой компонент отслеживания заданий для HUD и журналов Skyrim:
+- Заголовок квеста с аутентичным скайримским ромбовидным маркером.
+- Список целей с маркерами прогресса `(current/max)`, отметками выполнения и опциональными метками `(Optional)`.
+- Интерактивный клик по целям с `onObjectiveClicked(idx)`.
+```cpp
+auto* tracker = hud->add<PerfUI::QuestTracker>();
+tracker->setQuestTitle("Путь Голоса")
+       .setQuestCategory("Основной сюжет")
+       .addObjective("Поговорить с Седобородыми")
+       .addObjective("Продемонстрировать Безжалостную силу", false, 0, 3)
+       .addObjective("Выслушать Арнгейра", false, 0, 0, true);
+```
+
+### 15. `Notification`
+Всплывающий баннер уведомления с индикатором таймера и кнопкой действия:
+- Уровни важности: `NotificationLevel::Info`, `Success`, `Warning`, `Error`.
+- Цветовая индикация темы, прогресс-бар оставшегося времени.
+- Кнопка закрытия `[X]` и настраиваемая кнопка действия (например, "Открыть меню").
+```cpp
+auto* notif = panel->add<PerfUI::Notification>();
+notif->setTitle("Новый уровень!")
+     .setMessage("Достигнут 20 уровень навыка Разрушение.")
+     .setLevel(PerfUI::NotificationLevel::Success)
+     .setAction("Способности", [] { OpenPerkTree(); })
+     .setDuration(5.0f);
+```
+
+### 16. `Sidebar`
+Сворачиваемая боковая навигационная панель:
+- Анимированное плавное переключение между компактным (только иконки) и развернутым режимом.
+- Шапка с кнопкой сворачивания (`<<` / `>>`), список навигационных разделов с бейджами.
+- Интеграция с темой и каскадом стилей.
+```cpp
+auto* sidebar = panel->add<PerfUI::Sidebar>();
+sidebar->setTitle("Skyrim UI")
+       .addItem("dashboard", "Обзор")
+       .addItem("inventory", "Инвентарь", "", "12")
+       .addItem("spells", "Заклинания");
+sidebar->onItemSelected([](const std::string& id) {
+    SwitchView(id);
+});
+```
+
 ---
 
 ## 🎬 Анимации и Easing (`Animation.h`)

@@ -23,6 +23,11 @@
 #include "PerfUI/Accordion.h"
 #include "PerfUI/SearchableList.h"
 #include "PerfUI/TextArea.h"
+#include "PerfUI/SegmentedControl.h"
+#include "PerfUI/CategoryList.h"
+#include "PerfUI/QuestTracker.h"
+#include "PerfUI/Notification.h"
+#include "PerfUI/Sidebar.h"
 
 #include <sstream>
 
@@ -706,6 +711,122 @@ void WidgetRegistry::registerBuiltinWidgets() {
             return parent->addChild(std::move(ta));
         }
         return ta.release();
+    });
+
+    // 25. SegmentedControl
+    registerWidget("SegmentedControl", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "SegmentedControl";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        auto sc = std::make_unique<SegmentedControl>(std::move(name));
+
+        auto itSel = attrs.find("selected");
+        if (itSel != attrs.end()) {
+            sc->setSelectedIndex(static_cast<size_t>(parseNumberOrToken(itSel->second, 0.0f)));
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(sc));
+        }
+        return sc.release();
+    });
+
+    // 26. CategoryList
+    registerWidget("CategoryList", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "CategoryList";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        auto cl = std::make_unique<CategoryList>(std::move(name));
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "item-height" || k == "itemHeight") {
+                cl->itemHeight(parseNumberOrToken(v, 36.0f));
+            }
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(cl));
+        }
+        return cl.release();
+    });
+
+    // 27. QuestTracker
+    registerWidget("QuestTracker", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "QuestTracker";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        auto qt = std::make_unique<QuestTracker>(std::move(name));
+
+        auto itTitle = attrs.find("title");
+        if (itTitle != attrs.end()) qt->setQuestTitle(itTitle->second);
+
+        auto itCat = attrs.find("category");
+        if (itCat != attrs.end()) qt->setQuestCategory(itCat->second);
+
+        if (parent) {
+            return parent->addChild(std::move(qt));
+        }
+        return qt.release();
+    });
+
+    // 28. Notification
+    registerWidget("Notification", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "Notification";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        auto notif = std::make_unique<Notification>(std::move(name));
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "title") {
+                notif->setTitle(v);
+            } else if (k == "message") {
+                notif->setMessage(v);
+            } else if (k == "level") {
+                if (v == "success") notif->setLevel(NotificationLevel::Success);
+                else if (v == "warning") notif->setLevel(NotificationLevel::Warning);
+                else if (v == "error") notif->setLevel(NotificationLevel::Error);
+                else notif->setLevel(NotificationLevel::Info);
+            } else if (k == "duration") {
+                notif->setDuration(parseNumberOrToken(v, 4.0f));
+            } else if (k == "closable") {
+                notif->setClosable(parseBool(v, true));
+            }
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(notif));
+        }
+        return notif.release();
+    });
+
+    // 29. Sidebar
+    registerWidget("Sidebar", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "Sidebar";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        auto sb = std::make_unique<Sidebar>(std::move(name));
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "title") {
+                sb->setTitle(v);
+            } else if (k == "collapsed") {
+                sb->setCollapsed(parseBool(v, false));
+            } else if (k == "expanded-width" || k == "expandedWidth") {
+                sb->expandedWidth(parseNumberOrToken(v, 220.0f));
+            } else if (k == "collapsed-width" || k == "collapsedWidth") {
+                sb->collapsedWidth(parseNumberOrToken(v, 52.0f));
+            }
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(sb));
+        }
+        return sb.release();
     });
 
     m_builtinsRegistered = true;
