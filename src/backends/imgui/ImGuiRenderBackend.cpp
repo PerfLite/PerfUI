@@ -129,6 +129,7 @@ void ImGuiRenderBackend::initFonts() {
 
     const char* regularPath = "C:\\Windows\\Fonts\\segoeui.ttf";
     const char* boldPath = "C:\\Windows\\Fonts\\segoeuib.ttf";
+    const char* symbolPath = "C:\\Windows\\Fonts\\seguisym.ttf";
 
     // Fallback to Arial if Segoe UI is not present
     if (!std::filesystem::exists(regularPath)) {
@@ -144,12 +145,34 @@ void ImGuiRenderBackend::initFonts() {
 
         const ImWchar* glyphRanges = io.Fonts->GetGlyphRangesCyrillic();
 
-        m_fontSmall   = io.Fonts->AddFontFromFileTTF(regularPath, 13.0f, &cfg, glyphRanges);
-        m_fontRegular = io.Fonts->AddFontFromFileTTF(regularPath, 16.0f, &cfg, glyphRanges);
-        m_fontMedium  = io.Fonts->AddFontFromFileTTF(regularPath, 19.0f, &cfg, glyphRanges);
-        m_fontBold    = io.Fonts->AddFontFromFileTTF(boldPath,    17.0f, &cfg, glyphRanges);
-        m_fontTitle   = io.Fonts->AddFontFromFileTTF(boldPath,    22.0f, &cfg, glyphRanges);
-        m_fontHeader  = io.Fonts->AddFontFromFileTTF(boldPath,    28.0f, &cfg, glyphRanges);
+        const bool hasSymbols = std::filesystem::exists(symbolPath);
+        static const ImWchar symbolRanges[] = {
+            0x2000, 0x206F, // General Punctuation (bullets, dashes, quotes)
+            0x25A0, 0x25FF, // Geometric Shapes (◆ U+25C6, ◇ U+25C7, etc.)
+            0x2600, 0x26FF, // Miscellaneous Symbols
+            0x2700, 0x27BF, // Dingbats (✕ U+2715, etc.)
+            0
+        };
+
+        auto loadWithSymbols = [&](const char* path, float size) -> ImFont* {
+            ImFont* font = io.Fonts->AddFontFromFileTTF(path, size, &cfg, glyphRanges);
+            if (hasSymbols) {
+                ImFontConfig symCfg;
+                symCfg.MergeMode = true;
+                symCfg.OversampleH = 2;
+                symCfg.OversampleV = 2;
+                symCfg.PixelSnapH = true;
+                io.Fonts->AddFontFromFileTTF(symbolPath, size, &symCfg, symbolRanges);
+            }
+            return font;
+        };
+
+        m_fontSmall   = loadWithSymbols(regularPath, 13.0f);
+        m_fontRegular = loadWithSymbols(regularPath, 16.0f);
+        m_fontMedium  = loadWithSymbols(regularPath, 19.0f);
+        m_fontBold    = loadWithSymbols(boldPath,    17.0f);
+        m_fontTitle   = loadWithSymbols(boldPath,    22.0f);
+        m_fontHeader  = loadWithSymbols(boldPath,    28.0f);
     }
 
     if (!m_fontRegular) {
