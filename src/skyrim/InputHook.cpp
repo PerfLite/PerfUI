@@ -112,15 +112,8 @@ void InputHook::SetCaptureInput(bool capture) {
                         "MagicMenu",
                         "ContainerMenu",
                         "BarterMenu",
-                        "FavoritesMenu",
-                        "TweenMenu",
-                        "Lockpicking Menu",
                         "LevelUp Menu",
-                        "StatsMenu",
                         "Crafting Menu",
-                        "Console",
-                        "Dialogue Menu",
-                        "CustomMenu",
                         "MessageBoxMenu",
                         "Quantity Menu",
                         "Sleep/Wait Menu",
@@ -129,8 +122,7 @@ void InputHook::SetCaptureInput(bool capture) {
                         "Tutorial Menu",
                         "Book Menu",
                         "RaceSex Menu",
-                        "Mod Manager Menu",
-                        "Credits Menu"
+                        "Mod Manager Menu"
                     };
                     for (const auto& name : cursorMenus) {
                         if (ui->IsMenuOpen(name)) {

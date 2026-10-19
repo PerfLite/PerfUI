@@ -15,11 +15,6 @@ bool IsVanillaCursorActive() {
     auto* ui = RE::UI::GetSingleton();
     if (!ui) return false;
 
-    auto* mc = RE::MenuCursor::GetSingleton();
-    if (mc && mc->showCursorCount > 0) {
-        return true;
-    }
-
     static constexpr std::string_view cursorMenus[] = {
         "Main Menu",
         "MapMenu",
@@ -28,15 +23,8 @@ bool IsVanillaCursorActive() {
         "MagicMenu",
         "ContainerMenu",
         "BarterMenu",
-        "FavoritesMenu",
-        "TweenMenu",
-        "Lockpicking Menu",
         "LevelUp Menu",
-        "StatsMenu",
         "Crafting Menu",
-        "Console",
-        "Dialogue Menu",
-        "CustomMenu",
         "MessageBoxMenu",
         "Quantity Menu",
         "Sleep/Wait Menu",
@@ -45,8 +33,7 @@ bool IsVanillaCursorActive() {
         "Tutorial Menu",
         "Book Menu",
         "RaceSex Menu",
-        "Mod Manager Menu",
-        "Credits Menu"
+        "Mod Manager Menu"
     };
 
     for (const auto& name : cursorMenus) {
@@ -635,6 +622,16 @@ void D3D11Hook::RenderFrame() {
     bool hasPendingTasks = m_uiContext && m_uiContext->hasPendingTasks();
     bool vanillaCursor = IsVanillaCursorActive();
     bool shouldShowCursor = anyTreeVisible || vanillaCursor;
+
+    if (!shouldShowCursor) {
+        auto* mc = RE::MenuCursor::GetSingleton();
+        if (mc && mc->showCursorCount > 0) {
+            while (mc->showCursorCount > 0) {
+                mc->SetCursorVisibility(false);
+            }
+        }
+    }
+
     if (!m_imguiInitialized.load() || (!shouldShowCursor && !hasOverlays && !hasPendingTasks) || !m_imguiContext) return;
 
     ImGuiContext* prevContext = ImGui::GetCurrentContext();
