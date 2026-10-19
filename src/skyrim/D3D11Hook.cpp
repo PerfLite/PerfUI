@@ -617,11 +617,10 @@ void D3D11Hook::RenderFrame() {
     bool hasRootWindows = HasVisibleRootWindows();
     bool anyTreeVisible = uiVis || hasRootWindows;
     bool hasOverlays = m_uiContext && m_uiContext->hasVisibleOverlays();
-    // Tasks queued via UIContext::runOnUIThread are drained inside update(), so a frame
-    // with pending tasks must render even when nothing is visible - otherwise the queue stalls.
     bool hasPendingTasks = m_uiContext && m_uiContext->hasPendingTasks();
     bool vanillaCursor = IsVanillaCursorActive();
-    bool shouldShowCursor = anyTreeVisible || vanillaCursor;
+    bool isCapturingInput = InputHook::GetSingleton().IsCaptureInput();
+    bool shouldShowCursor = isCapturingInput || vanillaCursor;
 
     if (!shouldShowCursor) {
         auto* mc = RE::MenuCursor::GetSingleton();
@@ -632,7 +631,7 @@ void D3D11Hook::RenderFrame() {
         }
     }
 
-    if (!m_imguiInitialized.load() || (!shouldShowCursor && !hasOverlays && !hasPendingTasks) || !m_imguiContext) return;
+    if (!m_imguiInitialized.load() || (!anyTreeVisible && !vanillaCursor && !hasOverlays && !hasPendingTasks) || !m_imguiContext) return;
 
     ImGuiContext* prevContext = ImGui::GetCurrentContext();
     ImGui::SetCurrentContext(m_imguiContext);
@@ -747,7 +746,7 @@ void D3D11Hook::RenderFrame() {
         ImVec2 swordPos(0.0f, 0.0f);
         bool hasSwordPos = false;
         auto* mc = RE::MenuCursor::GetSingleton();
-        if (anyTreeVisible) {
+        if (isCapturingInput) {
             POINT pt;
             if (::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
                 swordPos = ImVec2(static_cast<float>(pt.x), static_cast<float>(pt.y));
@@ -809,7 +808,8 @@ HRESULT STDMETHODCALLTYPE D3D11Hook::Hooked_Present(
     bool anyTreeVisible = hook.m_uiVisible.load() || hook.HasVisibleRootWindows();
     bool hasOverlays = hook.m_uiContext && hook.m_uiContext->hasVisibleOverlays();
     bool hasPendingTasks = hook.m_uiContext && hook.m_uiContext->hasPendingTasks();
-    if (anyTreeVisible || hasOverlays || hasPendingTasks) {
+    bool vanillaCursor = IsVanillaCursorActive();
+    if (anyTreeVisible || hasOverlays || hasPendingTasks || vanillaCursor) {
         hook.RenderFrame();
     }
 
