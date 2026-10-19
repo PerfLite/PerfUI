@@ -26,6 +26,7 @@ public:
     // Called by the client prior to SetUIVisible.
     void SetOverlayMode(bool overlay) { m_overlayMode.store(overlay); }
     bool HasVisibleRootWindows() const;
+    bool IsCursorNeeded() const;
 
     void EnsureUIContext();
     UIContext* GetContext() {

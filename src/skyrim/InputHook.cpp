@@ -10,6 +10,49 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 namespace PerfUI::Skyrim {
 
+namespace {
+
+using ProcessMessage_t = RE::UI_MESSAGE_RESULTS(RE::CursorMenu*, RE::UIMessage&);
+static REL::Relocation<ProcessMessage_t> s_originalCursorProcessMessage;
+
+using AdvanceMovie_t = void(RE::CursorMenu*, float, std::uint32_t);
+static REL::Relocation<AdvanceMovie_t> s_originalCursorAdvanceMovie;
+
+static RE::UI_MESSAGE_RESULTS Hooked_CursorMenu_ProcessMessage(RE::CursorMenu* a_this, RE::UIMessage& a_message) {
+    if (a_message.type == RE::UI_MESSAGE_TYPE::kHide) {
+        if (InputHook::GetSingleton().IsCaptureInput() || D3D11Hook::GetSingleton().HasVisibleRootWindows()) {
+            return RE::UI_MESSAGE_RESULTS::kIgnore;
+        }
+    }
+    return s_originalCursorProcessMessage(a_this, a_message);
+}
+
+static void Hooked_CursorMenu_AdvanceMovie(RE::CursorMenu* a_this, float a_interval, std::uint32_t a_currentTime) {
+    if (a_this && a_this->uiMovie) {
+        bool shouldSuppressVanillaCursor = D3D11Hook::GetSingleton().IsCursorNeeded();
+        if (shouldSuppressVanillaCursor) {
+            a_this->uiMovie->SetVariableDouble("_root._alpha", 0.0);
+            a_this->uiMovie->SetVariableDouble("_root.Cursor._alpha", 0.0);
+        } else {
+            a_this->uiMovie->SetVariableDouble("_root._alpha", 100.0);
+            a_this->uiMovie->SetVariableDouble("_root.Cursor._alpha", 100.0);
+        }
+    }
+    s_originalCursorAdvanceMovie(a_this, a_interval, a_currentTime);
+}
+
+static void InstallCursorMenuHooks() {
+    static std::atomic<bool> s_installed{ false };
+    if (s_installed.exchange(true)) return;
+
+    REL::Relocation<std::uintptr_t> vTable(RE::VTABLE_CursorMenu[0]);
+    s_originalCursorProcessMessage = vTable.write_vfunc(0x4, &Hooked_CursorMenu_ProcessMessage);
+    s_originalCursorAdvanceMovie = vTable.write_vfunc(0x5, &Hooked_CursorMenu_AdvanceMovie);
+    SKSE::log::info("InputHook: Installed CursorMenu ProcessMessage (0x4) and AdvanceMovie (0x5) hooks");
+}
+
+} // namespace
+
 InputHook& InputHook::GetSingleton() {
     static InputHook s_instance;
     return s_instance;
@@ -24,6 +67,7 @@ bool InputHook::Install(HWND hWnd) {
     );
 
     EnsureInputSink();
+    InstallCursorMenuHooks();
 
     m_installed.store(true);
     SKSE::log::info("InputHook installed successfully");
@@ -95,49 +139,10 @@ void InputHook::SetCaptureInput(bool capture) {
                 if (ui && queue && !ui->IsMenuOpen(RE::CursorMenu::MENU_NAME)) {
                     queue->AddMessage(RE::CursorMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
                 }
-                if (ui) {
-                    auto cursorMenu = ui->GetMenu(RE::CursorMenu::MENU_NAME);
-                    if (cursorMenu && cursorMenu->uiMovie) {
-                        cursorMenu->uiMovie->SetVariableDouble("_root._alpha", 0.0);
-                        cursorMenu->uiMovie->SetVariableDouble("_root.Cursor._alpha", 0.0);
-                    }
-                }
             } else {
-                bool hasVanillaCursorMenu = false;
-                if (ui) {
-                    static constexpr std::string_view cursorMenus[] = {
-                        "Main Menu",
-                        "MapMenu",
-                        "Journal Menu",
-                        "InventoryMenu",
-                        "MagicMenu",
-                        "ContainerMenu",
-                        "BarterMenu",
-                        "LevelUp Menu",
-                        "Crafting Menu",
-                        "MessageBoxMenu",
-                        "Quantity Menu",
-                        "Sleep/Wait Menu",
-                        "GiftMenu",
-                        "Training Menu",
-                        "Tutorial Menu",
-                        "Book Menu",
-                        "RaceSex Menu",
-                        "Mod Manager Menu"
-                    };
-                    for (const auto& name : cursorMenus) {
-                        if (ui->IsMenuOpen(name)) {
-                            hasVanillaCursorMenu = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!hasVanillaCursorMenu) {
-                    if (mc) {
-                        while (mc->showCursorCount > 0) {
-                            mc->SetCursorVisibility(false);
-                        }
+                if (!D3D11Hook::GetSingleton().IsCursorNeeded()) {
+                    if (mc && mc->showCursorCount > 0) {
+                        mc->SetCursorVisibility(false);
                     }
                     if (ui && queue && ui->IsMenuOpen(RE::CursorMenu::MENU_NAME)) {
                         queue->AddMessage(RE::CursorMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);

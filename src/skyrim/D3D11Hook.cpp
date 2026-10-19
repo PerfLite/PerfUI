@@ -9,40 +9,34 @@
 
 namespace PerfUI::Skyrim {
 
-namespace {
+bool D3D11Hook::IsCursorNeeded() const {
+    if (InputHook::GetSingleton().IsCaptureInput()) return true;
+    if (HasVisibleRootWindows()) return true;
 
-bool IsVanillaCursorActive() {
+    auto* mc = RE::MenuCursor::GetSingleton();
+    if (mc && mc->showCursorCount > 0) return true;
+
     auto* ui = RE::UI::GetSingleton();
     if (!ui) return false;
 
-    static constexpr std::string_view cursorMenus[] = {
-        "Main Menu",
-        "MapMenu",
-        "Journal Menu",
-        "InventoryMenu",
-        "MagicMenu",
-        "ContainerMenu",
-        "BarterMenu",
-        "LevelUp Menu",
-        "Crafting Menu",
-        "MessageBoxMenu",
-        "Quantity Menu",
-        "Sleep/Wait Menu",
-        "GiftMenu",
-        "Training Menu",
-        "Tutorial Menu",
-        "Book Menu",
-        "RaceSex Menu",
-        "Mod Manager Menu"
-    };
-
-    for (const auto& name : cursorMenus) {
-        if (ui->IsMenuOpen(name)) {
+    for (const auto& menu : ui->menuStack) {
+        if (menu && menu->UsesCursor()) {
             return true;
         }
     }
+
+    if (ui->IsMenuOpen(RE::DialogueMenu::MENU_NAME)) {
+        return true;
+    }
+
+    if (ui->IsMenuOpen(RE::Console::MENU_NAME)) {
+        return true;
+    }
+
     return false;
 }
+
+namespace {
 
 void DrawSkyrimSwordCursor(ImDrawList* fg, ImVec2 pos) {
     if (!fg) return;
@@ -618,20 +612,16 @@ void D3D11Hook::RenderFrame() {
     bool anyTreeVisible = uiVis || hasRootWindows;
     bool hasOverlays = m_uiContext && m_uiContext->hasVisibleOverlays();
     bool hasPendingTasks = m_uiContext && m_uiContext->hasPendingTasks();
-    bool vanillaCursor = IsVanillaCursorActive();
-    bool isCapturingInput = InputHook::GetSingleton().IsCaptureInput();
-    bool shouldShowCursor = isCapturingInput || vanillaCursor;
+    bool shouldShowCursor = IsCursorNeeded();
 
     if (!shouldShowCursor) {
         auto* mc = RE::MenuCursor::GetSingleton();
         if (mc && mc->showCursorCount > 0) {
-            while (mc->showCursorCount > 0) {
-                mc->SetCursorVisibility(false);
-            }
+            mc->SetCursorVisibility(false);
         }
     }
 
-    if (!m_imguiInitialized.load() || (!anyTreeVisible && !vanillaCursor && !hasOverlays && !hasPendingTasks) || !m_imguiContext) return;
+    if (!m_imguiInitialized.load() || (!anyTreeVisible && !shouldShowCursor && !hasOverlays && !hasPendingTasks) || !m_imguiContext) return;
 
     ImGuiContext* prevContext = ImGui::GetCurrentContext();
     ImGui::SetCurrentContext(m_imguiContext);
@@ -747,6 +737,7 @@ void D3D11Hook::RenderFrame() {
         ImVec2 swordPos(0.0f, 0.0f);
         bool hasSwordPos = false;
         auto* mc = RE::MenuCursor::GetSingleton();
+        bool isCapturingInput = InputHook::GetSingleton().IsCaptureInput();
         if (isCapturingInput) {
             POINT pt;
             if (::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
@@ -809,8 +800,8 @@ HRESULT STDMETHODCALLTYPE D3D11Hook::Hooked_Present(
     bool anyTreeVisible = hook.m_uiVisible.load() || hook.HasVisibleRootWindows();
     bool hasOverlays = hook.m_uiContext && hook.m_uiContext->hasVisibleOverlays();
     bool hasPendingTasks = hook.m_uiContext && hook.m_uiContext->hasPendingTasks();
-    bool vanillaCursor = IsVanillaCursorActive();
-    if (anyTreeVisible || hasOverlays || hasPendingTasks || vanillaCursor) {
+    bool cursorNeeded = hook.IsCursorNeeded();
+    if (anyTreeVisible || hasOverlays || hasPendingTasks || cursorNeeded) {
         hook.RenderFrame();
     }
 
