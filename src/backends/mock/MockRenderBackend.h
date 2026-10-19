@@ -254,6 +254,27 @@ public:
         return Dimensions{ 0.0f, 0.0f };
     }
 
+    TextureId loadSvg(std::string_view filePath, float targetWidth = 0.0f, float targetHeight = 0.0f) override {
+        TextureId id = m_nextTextureId++;
+        MockTexture tex;
+        tex.filePath = std::string(filePath);
+        tex.width = (targetWidth > 0.0f) ? static_cast<uint32_t>(targetWidth) : 32;
+        tex.height = (targetHeight > 0.0f) ? static_cast<uint32_t>(targetHeight) : 32;
+        m_mockTextures[id] = tex;
+        return id;
+    }
+
+    TextureId loadSvgFromMemory(std::string_view svgContent, float targetWidth = 0.0f, float targetHeight = 0.0f) override {
+        (void)svgContent;
+        TextureId id = m_nextTextureId++;
+        MockTexture tex;
+        tex.filePath = "memory.svg";
+        tex.width = (targetWidth > 0.0f) ? static_cast<uint32_t>(targetWidth) : 32;
+        tex.height = (targetHeight > 0.0f) ? static_cast<uint32_t>(targetHeight) : 32;
+        m_mockTextures[id] = tex;
+        return id;
+    }
+
     // Telemetry & Test Assertions
     bool isFrameActive() const { return m_frameActive; }
     size_t drawCallCount() const { return m_drawCallCount; }

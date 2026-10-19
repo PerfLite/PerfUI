@@ -7,6 +7,7 @@ set_warnings("allextra")
 
 add_rules("mode.release", "mode.debug")
 add_rules("plugin.vsxmake.autoupdate")
+add_includedirs("third_party/nanosvg")
 
 add_requires("commonlibsse-ng", {optional = true})
 
@@ -21,6 +22,7 @@ target("PerfUI")
     add_includedirs("third_party/imgui")
     add_includedirs("third_party/imgui/backends")
     add_includedirs("third_party/pugixml")
+    add_includedirs("third_party/nanosvg")
     add_includedirs("src/markup")
     add_includedirs("src")
 
@@ -184,6 +186,19 @@ target("PerfUI_Test_Style")
         "src/markup/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/StyleSystemTest.cpp"
+    )
+
+target("PerfUI_Test_Svg")
+    set_kind("binary")
+    set_languages("c++20")
+    add_defines("PERFUI_STATIC")
+    add_syslinks("user32")
+    add_includedirs("include", "src/backends/mock", "third_party/nanosvg", "src")
+    add_files(
+        "src/core/*.cpp",
+        "src/layout/*.cpp",
+        "src/widgets/*.cpp",
+        "tests/SvgTest.cpp"
     )
 
 

@@ -186,6 +186,18 @@ static PerfUI::Dimensions API_GetTextureSize(PerfUI::TextureId id) {
     return ctx ? ctx->getTextureSize(id) : PerfUI::Dimensions{ 0.0f, 0.0f };
 }
 
+static PerfUI::TextureId API_LoadSvg(const char* filePath, float targetWidth, float targetHeight) {
+    if (!filePath) return 0;
+    auto* ctx = API_GetContext();
+    return ctx ? ctx->loadSvg(filePath, targetWidth, targetHeight) : 0;
+}
+
+static PerfUI::TextureId API_LoadSvgFromMemory(const char* svgContent, float targetWidth, float targetHeight) {
+    if (!svgContent) return 0;
+    auto* ctx = API_GetContext();
+    return ctx ? ctx->loadSvgFromMemory(svgContent, targetWidth, targetHeight) : 0;
+}
+
 static void API_CaptureInput(bool capture) {
     PerfUI::Skyrim::InputHook::GetSingleton().SetCaptureInput(capture);
 }
@@ -224,6 +236,8 @@ static PerfUI::API::IPerfUI_v1 g_perfUI_API_v1{
     .UpdateDynamicTexture = API_UpdateDynamicTexture,
     .DestroyTexture = API_DestroyTexture,
     .GetTextureSize = API_GetTextureSize,
+    .LoadSvg = API_LoadSvg,
+    .LoadSvgFromMemory = API_LoadSvgFromMemory,
     .CaptureInput = API_CaptureInput,
     .RegisterHotkey = API_RegisterHotkey,
     .UnregisterHotkey = API_UnregisterHotkey,

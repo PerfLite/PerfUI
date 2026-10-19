@@ -137,6 +137,17 @@ public:
         (void)id;
         return Dimensions{ 0.0f, 0.0f };
     }
+
+    // SVG Rendering API
+    virtual TextureId loadSvg(std::string_view filePath, float targetWidth = 0.0f, float targetHeight = 0.0f) {
+        (void)filePath; (void)targetWidth; (void)targetHeight;
+        return 0;
+    }
+
+    virtual TextureId loadSvgFromMemory(std::string_view svgContent, float targetWidth = 0.0f, float targetHeight = 0.0f) {
+        (void)svgContent; (void)targetWidth; (void)targetHeight;
+        return 0;
+    }
 };
 
 } // namespace PerfUI

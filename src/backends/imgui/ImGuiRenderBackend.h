@@ -80,6 +80,8 @@ public:
     bool updateDynamicTexture(TextureId id, uint32_t width, uint32_t height, const uint8_t* rgbaPixels) override;
     void destroyTexture(TextureId id) override;
     Dimensions getTextureSize(TextureId id) override;
+    TextureId loadSvg(std::string_view filePath, float targetWidth = 0.0f, float targetHeight = 0.0f) override;
+    TextureId loadSvgFromMemory(std::string_view svgContent, float targetWidth = 0.0f, float targetHeight = 0.0f) override;
 
     void initFonts();
 

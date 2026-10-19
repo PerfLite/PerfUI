@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <cmath>
+#include "PerfUI/SvgService.h"
 
 #pragma warning(push)
 #pragma warning(disable: 4244 4996)
@@ -462,6 +463,10 @@ TextureId ImGuiRenderBackend::loadTexture(std::string_view filePath) {
     ID3D11Device* device = static_cast<ID3D11Device*>(m_d3dDevice);
     if (!device) return 0;
 
+    if (filePath.ends_with(".svg") || filePath.ends_with(".SVG")) {
+        return loadSvg(filePath);
+    }
+
     std::string pathStr(filePath);
     int width = 0;
     int height = 0;
@@ -592,6 +597,18 @@ Dimensions ImGuiRenderBackend::getTextureSize(TextureId id) {
         return Dimensions{ static_cast<float>(it->second.width), static_cast<float>(it->second.height) };
     }
     return Dimensions{ 0.0f, 0.0f };
+}
+
+TextureId ImGuiRenderBackend::loadSvg(std::string_view filePath, float targetWidth, float targetHeight) {
+    auto res = SvgService::RasterizeFile(filePath, targetWidth, targetHeight);
+    if (!res.valid()) return 0;
+    return createDynamicTexture(res.width, res.height, res.rgbaPixels.data());
+}
+
+TextureId ImGuiRenderBackend::loadSvgFromMemory(std::string_view svgContent, float targetWidth, float targetHeight) {
+    auto res = SvgService::RasterizeString(svgContent, targetWidth, targetHeight);
+    if (!res.valid()) return 0;
+    return createDynamicTexture(res.width, res.height, res.rgbaPixels.data());
 }
 
 } // namespace PerfUI

@@ -28,6 +28,7 @@
 #include "PerfUI/QuestTracker.h"
 #include "PerfUI/Notification.h"
 #include "PerfUI/Sidebar.h"
+#include "PerfUI/SvgImage.h"
 
 #include <sstream>
 
@@ -312,6 +313,51 @@ void WidgetRegistry::registerBuiltinWidgets() {
         }
         return img.release();
     });
+
+    // 8b. Svg / SvgImage
+    auto registerSvgWidget = [this](const char* tag) {
+        registerWidget(tag, [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+            std::string name = "SvgImage";
+            std::string src;
+            std::string content;
+            float tw = 0.0f;
+            float th = 0.0f;
+
+            auto itName = attrs.find("name");
+            if (itName != attrs.end()) name = itName->second;
+            auto itSrc = attrs.find("src");
+            if (itSrc != attrs.end()) src = itSrc->second;
+            else {
+                auto itFile = attrs.find("file");
+                if (itFile != attrs.end()) src = itFile->second;
+            }
+            auto itContent = attrs.find("content");
+            if (itContent != attrs.end()) content = itContent->second;
+
+            auto itW = attrs.find("width");
+            if (itW != attrs.end()) tw = parseNumberOrToken(itW->second, 0.0f);
+            auto itH = attrs.find("height");
+            if (itH != attrs.end()) th = parseNumberOrToken(itH->second, 0.0f);
+
+            auto svg = std::make_unique<SvgImage>(src, tw, th, name);
+            if (!content.empty()) {
+                svg->svgContent(content);
+            }
+
+            for (const auto& [k, v] : attrs) {
+                if (k == "tint") {
+                    svg->tint(parseColorOrToken(v));
+                }
+            }
+
+            if (parent) {
+                return parent->addChild(std::move(svg));
+            }
+            return svg.release();
+        });
+    };
+    registerSvgWidget("Svg");
+    registerSvgWidget("SvgImage");
 
     // 9. TabBar
     registerWidget("TabBar", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {

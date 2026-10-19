@@ -44,4 +44,6 @@
 #include "JournalWindow.h"
 #include "MainMenuWindow.h"
 #include "MapCanvas.h"
+#include "SvgService.h"
+#include "SvgImage.h"
 #include "UIWindow.h"

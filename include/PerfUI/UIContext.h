@@ -160,6 +160,12 @@ public:
     Dimensions getTextureSize(TextureId id) {
         return m_renderBackend ? m_renderBackend->getTextureSize(id) : Dimensions{ 0.0f, 0.0f };
     }
+    TextureId loadSvg(std::string_view filePath, float targetWidth = 0.0f, float targetHeight = 0.0f) {
+        return m_renderBackend ? m_renderBackend->loadSvg(filePath, targetWidth, targetHeight) : 0;
+    }
+    TextureId loadSvgFromMemory(std::string_view svgContent, float targetWidth = 0.0f, float targetHeight = 0.0f) {
+        return m_renderBackend ? m_renderBackend->loadSvgFromMemory(svgContent, targetWidth, targetHeight) : 0;
+    }
 
     // Hotkey Management API (Stage 3 Clean Client)
     bool registerHotkey(std::string id, uint32_t keyCode, std::function<void()> callback);

@@ -58,6 +58,8 @@ struct IPerfUI_v1 {
     bool (*UpdateDynamicTexture)(TextureId id, uint32_t width, uint32_t height, const uint8_t* rgbaPixels);
     void (*DestroyTexture)(TextureId id);
     Dimensions (*GetTextureSize)(TextureId id);
+    TextureId (*LoadSvg)(const char* filePath, float targetWidth, float targetHeight);
+    TextureId (*LoadSvgFromMemory)(const char* svgContent, float targetWidth, float targetHeight);
 
     // Input & Hotkeys System (Phase 3 Clean Client)
     void (*CaptureInput)(bool capture);
@@ -221,6 +223,24 @@ inline Dimensions GetTextureSize(TextureId id) {
     }
     auto* ctx = GetContext();
     return ctx ? ctx->getTextureSize(id) : Dimensions{ 0.0f, 0.0f };
+}
+
+inline TextureId LoadSvg(const char* filePath, float targetWidth = 0.0f, float targetHeight = 0.0f) {
+    auto* api = GetApi();
+    if (api && api->LoadSvg) {
+        return api->LoadSvg(filePath, targetWidth, targetHeight);
+    }
+    auto* ctx = GetContext();
+    return ctx ? ctx->loadSvg(filePath, targetWidth, targetHeight) : 0;
+}
+
+inline TextureId LoadSvgFromMemory(const char* svgContent, float targetWidth = 0.0f, float targetHeight = 0.0f) {
+    auto* api = GetApi();
+    if (api && api->LoadSvgFromMemory) {
+        return api->LoadSvgFromMemory(svgContent, targetWidth, targetHeight);
+    }
+    auto* ctx = GetContext();
+    return ctx ? ctx->loadSvgFromMemory(svgContent, targetWidth, targetHeight) : 0;
 }
 
 // Input & Hotkeys System (Phase 3 Clean Client)
