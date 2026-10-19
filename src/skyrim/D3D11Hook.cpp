@@ -11,92 +11,252 @@ namespace PerfUI::Skyrim {
 
 namespace {
 
+bool IsVanillaCursorActive() {
+    auto* ui = RE::UI::GetSingleton();
+    if (!ui) return false;
+
+    auto* mc = RE::MenuCursor::GetSingleton();
+    if (mc && mc->showCursorCount > 0) {
+        return true;
+    }
+
+    static constexpr std::string_view cursorMenus[] = {
+        "Main Menu",
+        "MapMenu",
+        "Journal Menu",
+        "InventoryMenu",
+        "MagicMenu",
+        "ContainerMenu",
+        "BarterMenu",
+        "FavoritesMenu",
+        "TweenMenu",
+        "Lockpicking Menu",
+        "LevelUp Menu",
+        "StatsMenu",
+        "Crafting Menu",
+        "Console",
+        "Dialogue Menu",
+        "CustomMenu",
+        "MessageBoxMenu",
+        "Quantity Menu",
+        "Sleep/Wait Menu",
+        "GiftMenu",
+        "Training Menu",
+        "Tutorial Menu",
+        "Book Menu",
+        "RaceSex Menu",
+        "Mod Manager Menu",
+        "Credits Menu"
+    };
+
+    for (const auto& name : cursorMenus) {
+        if (ui->IsMenuOpen(name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void DrawSkyrimSwordCursor(ImDrawList* fg, ImVec2 pos) {
     if (!fg) return;
 
-    const float x = pos.x;
-    const float y = pos.y;
+    constexpr float cosA = 0.70710678f;
+    constexpr float sinA = 0.70710678f;
 
-    auto drawSword = [&](float ox, float oy, bool isShadow) {
-        ImVec2 tip{ x + ox, y + oy };
-
-        // Blade corners & center ridge
-        ImVec2 bladeLeft{ x + ox + 6.0f, y + oy + 15.0f };
-        ImVec2 bladeRight{ x + ox + 15.0f, y + oy + 6.0f };
-        ImVec2 bladeCenter{ x + ox + 10.5f, y + oy + 10.5f };
-
-        // Crossguard
-        ImVec2 guardLeftTip{ x + ox + 4.0f, y + oy + 17.5f };
-        ImVec2 guardLeftBase{ x + ox + 6.0f, y + oy + 19.5f };
-        ImVec2 guardRightBase{ x + ox + 19.5f, y + oy + 6.0f };
-        ImVec2 guardRightTip{ x + ox + 17.5f, y + oy + 4.0f };
-
-        // Grip / Hilt
-        ImVec2 gripLeft1{ x + ox + 11.5f, y + oy + 13.5f };
-        ImVec2 gripRight1{ x + ox + 13.5f, y + oy + 11.5f };
-        ImVec2 gripLeft2{ x + ox + 16.5f, y + oy + 18.5f };
-        ImVec2 gripRight2{ x + ox + 18.5f, y + oy + 16.5f };
-
-        // Pommel
-        ImVec2 pommelTop{ x + ox + 17.5f, y + oy + 17.5f };
-        ImVec2 pommelLeft{ x + ox + 16.0f, y + oy + 20.0f };
-        ImVec2 pommelTip{ x + ox + 21.0f, y + oy + 21.0f };
-        ImVec2 pommelRight{ x + ox + 20.0f, y + oy + 16.0f };
-
-        if (isShadow) {
-            ImU32 shadowCol = IM_COL32(0, 0, 0, 115);
-            fg->AddTriangleFilled(tip, bladeLeft, bladeCenter, shadowCol);
-            fg->AddTriangleFilled(tip, bladeCenter, bladeRight, shadowCol);
-            fg->AddQuadFilled(guardLeftTip, guardRightTip, guardRightBase, guardLeftBase, shadowCol);
-            fg->AddQuadFilled(gripLeft1, gripRight1, gripRight2, gripLeft2, shadowCol);
-            fg->AddQuadFilled(pommelTop, pommelRight, pommelTip, pommelLeft, shadowCol);
-            return;
-        }
-
-        // 1. Grip (Dark leather wrapped handle with wire details)
-        fg->AddQuadFilled(gripLeft1, gripRight1, gripRight2, gripLeft2, IM_COL32(36, 30, 26, 255));
-        fg->AddLine(ImVec2(x + ox + 13.0f, y + oy + 15.0f), ImVec2(x + ox + 15.0f, y + oy + 13.0f), IM_COL32(190, 160, 95, 220), 1.0f);
-        fg->AddLine(ImVec2(x + ox + 14.8f, y + oy + 16.8f), ImVec2(x + ox + 16.8f, y + oy + 14.8f), IM_COL32(190, 160, 95, 220), 1.0f);
-
-        // 2. Pommel (Polished steel diamond)
-        fg->AddQuadFilled(pommelTop, pommelRight, pommelTip, pommelLeft, IM_COL32(215, 225, 238, 255));
-
-        // 3. Crossguard (Winged steel quillons)
-        fg->AddQuadFilled(guardLeftTip, guardRightTip, guardRightBase, guardLeftBase, IM_COL32(170, 180, 195, 255));
-        fg->AddLine(guardLeftTip, guardRightTip, IM_COL32(245, 250, 255, 255), 1.0f);
-
-        // 4. Blade Left Half (Bright polished silver steel facet)
-        fg->AddTriangleFilled(tip, bladeLeft, bladeCenter, IM_COL32(238, 244, 252, 255));
-
-        // 5. Blade Right Half (Shaded steel facet)
-        fg->AddTriangleFilled(tip, bladeCenter, bladeRight, IM_COL32(142, 152, 168, 255));
-
-        // 6. Central Ridge Highlight Line (Fuller gleam)
-        fg->AddLine(tip, bladeCenter, IM_COL32(255, 255, 255, 230), 1.0f);
-
-        // 7. Dark Crisp Outer Silhouette
-        ImVec2 outlinePoints[] = {
-            tip,
-            bladeLeft,
-            guardLeftTip,
-            guardLeftBase,
-            gripLeft2,
-            pommelLeft,
-            pommelTip,
-            pommelRight,
-            gripRight2,
-            guardRightBase,
-            guardRightTip,
-            bladeRight
-        };
-        fg->AddPolyline(outlinePoints, 12, IM_COL32(20, 24, 30, 240), ImDrawFlags_Closed, 1.2f);
+    auto pt = [&](float t, float s, float ox = 0.0f, float oy = 0.0f) -> ImVec2 {
+        return ImVec2(
+            pos.x + ox + t * cosA - s * sinA,
+            pos.y + oy + t * sinA + s * cosA
+        );
     };
 
-    // Draw drop shadow shifted by (+1.5, +1.5)
-    drawSword(1.5f, 1.5f, true);
+    // 1. Double-layer smooth drop shadow (casts realistic ambient & contact shadow behind sword)
+    auto drawShadowSilhouette = [&](float ox, float oy, ImU32 col) {
+        ImVec2 shadowPoly[] = {
+            pt(0.0f, 0.0f, ox, oy),       // Needle Tip
+            pt(2.5f, -1.0f, ox, oy),
+            pt(9.0f, -1.9f, ox, oy),
+            pt(17.5f, -2.4f, ox, oy),     // Upper blade base
+            pt(17.2f, -5.2f, ox, oy),     // Upper guard knuckle
+            pt(15.8f, -9.0f, ox, oy),     // Upper quillon forward swept wing tip
+            pt(18.8f, -9.5f, ox, oy),     // Upper quillon outer flare
+            pt(20.0f, -7.8f, ox, oy),     // Upper quillon rear return
+            pt(20.0f, -1.6f, ox, oy),     // Upper guard base
+            pt(20.2f, -1.6f, ox, oy),     // Grip top-left
+            pt(23.5f, -1.4f, ox, oy),     // Grip waist
+            pt(26.8f, -1.6f, ox, oy),     // Grip base
+            pt(27.3f, -3.0f, ox, oy),     // Pommel upper diamond corner
+            pt(30.6f, 0.0f, ox, oy),      // Pommel peen block
+            pt(27.3f, 3.0f, ox, oy),      // Pommel lower diamond corner
+            pt(26.8f, 1.6f, ox, oy),      // Grip base lower
+            pt(23.5f, 1.4f, ox, oy),      // Grip waist lower
+            pt(20.2f, 1.6f, ox, oy),      // Grip top-right
+            pt(20.0f, 1.6f, ox, oy),      // Lower guard base
+            pt(20.0f, 7.8f, ox, oy),      // Lower quillon rear return
+            pt(18.8f, 9.5f, ox, oy),      // Lower quillon outer flare
+            pt(15.8f, 9.0f, ox, oy),      // Lower quillon forward swept wing tip
+            pt(17.2f, 5.2f, ox, oy),      // Lower guard knuckle
+            pt(17.5f, 2.4f, ox, oy),      // Lower blade base
+            pt(9.0f, 1.9f, ox, oy),
+            pt(2.5f, 1.0f, ox, oy)
+        };
+        constexpr int nPts = sizeof(shadowPoly) / sizeof(shadowPoly[0]);
+        fg->AddConvexPolyFilled(shadowPoly, nPts, col);
+        fg->AddPolyline(shadowPoly, nPts, col, ImDrawFlags_Closed, 1.6f);
+    };
 
-    // Draw authentic sword cursor
-    drawSword(0.0f, 0.0f, false);
+    // Soft ambient shadow
+    drawShadowSilhouette(2.4f, 2.8f, IM_COL32(0, 0, 0, 75));
+    // Tight contact shadow
+    drawShadowSilhouette(1.0f, 1.2f, IM_COL32(0, 0, 0, 160));
+
+    // 2. Ergonomic Dark Leather Grip
+    ImVec2 gripTopL = pt(20.2f, -1.6f);
+    ImVec2 gripTopR = pt(20.2f, 1.6f);
+    ImVec2 gripMidL = pt(23.5f, -1.4f);
+    ImVec2 gripMidR = pt(23.5f, 1.4f);
+    ImVec2 gripBotL = pt(26.8f, -1.6f);
+    ImVec2 gripBotR = pt(26.8f, 1.6f);
+
+    fg->AddQuadFilled(gripTopL, gripTopR, gripMidR, gripMidL, IM_COL32(36, 30, 26, 255));
+    fg->AddQuadFilled(gripMidL, gripMidR, gripBotR, gripBotL, IM_COL32(30, 24, 20, 255));
+    // Leather sheen along upper crest
+    fg->AddLine(gripTopL, gripBotL, IM_COL32(82, 70, 60, 255), 1.0f);
+
+    // Twisted Nordic brass/gold wire wraps with gleam
+    fg->AddLine(pt(21.4f, -1.6f), pt(22.8f, 1.5f), IM_COL32(230, 185, 80, 240), 1.0f);
+    fg->AddLine(pt(23.2f, -1.4f), pt(24.6f, 1.4f), IM_COL32(230, 185, 80, 240), 1.0f);
+    fg->AddLine(pt(25.0f, -1.5f), pt(26.4f, 1.6f), IM_COL32(230, 185, 80, 240), 1.0f);
+
+    // 3. Pommel (Faceted Nordic steel diamond counterweight with Skyrim gold rivet)
+    ImVec2 pommelFront = pt(26.8f, 0.0f);
+    ImVec2 pommelTop   = pt(27.3f, -3.0f);
+    ImVec2 pommelEnd   = pt(30.6f, 0.0f);
+    ImVec2 pommelBot   = pt(27.3f, 3.0f);
+
+    // Upper light facet (Cold mountain steel)
+    fg->AddTriangleFilled(pommelFront, pommelTop, pommelEnd, IM_COL32(235, 242, 252, 255));
+    // Lower shadow facet
+    fg->AddTriangleFilled(pommelFront, pommelEnd, pommelBot, IM_COL32(130, 140, 156, 255));
+    // Pommel ridge highlight
+    fg->AddLine(pommelFront, pommelEnd, IM_COL32(255, 255, 255, 230), 1.0f);
+    // Center gold rivet
+    fg->AddCircleFilled(pt(27.6f, 0.0f), 1.1f, IM_COL32(235, 185, 65, 255));
+    // Tang peen block at the tip
+    fg->AddCircleFilled(pt(30.4f, 0.0f), 0.85f, IM_COL32(200, 210, 225, 255));
+
+    // 4. Crossguard (Nordic winged quillons with central gold langet & ruby)
+    ImVec2 guardTopL = pt(17.5f, -2.4f);
+    ImVec2 guardTopR = pt(17.5f, 2.4f);
+    ImVec2 guardMidF = pt(17.6f, 0.0f);
+
+    ImVec2 qUpperTip     = pt(15.8f, -9.0f);
+    ImVec2 qUpperFlare   = pt(18.8f, -9.5f);
+    ImVec2 qUpperRear    = pt(20.0f, -7.8f);
+    ImVec2 qUpperBase    = pt(20.0f, -1.6f);
+    ImVec2 qUpperKnuckle = pt(17.2f, -5.2f);
+
+    ImVec2 qLowerTip     = pt(15.8f, 9.0f);
+    ImVec2 qLowerFlare   = pt(18.8f, 9.5f);
+    ImVec2 qLowerRear    = pt(20.0f, 7.8f);
+    ImVec2 qLowerBase    = pt(20.0f, 1.6f);
+    ImVec2 qLowerKnuckle = pt(17.2f, 5.2f);
+
+    // Upper quillon (Light tempered steel)
+    fg->AddTriangleFilled(guardMidF, qUpperKnuckle, qUpperBase, IM_COL32(212, 222, 238, 255));
+    fg->AddQuadFilled(qUpperKnuckle, qUpperTip, qUpperFlare, qUpperRear, IM_COL32(230, 240, 252, 255));
+    fg->AddTriangleFilled(qUpperKnuckle, qUpperRear, qUpperBase, IM_COL32(188, 198, 216, 255));
+    // Upper quillon leading edge razor highlight
+    fg->AddLine(guardTopL, qUpperTip, IM_COL32(255, 255, 255, 255), 1.0f);
+
+    // Lower quillon (Shadowed steel)
+    fg->AddTriangleFilled(guardMidF, qLowerBase, qLowerKnuckle, IM_COL32(136, 146, 162, 255));
+    fg->AddQuadFilled(qLowerKnuckle, qLowerTip, qLowerFlare, qLowerRear, IM_COL32(146, 156, 172, 255));
+    fg->AddTriangleFilled(qLowerKnuckle, qLowerRear, qLowerBase, IM_COL32(116, 126, 142, 255));
+
+    // Guard center body
+    fg->AddQuadFilled(guardTopL, guardTopR, qLowerBase, qUpperBase, IM_COL32(180, 190, 206, 255));
+
+    // Central Skyrim gold diamond langet
+    ImVec2 langetTop   = pt(17.2f, 0.0f);
+    ImVec2 langetRight = pt(18.8f, 1.5f);
+    ImVec2 langetBot   = pt(20.4f, 0.0f);
+    ImVec2 langetLeft  = pt(18.8f, -1.5f);
+    fg->AddQuadFilled(langetTop, langetRight, langetBot, langetLeft, IM_COL32(228, 175, 62, 255));
+    fg->AddQuadFilled(pt(17.7f, 0.0f), pt(18.8f, 0.8f), pt(19.9f, 0.0f), pt(18.8f, -0.8f), IM_COL32(255, 232, 138, 255));
+    // Center ruby jewel
+    fg->AddCircleFilled(pt(18.8f, 0.0f), 0.75f, IM_COL32(190, 36, 36, 255));
+    fg->AddCircleFilled(pt(18.6f, -0.2f), 0.35f, IM_COL32(255, 170, 170, 255));
+
+    // 5. Blade (Tempered multi-faceted steel with fuller groove)
+    ImVec2 tip = pt(0.0f, 0.0f);
+    ImVec2 b1L = pt(2.5f, -1.0f);
+    ImVec2 b1R = pt(2.5f, 1.0f);
+    ImVec2 b1C = pt(2.5f, 0.0f);
+
+    ImVec2 b2L = pt(9.0f, -1.9f);
+    ImVec2 b2R = pt(9.0f, 1.9f);
+    ImVec2 b2C = pt(9.0f, 0.0f);
+
+    ImVec2 b3L = pt(17.5f, -2.4f);
+    ImVec2 b3R = pt(17.5f, 2.4f);
+    ImVec2 b3C = pt(17.5f, 0.0f);
+
+    // Upper bevels (Polished cold steel catching overhead light)
+    fg->AddTriangleFilled(tip, b1L, b1C, IM_COL32(255, 255, 255, 255));
+    fg->AddQuadFilled(b1L, b2L, b2C, b1C, IM_COL32(240, 246, 255, 255));
+    fg->AddQuadFilled(b2L, b3L, b3C, b2C, IM_COL32(220, 230, 244, 255));
+
+    // Lower bevels (Gunmetal shadowed steel)
+    fg->AddTriangleFilled(tip, b1C, b1R, IM_COL32(165, 175, 192, 255));
+    fg->AddQuadFilled(b1C, b2C, b2R, b1R, IM_COL32(136, 146, 164, 255));
+    fg->AddQuadFilled(b2C, b3C, b3R, b2R, IM_COL32(112, 122, 138, 255));
+
+    // Central fuller (Blood groove - recessed deep steel channel)
+    fg->AddLine(pt(2.5f, 0.0f), pt(16.5f, 0.0f), IM_COL32(58, 65, 78, 255), 1.0f);
+    // Fuller specular highlight line (gleam along top ridge of groove)
+    fg->AddLine(pt(1.8f, -0.4f), pt(16.8f, -0.4f), IM_COL32(255, 255, 255, 240), 0.8f);
+
+    // Razor-sharp cutting edge highlight
+    fg->AddLine(tip, b1L, IM_COL32(255, 255, 255, 255), 1.0f);
+    fg->AddLine(b1L, b3L, IM_COL32(255, 255, 255, 240), 1.0f);
+
+    // Tip specular star glint (gleam at needle point)
+    fg->AddCircleFilled(pt(0.7f, -0.15f), 0.8f, IM_COL32(255, 255, 255, 255));
+    fg->AddLine(pt(0.0f, -0.15f), pt(1.4f, -0.15f), IM_COL32(255, 255, 255, 180), 0.7f);
+    fg->AddLine(pt(0.7f, -0.85f), pt(0.7f, 0.55f), IM_COL32(255, 255, 255, 180), 0.7f);
+
+    // 6. Crisp Dark Outer Silhouette Outline (Gives razor definition against any background)
+    ImVec2 outlinePoly[] = {
+        tip,
+        b1L,
+        b2L,
+        b3L,
+        qUpperKnuckle,
+        qUpperTip,
+        qUpperFlare,
+        qUpperRear,
+        qUpperBase,
+        gripTopL,
+        gripMidL,
+        gripBotL,
+        pommelTop,
+        pommelEnd,
+        pommelBot,
+        gripBotR,
+        gripMidR,
+        gripTopR,
+        qLowerBase,
+        qLowerRear,
+        qLowerFlare,
+        qLowerTip,
+        qLowerKnuckle,
+        b3R,
+        b2R,
+        b1R
+    };
+    constexpr int nOutline = sizeof(outlinePoly) / sizeof(outlinePoly[0]);
+    fg->AddPolyline(outlinePoly, nOutline, IM_COL32(14, 16, 22, 255), ImDrawFlags_Closed, 1.15f);
 }
 
 } // namespace
@@ -430,7 +590,9 @@ void D3D11Hook::RenderFrame() {
     // Tasks queued via UIContext::runOnUIThread are drained inside update(), so a frame
     // with pending tasks must render even when nothing is visible - otherwise the queue stalls.
     bool hasPendingTasks = m_uiContext && m_uiContext->hasPendingTasks();
-    if (!m_imguiInitialized.load() || (!anyTreeVisible && !hasOverlays && !hasPendingTasks) || !m_imguiContext) return;
+    bool vanillaCursor = IsVanillaCursorActive();
+    bool shouldShowCursor = anyTreeVisible || vanillaCursor;
+    if (!m_imguiInitialized.load() || (!shouldShowCursor && !hasOverlays && !hasPendingTasks) || !m_imguiContext) return;
 
     ImGuiContext* prevContext = ImGui::GetCurrentContext();
     ImGui::SetCurrentContext(m_imguiContext);
@@ -533,10 +695,37 @@ void D3D11Hook::RenderFrame() {
     m_uiContext->update(dt);
     m_uiContext->render(*m_renderBackend, anyTreeVisible);
 
-    if (anyTreeVisible) {
-        POINT pt;
-        if (::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
-            DrawSkyrimSwordCursor(ImGui::GetForegroundDrawList(), ImVec2(static_cast<float>(pt.x), static_cast<float>(pt.y)));
+    if (shouldShowCursor) {
+        auto* ui = RE::UI::GetSingleton();
+        if (ui) {
+            auto cursorMenu = ui->GetMenu(RE::CursorMenu::MENU_NAME);
+            if (cursorMenu && cursorMenu->uiMovie) {
+                cursorMenu->uiMovie->SetVisible(false);
+            }
+        }
+
+        ImVec2 swordPos(0.0f, 0.0f);
+        bool hasSwordPos = false;
+        auto* mc = RE::MenuCursor::GetSingleton();
+        if (anyTreeVisible) {
+            POINT pt;
+            if (::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
+                swordPos = ImVec2(static_cast<float>(pt.x), static_cast<float>(pt.y));
+                hasSwordPos = true;
+            }
+        } else if (mc) {
+            swordPos = ImVec2(mc->cursorPosX, mc->cursorPosY);
+            hasSwordPos = true;
+        } else {
+            POINT pt;
+            if (::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
+                swordPos = ImVec2(static_cast<float>(pt.x), static_cast<float>(pt.y));
+                hasSwordPos = true;
+            }
+        }
+
+        if (hasSwordPos) {
+            DrawSkyrimSwordCursor(ImGui::GetForegroundDrawList(), swordPos);
         }
     }
 

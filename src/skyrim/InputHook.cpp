@@ -95,10 +95,17 @@ void InputHook::SetCaptureInput(bool capture) {
                 if (ui && queue && !ui->IsMenuOpen(RE::CursorMenu::MENU_NAME)) {
                     queue->AddMessage(RE::CursorMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
                 }
+                if (ui) {
+                    auto cursorMenu = ui->GetMenu(RE::CursorMenu::MENU_NAME);
+                    if (cursorMenu && cursorMenu->uiMovie) {
+                        cursorMenu->uiMovie->SetVisible(false);
+                    }
+                }
             } else {
                 bool hasVanillaCursorMenu = false;
                 if (ui) {
                     static constexpr std::string_view cursorMenus[] = {
+                        "Main Menu",
                         "MapMenu",
                         "Journal Menu",
                         "InventoryMenu",
@@ -114,7 +121,16 @@ void InputHook::SetCaptureInput(bool capture) {
                         "Console",
                         "Dialogue Menu",
                         "CustomMenu",
-                        "MessageBoxMenu"
+                        "MessageBoxMenu",
+                        "Quantity Menu",
+                        "Sleep/Wait Menu",
+                        "GiftMenu",
+                        "Training Menu",
+                        "Tutorial Menu",
+                        "Book Menu",
+                        "RaceSex Menu",
+                        "Mod Manager Menu",
+                        "Credits Menu"
                     };
                     for (const auto& name : cursorMenus) {
                         if (ui->IsMenuOpen(name)) {
