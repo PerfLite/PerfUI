@@ -383,10 +383,11 @@ void D3D11Hook::RenderFrame() {
     ImGui::GetIO().MouseDrawCursor = false;
     ImGui::GetIO().WantSetMousePos = false;
 
+    // Always keep Windows hardware cursor hidden - Skyrim renders its own native game cursor
+    while (::ShowCursor(FALSE) >= 0);
+    ::SetCursor(nullptr);
+
     if (anyTreeVisible) {
-        // Ensure Windows hardware arrow cursor display count is >= 0 and active every frame
-        while (::ShowCursor(TRUE) < 0);
-        ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
 
         // Poll mouse position every frame via GetCursorPos
         POINT pt;

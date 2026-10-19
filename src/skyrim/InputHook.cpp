@@ -73,19 +73,31 @@ void InputHook::Uninstall() {
 }
 
 void InputHook::SetCaptureInput(bool capture) {
-    m_captureInput.store(capture);
-
-    // Properly adjust Windows cursor display count
+    bool wasCapturing = m_captureInput.exchange(capture);
     if (capture) {
         EnsureInputSink();
-        while (::ShowCursor(TRUE) < 0);
-        ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
     } else {
         m_mouseButtonDown[0] = false;
         m_mouseButtonDown[1] = false;
         m_mouseButtonDown[2] = false;
-        while (::ShowCursor(FALSE) >= 0);
     }
+
+    if (capture != wasCapturing) {
+        auto updateSkyrimCursor = [capture] {
+            auto* mc = RE::MenuCursor::GetSingleton();
+            if (mc) {
+                mc->SetCursorVisibility(capture);
+            }
+        };
+        if (auto* tasks = SKSE::GetTaskInterface()) {
+            tasks->AddTask(updateSkyrimCursor);
+        } else {
+            updateSkyrimCursor();
+        }
+    }
+
+    while (::ShowCursor(FALSE) >= 0);
+    ::SetCursor(nullptr);
 }
 
 void InputHook::PushInput(QueuedInput event) {
@@ -102,6 +114,13 @@ std::vector<InputHook::QueuedInput> InputHook::DrainInputQueue() {
 
 LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     auto& hook = InputHook::GetSingleton();
+
+    // Always keep Windows hardware cursor hidden - Skyrim renders its own native game cursor
+    if (msg == WM_SETCURSOR && LOWORD(lParam) == HTCLIENT) {
+        while (::ShowCursor(FALSE) >= 0);
+        ::SetCursor(nullptr);
+        return TRUE;
+    }
 
     if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) {
         auto* uiCtx = D3D11Hook::GetSingleton().GetContext();
@@ -125,15 +144,6 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
 
     if (hook.m_captureInput.load()) {
         hook.EnsureInputSink();
-
-        // Force Windows hardware arrow cursor
-        if (msg == WM_SETCURSOR) {
-            if (LOWORD(lParam) == HTCLIENT) {
-                while (::ShowCursor(TRUE) < 0);
-                ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
-                return TRUE;
-            }
-        }
 
         bool isMouseMsg = (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) || msg == WM_SETCURSOR;
         if (!isMouseMsg) {
@@ -170,9 +180,6 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
         case WM_RBUTTONDBLCLK:
         case WM_MBUTTONDOWN:
         case WM_MBUTTONDBLCLK: {
-            while (::ShowCursor(TRUE) < 0);
-            ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
-
             int btn = (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) ? 0 :
                       ((msg == WM_RBUTTONDOWN || msg == WM_RBUTTONDBLCLK) ? 1 : 2);
 
@@ -198,9 +205,6 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
         case WM_LBUTTONUP:
         case WM_RBUTTONUP:
         case WM_MBUTTONUP: {
-            while (::ShowCursor(TRUE) < 0);
-            ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
-
             int btn = (msg == WM_LBUTTONUP) ? 0 : (msg == WM_RBUTTONUP ? 1 : 2);
 
             POINT pt;
@@ -225,8 +229,6 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
         case WM_XBUTTONDOWN:
         case WM_XBUTTONUP:
         case WM_XBUTTONDBLCLK: {
-            while (::ShowCursor(TRUE) < 0);
-            ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
             return 0;
         }
         case WM_MOUSEWHEEL: {
@@ -257,14 +259,6 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
             }
             return 0; // Swallow from Skyrim
         }
-    } else {
-        // While PerfUI is NOT capturing input, suppress Windows OS arrow in Skyrim client area
-        // to prevent double cursors when transitioning to MapMenu, JournalMenu, etc.
-        if (msg == WM_SETCURSOR && LOWORD(lParam) == HTCLIENT) {
-            while (::ShowCursor(FALSE) >= 0);
-            ::SetCursor(nullptr);
-            return TRUE;
-        }
     }
 
     return ::CallWindowProcA(hook.m_originalWndProc, hWnd, msg, wParam, lParam);
@@ -292,9 +286,6 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
             // kLeftButton = 0, kRightButton = 1, kMiddleButton = 2
             // kWheelUp = 8, kWheelDown = 9
             if (keyCode <= 2) {
-                while (::ShowCursor(TRUE) < 0);
-                ::SetCursor(::LoadCursorA(nullptr, IDC_ARROW));
-
                 POINT pt;
                 if (m_hWnd && ::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
                     m_lastMousePos = pt;
