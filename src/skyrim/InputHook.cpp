@@ -85,8 +85,55 @@ void InputHook::SetCaptureInput(bool capture) {
     if (capture != wasCapturing) {
         auto updateSkyrimCursor = [capture] {
             auto* mc = RE::MenuCursor::GetSingleton();
-            if (mc) {
-                mc->SetCursorVisibility(capture);
+            auto* ui = RE::UI::GetSingleton();
+            auto* queue = RE::UIMessageQueue::GetSingleton();
+
+            if (capture) {
+                if (mc && mc->showCursorCount <= 0) {
+                    mc->SetCursorVisibility(true);
+                }
+                if (ui && queue && !ui->IsMenuOpen(RE::CursorMenu::MENU_NAME)) {
+                    queue->AddMessage(RE::CursorMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
+                }
+            } else {
+                bool hasVanillaCursorMenu = false;
+                if (ui) {
+                    static constexpr std::string_view cursorMenus[] = {
+                        "MapMenu",
+                        "Journal Menu",
+                        "InventoryMenu",
+                        "MagicMenu",
+                        "ContainerMenu",
+                        "BarterMenu",
+                        "FavoritesMenu",
+                        "TweenMenu",
+                        "Lockpicking Menu",
+                        "LevelUp Menu",
+                        "StatsMenu",
+                        "Crafting Menu",
+                        "Console",
+                        "Dialogue Menu",
+                        "CustomMenu",
+                        "MessageBoxMenu"
+                    };
+                    for (const auto& name : cursorMenus) {
+                        if (ui->IsMenuOpen(name)) {
+                            hasVanillaCursorMenu = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!hasVanillaCursorMenu) {
+                    if (mc) {
+                        while (mc->showCursorCount > 0) {
+                            mc->SetCursorVisibility(false);
+                        }
+                    }
+                    if (ui && queue && ui->IsMenuOpen(RE::CursorMenu::MENU_NAME)) {
+                        queue->AddMessage(RE::CursorMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kHide, nullptr);
+                    }
+                }
             }
         };
         if (auto* tasks = SKSE::GetTaskInterface()) {

@@ -27,8 +27,8 @@ void MainMenuWindow::initDefaultSaves() {
 }
 
 void MainMenuWindow::buildUI() {
-    // Fullscreen styling
-    backgroundColor(Color(10, 14, 20, 245));
+    // Fullscreen styling (frosted dark glass so Skyrim native cursor and game backdrop remain visible)
+    backgroundColor(Color(10, 14, 20, 185));
     borderWidth(0.0f);
 
     layout().direction(LayoutDirection::Vertical)

@@ -395,6 +395,12 @@ void D3D11Hook::RenderFrame() {
             float mx = static_cast<float>(pt.x);
             float my = static_cast<float>(pt.y);
             m_uiContext->onMouseMove({ mx, my });
+
+            auto* mc = RE::MenuCursor::GetSingleton();
+            if (mc) {
+                mc->cursorPosX = mx;
+                mc->cursorPosY = my;
+            }
         }
 
         // Drain queued input from background hook
