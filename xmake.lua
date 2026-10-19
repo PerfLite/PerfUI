@@ -11,7 +11,7 @@ add_rules("plugin.vsxmake.autoupdate")
 add_requires("commonlibsse-ng", {optional = true})
 
 target("PerfUI")
-    set_default(false)
+    set_default(true)
     set_kind("shared")
     set_languages("c++20")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN", "PERFUI_BUILD_DLL")
