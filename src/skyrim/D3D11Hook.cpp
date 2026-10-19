@@ -9,6 +9,98 @@
 
 namespace PerfUI::Skyrim {
 
+namespace {
+
+void DrawSkyrimSwordCursor(ImDrawList* fg, ImVec2 pos) {
+    if (!fg) return;
+
+    const float x = pos.x;
+    const float y = pos.y;
+
+    auto drawSword = [&](float ox, float oy, bool isShadow) {
+        ImVec2 tip{ x + ox, y + oy };
+
+        // Blade corners & center ridge
+        ImVec2 bladeLeft{ x + ox + 6.0f, y + oy + 15.0f };
+        ImVec2 bladeRight{ x + ox + 15.0f, y + oy + 6.0f };
+        ImVec2 bladeCenter{ x + ox + 10.5f, y + oy + 10.5f };
+
+        // Crossguard
+        ImVec2 guardLeftTip{ x + ox + 4.0f, y + oy + 17.5f };
+        ImVec2 guardLeftBase{ x + ox + 6.0f, y + oy + 19.5f };
+        ImVec2 guardRightBase{ x + ox + 19.5f, y + oy + 6.0f };
+        ImVec2 guardRightTip{ x + ox + 17.5f, y + oy + 4.0f };
+
+        // Grip / Hilt
+        ImVec2 gripLeft1{ x + ox + 11.5f, y + oy + 13.5f };
+        ImVec2 gripRight1{ x + ox + 13.5f, y + oy + 11.5f };
+        ImVec2 gripLeft2{ x + ox + 16.5f, y + oy + 18.5f };
+        ImVec2 gripRight2{ x + ox + 18.5f, y + oy + 16.5f };
+
+        // Pommel
+        ImVec2 pommelTop{ x + ox + 17.5f, y + oy + 17.5f };
+        ImVec2 pommelLeft{ x + ox + 16.0f, y + oy + 20.0f };
+        ImVec2 pommelTip{ x + ox + 21.0f, y + oy + 21.0f };
+        ImVec2 pommelRight{ x + ox + 20.0f, y + oy + 16.0f };
+
+        if (isShadow) {
+            ImU32 shadowCol = IM_COL32(0, 0, 0, 115);
+            fg->AddTriangleFilled(tip, bladeLeft, bladeCenter, shadowCol);
+            fg->AddTriangleFilled(tip, bladeCenter, bladeRight, shadowCol);
+            fg->AddQuadFilled(guardLeftTip, guardRightTip, guardRightBase, guardLeftBase, shadowCol);
+            fg->AddQuadFilled(gripLeft1, gripRight1, gripRight2, gripLeft2, shadowCol);
+            fg->AddQuadFilled(pommelTop, pommelRight, pommelTip, pommelLeft, shadowCol);
+            return;
+        }
+
+        // 1. Grip (Dark leather wrapped handle with wire details)
+        fg->AddQuadFilled(gripLeft1, gripRight1, gripRight2, gripLeft2, IM_COL32(36, 30, 26, 255));
+        fg->AddLine(ImVec2(x + ox + 13.0f, y + oy + 15.0f), ImVec2(x + ox + 15.0f, y + oy + 13.0f), IM_COL32(190, 160, 95, 220), 1.0f);
+        fg->AddLine(ImVec2(x + ox + 14.8f, y + oy + 16.8f), ImVec2(x + ox + 16.8f, y + oy + 14.8f), IM_COL32(190, 160, 95, 220), 1.0f);
+
+        // 2. Pommel (Polished steel diamond)
+        fg->AddQuadFilled(pommelTop, pommelRight, pommelTip, pommelLeft, IM_COL32(215, 225, 238, 255));
+
+        // 3. Crossguard (Winged steel quillons)
+        fg->AddQuadFilled(guardLeftTip, guardRightTip, guardRightBase, guardLeftBase, IM_COL32(170, 180, 195, 255));
+        fg->AddLine(guardLeftTip, guardRightTip, IM_COL32(245, 250, 255, 255), 1.0f);
+
+        // 4. Blade Left Half (Bright polished silver steel facet)
+        fg->AddTriangleFilled(tip, bladeLeft, bladeCenter, IM_COL32(238, 244, 252, 255));
+
+        // 5. Blade Right Half (Shaded steel facet)
+        fg->AddTriangleFilled(tip, bladeCenter, bladeRight, IM_COL32(142, 152, 168, 255));
+
+        // 6. Central Ridge Highlight Line (Fuller gleam)
+        fg->AddLine(tip, bladeCenter, IM_COL32(255, 255, 255, 230), 1.0f);
+
+        // 7. Dark Crisp Outer Silhouette
+        ImVec2 outlinePoints[] = {
+            tip,
+            bladeLeft,
+            guardLeftTip,
+            guardLeftBase,
+            gripLeft2,
+            pommelLeft,
+            pommelTip,
+            pommelRight,
+            gripRight2,
+            guardRightBase,
+            guardRightTip,
+            bladeRight
+        };
+        fg->AddPolyline(outlinePoints, 12, IM_COL32(20, 24, 30, 240), ImDrawFlags_Closed, 1.2f);
+    };
+
+    // Draw drop shadow shifted by (+1.5, +1.5)
+    drawSword(1.5f, 1.5f, true);
+
+    // Draw authentic sword cursor
+    drawSword(0.0f, 0.0f, false);
+}
+
+} // namespace
+
 // Demo test element for Skyrim verification
 class SkyrimDemoCard : public PerfUI::UIElement {
 public:
@@ -440,6 +532,13 @@ void D3D11Hook::RenderFrame() {
 
     m_uiContext->update(dt);
     m_uiContext->render(*m_renderBackend, anyTreeVisible);
+
+    if (anyTreeVisible) {
+        POINT pt;
+        if (::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
+            DrawSkyrimSwordCursor(ImGui::GetForegroundDrawList(), ImVec2(static_cast<float>(pt.x), static_cast<float>(pt.y)));
+        }
+    }
 
     ImGui::Render();
 
