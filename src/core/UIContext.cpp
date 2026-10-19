@@ -401,6 +401,21 @@ void UIContext::onKeyDown(int keyCode) {
             }
         }
     }
+
+    // Fallback standard navigation handlers
+    if (keyCode == 0x0D /* VK_RETURN */ || keyCode == 0x20 /* VK_SPACE */) {
+        onSubmit();
+    } else if (keyCode == 0x1B /* VK_ESCAPE */) {
+        onCancel();
+    } else if (keyCode == 0x26 /* VK_UP */) {
+        onNavigate(NavDirection::Up);
+    } else if (keyCode == 0x28 /* VK_DOWN */) {
+        onNavigate(NavDirection::Down);
+    } else if (keyCode == 0x25 /* VK_LEFT */) {
+        onNavigate(NavDirection::Left);
+    } else if (keyCode == 0x27 /* VK_RIGHT */) {
+        onNavigate(NavDirection::Right);
+    }
 }
 
 void UIContext::setActiveComboBox(ComboBox* cb) {

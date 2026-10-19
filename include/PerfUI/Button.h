@@ -72,6 +72,7 @@ public:
     bool onPointerDown(const Point& localPoint) override;
     bool onPointerUp(const Point& localPoint) override;
     bool onAction(NavDirection dir) override;
+    bool onKeyDown(int keyCode) override;
 
 private:
     std::string m_label;

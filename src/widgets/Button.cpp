@@ -129,8 +129,9 @@ bool Button::onPointerUp(const Point& localPoint) {
     bool wasPressed = m_pressed;
     UIElement::onPointerUp(localPoint);
 
-    bool inside = (localPoint.x >= 0.0f && localPoint.x <= m_bounds.width &&
-                   localPoint.y >= 0.0f && localPoint.y <= m_bounds.height);
+    // Generous 6px hit margin for comfortable, reliable clicking
+    bool inside = (localPoint.x >= -6.0f && localPoint.x <= m_bounds.width + 6.0f &&
+                   localPoint.y >= -6.0f && localPoint.y <= m_bounds.height + 6.0f);
 
     if (wasPressed || inside) {
         if (m_onClick) {
@@ -145,6 +146,16 @@ bool Button::onAction(NavDirection dir) {
     if (m_onClick) {
         m_onClick();
         return true;
+    }
+    return false;
+}
+
+bool Button::onKeyDown(int keyCode) {
+    if (keyCode == 0x0D /* VK_RETURN */ || keyCode == 0x20 /* VK_SPACE */ || keyCode == 'E' || keyCode == 'e') {
+        if (m_onClick) {
+            m_onClick();
+            return true;
+        }
     }
     return false;
 }

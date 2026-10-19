@@ -147,7 +147,6 @@ void UIElement::onPointerEnter() {
 
 void UIElement::onPointerLeave() {
     m_hovered = false;
-    m_pressed = false;
 }
 
 bool UIElement::onMouseWheel(float delta, const Point& localPoint) {

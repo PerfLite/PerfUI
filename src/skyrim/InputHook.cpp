@@ -98,7 +98,8 @@ void InputHook::SetCaptureInput(bool capture) {
                 if (ui) {
                     auto cursorMenu = ui->GetMenu(RE::CursorMenu::MENU_NAME);
                     if (cursorMenu && cursorMenu->uiMovie) {
-                        cursorMenu->uiMovie->SetVisible(false);
+                        cursorMenu->uiMovie->SetVariableDouble("_root._alpha", 0.0);
+                        cursorMenu->uiMovie->SetVariableDouble("_root.Cursor._alpha", 0.0);
                     }
                 }
             } else {
@@ -217,15 +218,18 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
 
         switch (msg) {
         case WM_MOUSEMOVE: {
-            float x = static_cast<float>(GET_X_LPARAM(lParam));
-            float y = static_cast<float>(GET_Y_LPARAM(lParam));
-            hook.m_lastMousePos = { static_cast<LONG>(x), static_cast<LONG>(y) };
-            hook.PushInput({ QueuedInput::Type::MouseMove, 0, x, y });
+            POINT pt;
+            if (!::GetCursorPos(&pt) || !::ScreenToClient(hWnd, &pt)) {
+                pt.x = GET_X_LPARAM(lParam);
+                pt.y = GET_Y_LPARAM(lParam);
+            }
+            hook.m_lastMousePos = pt;
+            hook.PushInput({ QueuedInput::Type::MouseMove, 0, static_cast<float>(pt.x), static_cast<float>(pt.y) });
 
             auto* mc = RE::MenuCursor::GetSingleton();
             if (mc) {
-                mc->cursorPosX = x;
-                mc->cursorPosY = y;
+                mc->cursorPosX = static_cast<float>(pt.x);
+                mc->cursorPosY = static_cast<float>(pt.y);
             }
             return 0;
         }
@@ -251,8 +255,7 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
                 mc->cursorPosY = static_cast<float>(pt.y);
             }
 
-            if (!hook.m_mouseButtonDown[btn]) {
-                hook.m_mouseButtonDown[btn] = true;
+            if (!hook.m_mouseButtonDown[btn].exchange(true)) {
                 hook.PushInput({ QueuedInput::Type::MouseDown, btn, static_cast<float>(pt.x), static_cast<float>(pt.y) });
             }
             return 0;
@@ -275,8 +278,7 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
                 mc->cursorPosY = static_cast<float>(pt.y);
             }
 
-            if (hook.m_mouseButtonDown[btn]) {
-                hook.m_mouseButtonDown[btn] = false;
+            if (hook.m_mouseButtonDown[btn].exchange(false)) {
                 hook.PushInput({ QueuedInput::Type::MouseUp, btn, static_cast<float>(pt.x), static_cast<float>(pt.y) });
             }
             return 0;
@@ -353,12 +355,14 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
                 }
 
                 bool isPressed = btnEvent->IsPressed();
-                if (isPressed && !m_mouseButtonDown[keyCode]) {
-                    m_mouseButtonDown[keyCode] = true;
-                    PushInput({ QueuedInput::Type::MouseDown, static_cast<int>(keyCode), static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y) });
-                } else if (!isPressed && m_mouseButtonDown[keyCode]) {
-                    m_mouseButtonDown[keyCode] = false;
-                    PushInput({ QueuedInput::Type::MouseUp, static_cast<int>(keyCode), static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y) });
+                if (isPressed) {
+                    if (!m_mouseButtonDown[keyCode].exchange(true)) {
+                        PushInput({ QueuedInput::Type::MouseDown, static_cast<int>(keyCode), static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y) });
+                    }
+                } else {
+                    if (m_mouseButtonDown[keyCode].exchange(false)) {
+                        PushInput({ QueuedInput::Type::MouseUp, static_cast<int>(keyCode), static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y) });
+                    }
                 }
             } else if (keyCode == 8) {
                 if (btnEvent->IsDown()) {
@@ -371,6 +375,38 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
             }
         }
 
+        // Keyboard keys: device == kKeyboard, type == kButton
+        if (event->GetDevice() == RE::INPUT_DEVICE::kKeyboard &&
+            event->GetEventType() == RE::INPUT_EVENT_TYPE::kButton)
+        {
+            auto* btnEvent = event->AsButtonEvent();
+            if (btnEvent && btnEvent->IsDown()) {
+                uint32_t scanCode = btnEvent->GetIDCode();
+                int vk = 0;
+                switch (scanCode) {
+                case 0xC8: vk = VK_UP; break;
+                case 0xD0: vk = VK_DOWN; break;
+                case 0xCB: vk = VK_LEFT; break;
+                case 0xCD: vk = VK_RIGHT; break;
+                case 0x1C: vk = VK_RETURN; break;
+                case 0x9C: vk = VK_RETURN; break; // Numpad Enter
+                case 0x39: vk = VK_SPACE; break;
+                case 0x01: vk = VK_ESCAPE; break;
+                case 0x0F: vk = VK_TAB; break;
+                case 0x12: vk = 'E'; break;
+                case 0x11: vk = 'W'; break;
+                case 0x1F: vk = 'S'; break;
+                case 0x1E: vk = 'A'; break;
+                case 0x20: vk = 'D'; break;
+                default:
+                    vk = static_cast<int>(::MapVirtualKeyA(scanCode & 0xFF, MAPVK_VSC_TO_VK));
+                    break;
+                }
+                if (vk > 0) {
+                    PushInput({ QueuedInput::Type::KeyDown, 0, 0.0f, 0.0f, 0.0f, 0, vk });
+                }
+            }
+        }
     }
 
     if (m_captureKeyboard.load()) {
