@@ -70,45 +70,88 @@ void DrawSkyrimSwordCursor(ImDrawList* fg, ImVec2 pos) {
         );
     };
 
-    // 1. Double-layer smooth drop shadow (casts realistic ambient & contact shadow behind sword)
-    auto drawShadowSilhouette = [&](float ox, float oy, ImU32 col) {
-        ImVec2 shadowPoly[] = {
-            pt(0.0f, 0.0f, ox, oy),       // Needle Tip
-            pt(2.5f, -1.0f, ox, oy),
-            pt(9.0f, -1.9f, ox, oy),
-            pt(17.5f, -2.4f, ox, oy),     // Upper blade base
-            pt(17.2f, -5.2f, ox, oy),     // Upper guard knuckle
-            pt(15.8f, -9.0f, ox, oy),     // Upper quillon forward swept wing tip
-            pt(18.8f, -9.5f, ox, oy),     // Upper quillon outer flare
-            pt(20.0f, -7.8f, ox, oy),     // Upper quillon rear return
-            pt(20.0f, -1.6f, ox, oy),     // Upper guard base
-            pt(20.2f, -1.6f, ox, oy),     // Grip top-left
-            pt(23.5f, -1.4f, ox, oy),     // Grip waist
-            pt(26.8f, -1.6f, ox, oy),     // Grip base
-            pt(27.3f, -3.0f, ox, oy),     // Pommel upper diamond corner
-            pt(30.6f, 0.0f, ox, oy),      // Pommel peen block
-            pt(27.3f, 3.0f, ox, oy),      // Pommel lower diamond corner
-            pt(26.8f, 1.6f, ox, oy),      // Grip base lower
-            pt(23.5f, 1.4f, ox, oy),      // Grip waist lower
-            pt(20.2f, 1.6f, ox, oy),      // Grip top-right
-            pt(20.0f, 1.6f, ox, oy),      // Lower guard base
-            pt(20.0f, 7.8f, ox, oy),      // Lower quillon rear return
-            pt(18.8f, 9.5f, ox, oy),      // Lower quillon outer flare
-            pt(15.8f, 9.0f, ox, oy),      // Lower quillon forward swept wing tip
-            pt(17.2f, 5.2f, ox, oy),      // Lower guard knuckle
-            pt(17.5f, 2.4f, ox, oy),      // Lower blade base
-            pt(9.0f, 1.9f, ox, oy),
-            pt(2.5f, 1.0f, ox, oy)
+    // 1. Double-layer smooth drop shadow (decomposed into convex polygons to avoid concave triangle-fan artifacts)
+    auto drawShadowParts = [&](float ox, float oy, ImU32 col) {
+        // Blade shadow (split into upper & lower convex halves)
+        ImVec2 s_tip = pt(0.0f, 0.0f, ox, oy);
+        ImVec2 s_b1L = pt(2.5f, -1.0f, ox, oy);
+        ImVec2 s_b1R = pt(2.5f, 1.0f, ox, oy);
+        ImVec2 s_b1C = pt(2.5f, 0.0f, ox, oy);
+        ImVec2 s_b2L = pt(9.0f, -1.9f, ox, oy);
+        ImVec2 s_b2R = pt(9.0f, 1.9f, ox, oy);
+        ImVec2 s_b2C = pt(9.0f, 0.0f, ox, oy);
+        ImVec2 s_b3L = pt(17.5f, -2.4f, ox, oy);
+        ImVec2 s_b3R = pt(17.5f, 2.4f, ox, oy);
+        ImVec2 s_b3C = pt(17.5f, 0.0f, ox, oy);
+
+        fg->AddTriangleFilled(s_tip, s_b1L, s_b1C, col);
+        fg->AddQuadFilled(s_b1L, s_b2L, s_b2C, s_b1C, col);
+        fg->AddQuadFilled(s_b2L, s_b3L, s_b3C, s_b2C, col);
+
+        fg->AddTriangleFilled(s_tip, s_b1C, s_b1R, col);
+        fg->AddQuadFilled(s_b1C, s_b2C, s_b2R, s_b1R, col);
+        fg->AddQuadFilled(s_b2C, s_b3C, s_b3R, s_b2R, col);
+
+        // Guard shadow
+        ImVec2 s_gMid  = pt(17.6f, 0.0f, ox, oy);
+        ImVec2 s_qUK   = pt(17.2f, -5.2f, ox, oy);
+        ImVec2 s_qUTip = pt(15.8f, -9.0f, ox, oy);
+        ImVec2 s_qUFlr = pt(18.8f, -9.5f, ox, oy);
+        ImVec2 s_qURr  = pt(20.0f, -7.8f, ox, oy);
+        ImVec2 s_qUBs  = pt(20.0f, -1.6f, ox, oy);
+
+        ImVec2 s_qLK   = pt(17.2f, 5.2f, ox, oy);
+        ImVec2 s_qLTip = pt(15.8f, 9.0f, ox, oy);
+        ImVec2 s_qLFlr = pt(18.8f, 9.5f, ox, oy);
+        ImVec2 s_qLRr  = pt(20.0f, 7.8f, ox, oy);
+        ImVec2 s_qLBs  = pt(20.0f, 1.6f, ox, oy);
+
+        fg->AddTriangleFilled(s_gMid, s_qUK, s_qUBs, col);
+        fg->AddQuadFilled(s_qUK, s_qUTip, s_qUFlr, s_qURr, col);
+        fg->AddTriangleFilled(s_qUK, s_qURr, s_qUBs, col);
+
+        fg->AddTriangleFilled(s_gMid, s_qLBs, s_qLK, col);
+        fg->AddQuadFilled(s_qLK, s_qLTip, s_qLFlr, s_qLRr, col);
+        fg->AddTriangleFilled(s_qLK, s_qLRr, s_qLBs, col);
+
+        fg->AddQuadFilled(s_b3L, s_b3R, s_qLBs, s_qUBs, col);
+
+        // Grip shadow
+        ImVec2 s_gTL = pt(20.2f, -1.6f, ox, oy);
+        ImVec2 s_gTR = pt(20.2f, 1.6f, ox, oy);
+        ImVec2 s_gML = pt(23.5f, -1.4f, ox, oy);
+        ImVec2 s_gMR = pt(23.5f, 1.4f, ox, oy);
+        ImVec2 s_gBL = pt(26.8f, -1.6f, ox, oy);
+        ImVec2 s_gBR = pt(26.8f, 1.6f, ox, oy);
+        fg->AddQuadFilled(s_gTL, s_gTR, s_gMR, s_gML, col);
+        fg->AddQuadFilled(s_gML, s_gMR, s_gBR, s_gBL, col);
+
+        // Pommel shadow
+        ImVec2 s_pF = pt(26.8f, 0.0f, ox, oy);
+        ImVec2 s_pT = pt(27.3f, -3.0f, ox, oy);
+        ImVec2 s_pE = pt(30.6f, 0.0f, ox, oy);
+        ImVec2 s_pB = pt(27.3f, 3.0f, ox, oy);
+        fg->AddTriangleFilled(s_pF, s_pT, s_pE, col);
+        fg->AddTriangleFilled(s_pF, s_pE, s_pB, col);
+
+        // Feathered silhouette outline for soft contact shadow
+        ImVec2 s_poly[] = {
+            s_tip, s_b1L, s_b2L, s_b3L,
+            s_qUK, s_qUTip, s_qUFlr, s_qURr, s_qUBs,
+            s_gTL, s_gML, s_gBL,
+            s_pT, s_pE, s_pB,
+            s_gBR, s_gMR, s_gTR,
+            s_qLBs, s_qLRr, s_qLFlr, s_qLTip, s_qLK,
+            s_b3R, s_b2R, s_b1R
         };
-        constexpr int nPts = sizeof(shadowPoly) / sizeof(shadowPoly[0]);
-        fg->AddConvexPolyFilled(shadowPoly, nPts, col);
-        fg->AddPolyline(shadowPoly, nPts, col, ImDrawFlags_Closed, 1.6f);
+        constexpr int nShadowPts = sizeof(s_poly) / sizeof(s_poly[0]);
+        fg->AddPolyline(s_poly, nShadowPts, col, ImDrawFlags_Closed, 1.5f);
     };
 
-    // Soft ambient shadow
-    drawShadowSilhouette(2.4f, 2.8f, IM_COL32(0, 0, 0, 75));
-    // Tight contact shadow
-    drawShadowSilhouette(1.0f, 1.2f, IM_COL32(0, 0, 0, 160));
+    // Layer 1: Ambient soft blur shadow
+    drawShadowParts(2.0f, 2.5f, IM_COL32(0, 0, 0, 50));
+    // Layer 2: Focused contact shadow
+    drawShadowParts(1.0f, 1.2f, IM_COL32(0, 0, 0, 110));
 
     // 2. Ergonomic Dark Leather Grip
     ImVec2 gripTopL = pt(20.2f, -1.6f);
