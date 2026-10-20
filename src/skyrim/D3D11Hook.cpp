@@ -728,9 +728,8 @@ void D3D11Hook::RenderFrame() {
         auto* ui = RE::UI::GetSingleton();
         if (ui) {
             auto cursorMenu = ui->GetMenu(RE::CursorMenu::MENU_NAME);
-            if (cursorMenu && cursorMenu->uiMovie) {
-                cursorMenu->uiMovie->SetVariableDouble("_root._alpha", 0.0);
-                cursorMenu->uiMovie->SetVariableDouble("_root.Cursor._alpha", 0.0);
+            if (cursorMenu && cursorMenu->uiMovie && cursorMenu->uiMovie->GetVisible()) {
+                cursorMenu->uiMovie->SetVisible(false);
             }
         }
 

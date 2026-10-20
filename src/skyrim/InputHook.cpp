@@ -31,11 +31,13 @@ static void Hooked_CursorMenu_AdvanceMovie(RE::CursorMenu* a_this, float a_inter
     if (a_this && a_this->uiMovie) {
         bool shouldSuppressVanillaCursor = D3D11Hook::GetSingleton().IsCursorNeeded();
         if (shouldSuppressVanillaCursor) {
-            a_this->uiMovie->SetVariableDouble("_root._alpha", 0.0);
-            a_this->uiMovie->SetVariableDouble("_root.Cursor._alpha", 0.0);
+            if (a_this->uiMovie->GetVisible()) {
+                a_this->uiMovie->SetVisible(false);
+            }
         } else {
-            a_this->uiMovie->SetVariableDouble("_root._alpha", 100.0);
-            a_this->uiMovie->SetVariableDouble("_root.Cursor._alpha", 100.0);
+            if (!a_this->uiMovie->GetVisible()) {
+                a_this->uiMovie->SetVisible(true);
+            }
         }
     }
     s_originalCursorAdvanceMovie(a_this, a_interval, a_currentTime);
