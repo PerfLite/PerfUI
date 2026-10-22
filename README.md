@@ -2,6 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/PerfLite/PerfUI/actions/workflows/build.yml/badge.svg)](https://github.com/PerfLite/PerfUI/actions)
+[![Version: 0.1.0--alpha](https://img.shields.io/badge/Version-0.1.0--alpha-orange.svg)](ROADMAP.md)
 [![C++20](https://img.shields.io/badge/Language-C%2B%2B20-f34b7d.svg)](https://en.cppreference.com/w/cpp/20)
 [![DirectX 11](https://img.shields.io/badge/Renderer-DirectX%2011-0078D6.svg)](https://learn.microsoft.com/en-us/windows/win32/direct3d11/atoc-dx-graphics-direct3d-11)
 [![Skyrim SE / AE](https://img.shields.io/badge/Skyrim-SE%201.5.97%20%7C%20AE%201.6%2B-555555.svg)](https://skse.silverlock.org/)
@@ -17,14 +18,19 @@
 
 It provides mod authors and game developers with an intuitive, modern object-oriented API for building complex, fluid, gamepad-friendly in-game menus, HUD overlays, journal windows, and configuration interfaces.
 
+> **Status: Alpha (`v0.1.0-alpha`)** — Core architecture, retained scene graph, layout engine, SVG vector rendering, XML markup, and Skyrim DirectX 11 hooks are fully functional. Active development and in-game pilot testing are ongoing.
+
 ---
 
 ## 🌟 Acknowledgments & Third-Party Credits
 
-PerfUI utilizes **[Dear ImGui](https://github.com/ocornut/imgui)** (created by [Omar Cornut](https://github.com/ocornut) and contributors) as its primary rendering backend foundation (`ImDrawList` vertex buffer pipeline).
+PerfUI utilizes several proven open-source libraries as underlying engine foundations while maintaining strict interface abstraction:
 
-* **[Dear ImGui GitHub Repository](https://github.com/ocornut/imgui)**
-* **License:** Dear ImGui is licensed under the [MIT License](https://github.com/ocornut/imgui/blob/master/LICENSE.txt).
+* **[Dear ImGui](https://github.com/ocornut/imgui)** (Omar Cornut and contributors) — Primary 2D rendering backend foundation (`ImDrawList` vertex buffer pipeline). Licensed under [MIT](https://github.com/ocornut/imgui/blob/master/LICENSE.txt).
+* **[NanoSVG](https://github.com/memononen/nanosvg)** (Mikko Mononen) — Ultra-lightweight C99 SVG vector parser and rasterizer. Licensed under [zlib](https://github.com/memononen/nanosvg/blob/master/LICENSE.txt).
+* **[pugixml](https://github.com/zeux/pugixml)** (Arseny Kapoulkine) — Fast, light C++ XML parser used for declarative UI markup and hot-reload. Licensed under [MIT](https://github.com/zeux/pugixml/blob/master/LICENSE.md).
+* **[stb](https://github.com/nothings/stb)** (Sean Barrett) — Public domain / MIT single-header image decoding (`stb_image.h`).
+* **[CommonLibSSE-ng](https://github.com/CharmedBaryon/CommonLibSSE-ng)** (CharmedBaryon and contributors) — Reverse-engineered Skyrim engine wrapper. Licensed under [MIT](https://github.com/CharmedBaryon/CommonLibSSE-ng/blob/main/LICENSE).
 
 ### The Decoupling Principle
 While Dear ImGui powers low-level font rendering and 2D vector primitives, **PerfUI's public API never exposes `<imgui.h>`**. All client and widget code interacts exclusively with PerfUI's retained scene graph and the abstract `UIRenderBackend` interface. This allows future renderer backends (native D3D11, Vulkan, or D3D12) to be swapped in seamlessly without modifying a single line of client UI code.
@@ -36,15 +42,22 @@ While Dear ImGui powers low-level font rendering and 2D vector primitives, **Per
 * **Retained-Mode Scene Graph:** Hierarchical DOM-like element tree (`UIElement`, `UIWindow`, `Panel`) with dirty-flag layout optimization.
 * **Flexbox & Stack Layout Engine:** Automatic layout calculation, flex-grow/shrink, alignment, padding, margins, and auto-sizing.
 * **Controller & Gamepad First:** Full focus-graph navigation supporting D-Pad, Thumbsticks, Keyboard, and Mouse with automatic spatial focus transitions.
+* **Authentic Masterwork Nordic Sword Cursor:**
+  * Global hardware-accurate Skyrim sword cursor rendered in the foreground draw list with soft drop shadows.
+  * Zero-conflict Scaleform integration: hooks Skyrim's `CursorMenu` without Flash null-pointer dereferences or cursor disappearance bugs.
+* **Native Vector SVG Graphics:**
+  * Embedded NanoSVG parser and rasterizer (`SvgImage` widget, `SvgService`).
+  * Crisp, resolution-independent vector rendering at any display scale or 4K/ultrawide resolution with zero browser runtime overhead.
+  * Direct declarative XML support (`<SvgImage src="..." width="32" height="32" />`).
 * **Rich Modern Widget Library:**
-  * Containers & Windows: `UIWindow`, `Panel`, `ScrollView`, `ModalDialog`, `ContextMenu`, `TabBar`
-  * Controls: `Button`, `Checkbox`, `Slider`, `ComboBox`, `TextInput`, `ProgressBar`
-  * Display: `Text`, `Image`, `Toast` notifications
-* **Nordic Skyrim Styling & Aesthetics:** Built-in Skyrim-authentic themes (parchment, dark charcoal slate, gold and silver trim, runes, ambient glass depth).
+  * **Containers & Windows:** `UIWindow`, `Panel`, `ScrollView`, `ModalDialog`, `ContextMenu`, `TabBar`, `Accordion`, `Sidebar`, `CategoryList`.
+  * **Controls:** `Button`, `Checkbox`, `Slider`, `ComboBox`, `TextInput`, `ProgressBar`, `Switch`, `RadioButton`, `RadioGroup`, `KeybindSelector`, `SegmentedControl`.
+  * **Display & Data:** `Text`, `TextArea`, `Image`, `SvgImage`, `Toast`, `Notification`, `ItemSlot`, `SearchableList`, `QuestTracker`, `MapCanvas` (radar & world modes), `Divider`, `Spacer`.
+* **Theme Tokens & Skyrim Aesthetics:** Built-in design token system with 4 visual presets: `SkyrimClassic`, `NordicDark`, `GlassFrost`, `WarmParchment`.
 * **Animation & State Engine:** Smooth easing functions, transitions, hover/active glow effects, and auto-fade mechanisms.
-* **Cyrillic & Localization Ready:** Native UTF-8 string support with Cyrillic glyph range preloading (`GetGlyphRangesCyrillic`) and Windows system font fallback (Segoe UI / Arial / custom TTF).
-* **Skyrim Game Services:** Bridge for playing native UI sound descriptors, querying quests/stats, and hooking into the DirectX 11 Present loop.
-* **Declarative XML Markup & Instant Hot-Reload:** Separate lightweight static library (`PerfUI_Markup`) allowing authors to declare complex UIs in XML, bind C++ callbacks by name, and edit layouts live with instant state-preserving hot-reload. See [docs/MARKUP.md](docs/MARKUP.md).
+* **Cyrillic & Typography Ready:** Native UTF-8 string support with Cyrillic glyph range preloading (`GetGlyphRangesCyrillic`) and merged Segoe UI Symbol font for quest diamond markers, dingbats, and geometric symbols.
+* **Skyrim Game Services:** Safe bridge for playing native UI sound descriptors, querying quests/stats, and hooking into the DirectX 11 Present loop.
+* **Declarative XML Markup & Instant Hot-Reload:** Static library (`PerfUI_Markup`) allowing authors to declare complex UIs in XML, bind C++ callbacks by name, and edit layouts live with instant state-preserving hot-reload. See [docs/MARKUP.md](docs/MARKUP.md).
 
 ---
 
@@ -84,7 +97,7 @@ Measurements taken on Windows 11 x64 (MSVC 2022 v143, Release Build):
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        PerfUI Public API Layer                         │
-│   UIContext, UIWindow, Panel, Button, Text, ScrollView, Slider, etc.   │
+│   UIContext, UIWindow, Panel, Button, Text, SvgImage, MapCanvas, etc.  │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
                                     ▼
@@ -92,9 +105,10 @@ Measurements taken on Windows 11 x64 (MSVC 2022 v143, Release Build):
 │                              PerfUI Core                               │
 │  ├── Retained UI Tree (UIElement, Hierarchy, Memory Lifecycle)         │
 │  ├── Layout Engine (Flex / Box Model / Anchoring)                     │
-│  ├── Styling & Theme Engine (Brushes, Palettes, Metrics, Fonts)        │
+│  ├── Styling & Theme Engine (Tokens, Brushes, Palettes, Fonts)         │
 │  ├── Animation Engine (Interpolation, Easing Curves)                   │
 │  ├── Input & Focus Graph (Gamepad D-Pad, Mouse, Keyboard Capture)      │
+│  ├── Vector Graphics Service (NanoSVG rasterization)                   │
 │  └── Event System (Bubbling, Tunneling, Direct Callbacks)              │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
@@ -127,7 +141,7 @@ Creating an interactive window with `UIWindow` and flexbox layout:
 void CreateMyCustomMenu(PerfUI::UIContext& context) {
     // 1. Create a top-level window with title bar and close button
     auto* window = context.root()->add<PerfUI::UIWindow>("My Mod Configuration");
-    window->setBounds(PerfUI::Rect{ 100.0f, 100.0f, 480.0f, 340.0f });
+    window->setBounds(PerfUI::Rect{ 100.0f, 100.0f, 480.0f, 360.0f });
     window->layout()
         .direction(PerfUI::LayoutDirection::Vertical)
         .padding(16.0f)
@@ -162,40 +176,66 @@ void CreateMyCustomMenu(PerfUI::UIContext& context) {
 ```text
 PerfUI/
 ├── include/PerfUI/         # Public header files (No ImGui headers exposed!)
+│   ├── Accordion.h         # Collapsible accordion container
 │   ├── Animation.h         # Tweening & easing helpers
 │   ├── Button.h            # Button widget
+│   ├── CategoryList.h      # Categorized list with icons
 │   ├── Checkbox.h          # Checkbox widget
 │   ├── ComboBox.h          # Dropdown combo box widget
 │   ├── ContextMenu.h       # Popup context menu
+│   ├── Divider.h           # Visual separator line
+│   ├── ItemSlot.h          # Inventory item slot with rarity border
+│   ├── KeybindSelector.h   # Keyboard/gamepad key binding control
+│   ├── MapCanvas.h         # Interactive map & radar canvas widget
 │   ├── ModalDialog.h       # Modal dialog window
+│   ├── Notification.h      # Toast & banner notifications
 │   ├── Panel.h             # Flexible container panel
 │   ├── ProgressBar.h       # Progress bar widget
+│   ├── QuestTracker.h      # Quest tracking HUD widget
+│   ├── RadioButton.h       # Single choice radio button
+│   ├── RadioGroup.h        # Radio button grouping container
 │   ├── ScrollView.h        # Scrollable container view
+│   ├── SearchableList.h    # Filterable item list
+│   ├── SegmentedControl.h  # Segmented button group
+│   ├── Sidebar.h           # Collapsible navigation sidebar
 │   ├── Slider.h            # Numeric slider control
+│   ├── Spacer.h            # Flexible layout spacer
+│   ├── SvgImage.h          # Native vector SVG rendering widget
+│   ├── SvgService.h        # SVG parsing and rasterization cache
+│   ├── Switch.h            # Toggle switch control
 │   ├── TabBar.h            # Tab navigation widget
 │   ├── Text.h              # Text display widget
-│   ├── TextInput.h         # Text input box
-│   ├── Theme.h             # Colors, metrics, and themes
+│   ├── TextArea.h          # Multi-line text display & editor
+│   ├── TextInput.h         # Single-line text input box
+│   ├── Theme.h             # Design tokens, metrics, and themes
 │   ├── Toast.h             # Pop-up toast notifications
 │   ├── UIContext.h         # Root framework context
 │   ├── UIElement.h         # Base retained element
 │   └── UIWindow.h          # Top-level window with titlebar & close button
+│   └── Markup/             # Declarative XML Markup headers
+│       ├── MarkupLoader.h  # XML loader with hot-reload engine
+│       ├── MarkupTypes.h   # Markup parser structures
+│       └── WidgetRegistry.h# Tag-to-widget registration factory
 ├── src/                    # Implementation files
 │   ├── backends/           # Render backends (ImGui, Mock headless backend)
 │   ├── core/               # Core runtime, context, memory lifecycle
 │   ├── layout/             # Flexbox and box-model layout engine
-│   ├── skyrim/             # DirectX 11 hook, SKSE plugin, audio bridge
+│   ├── skyrim/             # DirectX 11 hook, SKSE plugin, CursorMenu hook, audio bridge
 │   └── widgets/            # Widget implementations
 ├── tests/                  # Automated unit test suite
 │   ├── BackendIndependenceTest.cpp # Proof of 100% backend independence
-│   └── LayoutTest.cpp      # Flex-grow, padding, auto-size & 500-widget benchmark
+│   ├── LayoutTest.cpp      # Flex-grow, padding, auto-size & 500-widget benchmark
+│   └── MarkupTest.cpp      # Declarative XML markup and hot-reload tests
 ├── examples/               # Sample implementations for modders
 │   ├── modder_custom_hud/  # Custom HUD widget example
 │   ├── modder_menu_plugin/ # Interactive SKSE mod menu window example
-│   └── sandbox/            # Standalone Win32/D3D11 desktop sandbox
+│   └── sandbox/            # Standalone Win32/D3D11 desktop showcase sandbox
 ├── third_party/
-│   └── imgui/              # Dear ImGui library (Omar Cornut - MIT License)
-├── docs/                   # Documentation and assets
+│   ├── imgui/              # Dear ImGui library (Omar Cornut - MIT License)
+│   ├── nanosvg/            # NanoSVG vector parser & rasterizer (Mikko Mononen - zlib License)
+│   ├── pugixml/            # Fast XML parser (Arseny Kapoulkine - MIT License)
+│   └── stb/                # STB single-header libraries (Sean Barrett - MIT / Public Domain)
+├── docs/                   # Documentation and guides
 ├── CMakeLists.txt          # CMake build configuration
 ├── xmake.lua               # XMake build script
 ├── LICENSE                 # MIT License
@@ -223,13 +263,16 @@ xmake run PerfUI_Test_Layout
 
 # Build & run backend independence test
 xmake run PerfUI_Test_Independence
+
+# Build & run markup tests
+xmake run PerfUI_Test_Markup
 ```
 
 ### Building with CMake
 
 ```powershell
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release --target PerfUI_Test_Layout PerfUI_Test_Independence
+cmake --build build --config Release --target PerfUI_Test_Layout PerfUI_Test_Independence PerfUI_Test_Markup
 
 # Run tests
 ctest --test-dir build -C Release --output-on-failure
@@ -242,6 +285,7 @@ ctest --test-dir build -C Release --output-on-failure
 * **Modder Integration Guide:** [English](docs/MODDER_GUIDE_EN.md) | [Русский](docs/MODDER_GUIDE.md)
 * **Declarative XML Markup & Hot-Reload:** [English](docs/MARKUP_EN.md) | [Русский](docs/MARKUP.md)
 * **Skyrim Input, Mouse & Cursor Integration:** [English](docs/SKYRIM_INPUT_GUIDE_EN.md) | [Русский](docs/SKYRIM_INPUT_GUIDE.md)
+* **MapCanvas Radar & World Widget:** [English](docs/MAPCANVAS_EN.md) | [Русский](docs/MAPCANVAS.md)
 * **Core Architecture Overview:** [ARCHITECTURE.md](ARCHITECTURE.md)
 * **Visual & Widget Design Specification:** [DESIGN.md](DESIGN.md)
 
@@ -251,26 +295,35 @@ ctest --test-dir build -C Release --output-on-failure
 
 **PerfUI** — это независимый, высокопроизводительный retained-mode UI-фреймворк на современном стандарте **C++20**, разработанный специально для создания модификаций и интерфейсов для игры *The Elder Scrolls V: Skyrim Special Edition / Anniversary Edition*, а также для автономных графических приложений на DirectX 11.
 
+> **Текущий статус: Альфа (`v0.1.0-alpha`)** — архитектура ядра, Flexbox-раскладка, векторная графика SVG, XML Markup и хуки рендера DirectX 11 полностью функциональны и тестируются в реальной игре.
+
 Фреймворк предоставляет авторам модов и разработчикам удобный объектно-ориентированный C++ API для построения плавных, отзывчивых и удобных для управления с геймпада внутриигровых меню: журналов заданий, кастомных HUD-полосок, экранов настроек, диалоговых окон и окон конфигурации модов.
 
 ### 🌟 Ключевые особенности
 
-* **Дерево элементов (Retained-Mode):** Иерархический граф сцены (`UIElement`, `UIWindow`, `Panel`) с dirty-флагами — вычисления геометрии и Flexbox происходят только при фактических изменениях.
+* **Дерево элементов (Retained-Mode):** Иерархический граф сцены (`UIElement`, `UIWindow`, `Panel`) с dirty-флагами — вычисления геометрии и Flexbox происходят только при фактических изменениях (< 0.2 мс на кадр при 550+ элементах).
 * **Движок вёрстки (Flexbox & Box-Model):** Автоматическое распределение элементов, гибкие направления (`Row` / `Column`), адаптивное растяжение (`flex-grow`), отступы (`padding`, `margin`) и авто-размеры (`Auto`).
 * **Адаптация под геймпады (Controller-First):** Полноценная навигация по графу фокуса с помощью крестовины (D-Pad), стиков, клавиатуры и мыши с автоматическим пространственным переходом фокуса.
-* **Библиотека готовых виджетов:**
-  * **Окна и контейнеры:** `UIWindow` (окна с заголовком и кнопкой закрытия), `Panel` (панели), `ScrollView` (области прокрутки), `ModalDialog` (модальные диалоги), `ContextMenu` (всплывающие контекстные меню), `TabBar` (вкладки).
-  * **Элементы управления:** `Button` (кнопки), `Checkbox` (флажки), `Slider` (ползунки), `ComboBox` (выпадающие списки), `TextInput` (ввод текста), `ProgressBar` (полосы прогресса).
-  * **Информационные виджеты:** `Text` (форматированный текст), `Image` (текстуры/картинки), `Toast` (всплывающие уведомления).
-* **Стилизация в эстетике Скайрима:** Встроенные темы оформления (тёмный сланец, пергамент, золото, серебряные окантовки, нордические орнаменты) и движок анимаций (плавное появление, пульсация, hover-эффекты).
-* **Поддержка кириллицы:** Встроенная загрузка диапазонов кириллических глифов ImGui и системных шрифтов Windows (Segoe UI, Arial).
+* **Аутентичный меч-курсор Скайрима:**
+  * Собственный векторный меч-курсор в foreground-слое с мягкими тенями.
+  * Бесшовная интеграция со Scaleform `CursorMenu`: исключает вылеты в Flash runtime и исчезновение курсора при диалогах и переключении окон.
+* **Нативная векторная графика SVG:**
+  * Встроенный легковесный парсер и растеризатор NanoSVG (`SvgImage`, `SvgService`).
+  * Абсолютная чёткость и независимость от разрешения экрана (Full HD, 2K, 4K, Ultrawide) без оверхеда браузерных движков.
+  * Поддержка тега `<SvgImage src="..." />` прямо в XML Markup.
+* **Большая библиотека современных виджетов:**
+  * **Окна и контейнеры:** `UIWindow`, `Panel`, `ScrollView`, `ModalDialog`, `ContextMenu`, `TabBar`, `Accordion`, `Sidebar`, `CategoryList`.
+  * **Элементы управления:** `Button`, `Checkbox`, `Slider`, `ComboBox`, `TextInput`, `ProgressBar`, `Switch`, `RadioButton`, `RadioGroup`, `KeybindSelector`, `SegmentedControl`.
+  * **Информационные виджеты:** `Text`, `TextArea`, `Image`, `SvgImage`, `Toast`, `Notification`, `ItemSlot`, `SearchableList`, `QuestTracker`, `MapCanvas` (радар и карта), `Divider`, `Spacer`.
+* **Стилизация в эстетике Скайрима:** Дизайн-токены и 4 встроенные темы (`SkyrimClassic`, `NordicDark`, `GlassFrost`, `WarmParchment`), движок плавных анимаций (появление, пульсация, hover-эффекты).
+* **Поддержка кириллицы и символов:** Встроенная загрузка кириллических диапазонов глифов ImGui, системных шрифтов Windows и объединённый шрифт Segoe UI Symbol для маркеров квестов и геометрических значков.
 * **Изоляция бэкенда:** Проект использует библиотеку [Dear ImGui](https://github.com/ocornut/imgui) **исключительно** как начальный фундамент растеризации вершинных буферов (`ImDrawList`). Внешний API `PerfUI` полностью независим и не подключает заголовочные файлы ImGui, что позволяет в будущем бесшовно заменить бэкенд на прямой D3D11/D3D12/Vulkan без переписывания пользовательского кода интерфейсов.
 
 ---
 
 ## 🔥 Рисуй интерфейс без перекомпиляции (XML Markup & Hot-Reload)
 
-С новой библиотекой **`PerfUI_Markup`** интерфейсы описываются в декларативном XML без необходимости пересобирать плагин или перезапускать игру:
+С библиотекой **`PerfUI_Markup`** интерфейсы описываются в декларативном XML без необходимости пересобирать плагин или перезапускать игру:
 
 ```xml
 <UI>
@@ -302,7 +355,7 @@ loader.poll(); // Автоматически перезагрузит измен
 
 * **Мгновенный отклик:** файл опрашивается каждые ~500 мс без блокировок и фоновых потоков.
 * **Сохранение состояния:** при перезагрузке автоматически сохраняется фокус ввода, позиция скролла (`ScrollView`) и выбранные вкладки (`TabBar`).
-* **Устойчивость к ошибкам:** при битом XML предыдущее рабочее дерево не ломается, а на экран выводится детальный Toast с номером строки ошибки.
+* **Устойчивость к ошибкам:** при синтаксической ошибке в XML предыдущее рабочее дерево не ломается, а на экран выводится Toast с номером строки ошибки.
 * **Подробное руководство:** см. [docs/MARKUP.md](docs/MARKUP.md).
 
 ---
@@ -317,5 +370,14 @@ See the [LICENSE](LICENSE) file for the full text.
 * **[Dear ImGui](https://github.com/ocornut/imgui)**  
   Copyright (c) 2014-2026 Omar Cornut.  
   Licensed under the [MIT License](https://github.com/ocornut/imgui/blob/master/LICENSE.txt).
+* **[NanoSVG](https://github.com/memononen/nanosvg)**  
+  Copyright (c) 2013-2014 Mikko Mononen.  
+  Licensed under the [zlib License](https://github.com/memononen/nanosvg/blob/master/LICENSE.txt).
+* **[pugixml](https://github.com/zeux/pugixml)**  
+  Copyright (c) 2006-2025 Arseny Kapoulkine.  
+  Licensed under the [MIT License](https://github.com/zeux/pugixml/blob/master/LICENSE.md).
+* **[stb](https://github.com/nothings/stb)** (stb_image)  
+  Copyright (c) 2017 Sean Barrett.  
+  Licensed under the [MIT License / Public Domain](https://github.com/nothings/stb/blob/master/LICENSE).
 * **[CommonLibSSE-ng](https://github.com/CharmedBaryon/CommonLibSSE-ng)**  
   Licensed under the [MIT License](https://github.com/CharmedBaryon/CommonLibSSE-ng/blob/main/LICENSE).

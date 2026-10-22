@@ -13,6 +13,7 @@ out/
 *.opendb
 .idea/
 .vscode/
+compile_commands.json
 
 # CMake artifacts
 CMakeSettings.json
@@ -30,6 +31,15 @@ PerfUI_Config.json
 # Temporary files
 *.tmp
 *.bak
+
+# Binaries and compiled object files
+*.obj
+*.lib
+*.dll
+*.pdb
+*.exp
+*.ilk
+*.exe
 
 # Local deployment scripts
 deploy.ps1
