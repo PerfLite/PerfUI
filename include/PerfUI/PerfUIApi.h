@@ -16,24 +16,6 @@ namespace PerfUI::API {
 
 constexpr unsigned long InterfaceVersion_1 = 1;
 
-struct ClientABIInfo {
-    unsigned long structSize{ sizeof(ClientABIInfo) };
-    unsigned long mscVer{
-#if defined(_MSC_VER)
-        _MSC_VER
-#else
-        0
-#endif
-    };
-    int iteratorDebugLevel{
-#if defined(_ITERATOR_DEBUG_LEVEL)
-        _ITERATOR_DEBUG_LEVEL
-#else
-        0
-#endif
-    };
-};
-
 struct IPerfUI_v1 {
     unsigned long version{ InterfaceVersion_1 };
 
@@ -69,6 +51,25 @@ struct IPerfUI_v1 {
     // Must be set before SetUIVisible. Modal (default) swallows the whole input; overlay keeps
     // the keyboard and the game controls alive so the world stays playable under the panel.
     void (*SetOverlayMode)(bool overlay);
+};
+
+struct ClientABIInfo {
+    unsigned long structSize{ sizeof(ClientABIInfo) };
+    unsigned long apiStructSize{ sizeof(IPerfUI_v1) };
+    unsigned long mscVer{
+#if defined(_MSC_VER)
+        _MSC_VER
+#else
+        0
+#endif
+    };
+    int iteratorDebugLevel{
+#if defined(_ITERATOR_DEBUG_LEVEL)
+        _ITERATOR_DEBUG_LEVEL
+#else
+        0
+#endif
+    };
 };
 
 } // namespace PerfUI::API

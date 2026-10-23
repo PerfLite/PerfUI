@@ -15,6 +15,7 @@ target("PerfUI")
     set_default(true)
     set_kind("shared")
     set_languages("c++20")
+    set_symbols("debug")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN", "PERFUI_BUILD_DLL")
     add_packages("commonlibsse-ng")
 
@@ -56,6 +57,10 @@ target("PerfUI")
         local implib = path.join(target_dir, "PerfUI.lib")
         if os.isfile(implib) then
             os.cp(implib, path.join(sdk_lib, "PerfUI.lib"))
+        end
+        local pdb = path.join(target_dir, "PerfUI.pdb")
+        if os.isfile(pdb) then
+            os.cp(pdb, path.join(sdk_lib, "PerfUI.pdb"))
         end
     end)
 

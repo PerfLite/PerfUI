@@ -275,6 +275,14 @@ extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interf
                 a_clientAbi->mscVer);
             return nullptr;
         }
+
+        if (a_clientAbi->structSize >= sizeof(PerfUI::API::ClientABIInfo)) {
+            if (a_clientAbi->apiStructSize != sizeof(PerfUI::API::IPerfUI_v1)) {
+                SKSE::log::error("PerfUI API Rejected: IPerfUI_v1 struct size mismatch! Host={}, Client={}. Recompile mod against latest PerfUIApi.h.",
+                    sizeof(PerfUI::API::IPerfUI_v1), a_clientAbi->apiStructSize);
+                return nullptr;
+            }
+        }
     }
 
     SKSE::log::info("RequestPluginAPIEx(v1) called by external mod - ABI verified, granting API pointer!");
