@@ -122,6 +122,11 @@ void InputHook::SetCaptureInput(bool capture) {
     bool wasCapturing = m_captureInput.exchange(capture);
     if (capture) {
         EnsureInputSink();
+        POINT pt;
+        if (m_hWnd && ::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
+            m_lastMousePos = pt;
+            PushInput({ QueuedInput::Type::MouseMove, 0, static_cast<float>(pt.x), static_cast<float>(pt.y) });
+        }
     } else {
         m_mouseButtonDown[0] = false;
         m_mouseButtonDown[1] = false;
@@ -338,6 +343,17 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
 
     // Walk the linked list of input events from Skyrim's DirectInput polling
     for (auto* event = *a_event; event; event = event->next) {
+        // Mouse movement: device == kMouse, type == kMouseMove
+        if (event->GetDevice() == RE::INPUT_DEVICE::kMouse &&
+            event->GetEventType() == RE::INPUT_EVENT_TYPE::kMouseMove)
+        {
+            POINT pt;
+            if (m_hWnd && ::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
+                m_lastMousePos = pt;
+                PushInput({ QueuedInput::Type::MouseMove, 0, static_cast<float>(pt.x), static_cast<float>(pt.y) });
+            }
+        }
+
         // Mouse buttons: device == kMouse, type == kButton
         if (event->GetDevice() == RE::INPUT_DEVICE::kMouse &&
             event->GetEventType() == RE::INPUT_EVENT_TYPE::kButton)
@@ -371,13 +387,19 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
                         PushInput({ QueuedInput::Type::MouseUp, static_cast<int>(keyCode), static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y) });
                     }
                 }
-            } else if (keyCode == 8) {
-                if (btnEvent->IsDown()) {
-                    PushInput({ QueuedInput::Type::MouseWheel, 0, static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y), 1.0f });
+            } else if (keyCode == 8 || keyCode == 9) {
+                POINT pt;
+                if (m_hWnd && ::GetCursorPos(&pt) && ::ScreenToClient(m_hWnd, &pt)) {
+                    m_lastMousePos = pt;
                 }
-            } else if (keyCode == 9) {
+                auto* mc = RE::MenuCursor::GetSingleton();
+                if (mc) {
+                    mc->cursorPosX = static_cast<float>(m_lastMousePos.x);
+                    mc->cursorPosY = static_cast<float>(m_lastMousePos.y);
+                }
                 if (btnEvent->IsDown()) {
-                    PushInput({ QueuedInput::Type::MouseWheel, 0, static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y), -1.0f });
+                    float delta = (keyCode == 8) ? 1.0f : -1.0f;
+                    PushInput({ QueuedInput::Type::MouseWheel, 0, static_cast<float>(m_lastMousePos.x), static_cast<float>(m_lastMousePos.y), delta });
                 }
             }
         }
