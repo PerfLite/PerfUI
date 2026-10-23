@@ -13,6 +13,9 @@
 namespace PerfUI {
 
 class UIContext;
+class ElementAnimator;
+class ElementSpring;
+class WeakElementRef;
 
 class PERFUI_API UIElement {
 public:
@@ -108,6 +111,20 @@ public:
         m_classes = std::move(cls);
     }
 
+    // Opacity
+    float opacity() const { return m_opacity; }
+    void setOpacity(float opacity);
+    UIElement& opacity(float opacity) { setOpacity(opacity); return *this; }
+
+    // Animation & Physics Springs
+    ElementAnimator& animate();
+    ElementSpring& spring();
+    void stopAnimations();
+    bool isAnimating() const;
+
+    std::shared_ptr<bool> aliveToken() const { return m_aliveToken; }
+    WeakElementRef weakRef();
+
     // Bounds & Geometry
     const Rect& bounds() const { return m_bounds; }
     void setBounds(const Rect& bounds);
@@ -164,6 +181,11 @@ protected:
     UIElement* m_parent{ nullptr };
     UIContext* m_context{ nullptr };
     std::vector<std::unique_ptr<UIElement>> m_children;
+
+    float m_opacity{ 1.0f };
+    std::shared_ptr<bool> m_aliveToken{ std::make_shared<bool>(true) };
+    std::unique_ptr<ElementAnimator> m_animator;
+    std::unique_ptr<ElementSpring> m_spring;
 
     Rect m_bounds{};
     Dimensions m_desiredSize{};

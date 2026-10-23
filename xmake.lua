@@ -90,6 +90,19 @@ target("PerfUI_Test_Layout")
         "tests/LayoutTest.cpp"
     )
 
+target("PerfUI_Test_Animation")
+    set_kind("binary")
+    set_languages("c++20")
+    add_defines("PERFUI_STATIC")
+    add_syslinks("user32")
+    add_includedirs("include", "src/backends/mock", "src")
+    add_files(
+        "src/core/*.cpp",
+        "src/layout/*.cpp",
+        "src/widgets/*.cpp",
+        "tests/AnimationTest.cpp"
+    )
+
 target("PerfUI_Bench_ImGui")
     set_kind("binary")
     set_languages("c++20")

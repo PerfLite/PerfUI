@@ -19,6 +19,7 @@
 namespace PerfUI {
 
 class ModalDialog;
+class Timeline;
 class ComboBox;
 
 class PERFUI_API UIContext {
@@ -79,6 +80,10 @@ public:
     };
 
     const ProfilerMetrics& metrics() const { return m_metrics; }
+
+    // Timelines & Animation Coordination
+    std::shared_ptr<Timeline> createTimeline();
+    void removeTimeline(const std::shared_ptr<Timeline>& timeline);
 
     // Overlay Layer (Tooltips, Popups, Dropdowns)
     void setOverlayRender(std::function<void(UIRenderBackend&)> callback) {
@@ -204,6 +209,9 @@ private:
     ComboBox* m_activeComboBox{ nullptr };
     OverlayManager m_overlayManager;
     float m_lastDeltaTime{ 0.016f };
+
+    // Animations & Timelines
+    std::vector<std::shared_ptr<Timeline>> m_timelines;
 
     // Hotkeys storage
     struct HotkeyItem {

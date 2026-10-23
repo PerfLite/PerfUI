@@ -4,6 +4,72 @@
 
 namespace PerfUI {
 
+// ============================================================================
+// ProgressBarAnimator
+// ============================================================================
+
+ProgressBarAnimator::ProgressBarAnimator(ProgressBar* bar)
+    : ElementAnimator(bar)
+    , m_bar(bar)
+{
+}
+
+ProgressBarAnimator& ProgressBarAnimator::fill(float target, float duration, Easing easing) {
+    if (!m_bar) return *this;
+    m_fromFill = m_bar->progress();
+    m_toFill = (std::clamp)(target, 0.0f, 1.0f);
+    m_fillDuration = (std::max)(0.001f, duration);
+    m_fillElapsed = 0.0f;
+    m_fillEasing = easing;
+    m_animFill = true;
+    return *this;
+}
+
+ProgressBarAnimator& ProgressBarAnimator::fillColor(Color target, float duration, Easing easing) {
+    if (!m_bar) return *this;
+    m_fromFillColor = m_bar->m_fillColor;
+    m_toFillColor = target;
+    m_colorDuration = (std::max)(0.001f, duration);
+    m_colorElapsed = 0.0f;
+    m_colorEasing = easing;
+    m_animFillColor = true;
+    return *this;
+}
+
+void ProgressBarAnimator::update(float dt) {
+    ElementAnimator::update(dt);
+
+    if (m_animFill && m_bar) {
+        m_fillElapsed += dt;
+        float p = (std::clamp)(m_fillElapsed / m_fillDuration, 0.0f, 1.0f);
+        float curved = ApplyEasing(p, m_fillEasing);
+        float curVal = m_fromFill + (m_toFill - m_fromFill) * curved;
+        m_bar->m_progress = curVal;
+        m_bar->m_animProgress.snapTo(curVal);
+        if (p >= 1.0f) {
+            m_animFill = false;
+        }
+    }
+
+    if (m_animFillColor && m_bar) {
+        m_colorElapsed += dt;
+        float p = (std::clamp)(m_colorElapsed / m_colorDuration, 0.0f, 1.0f);
+        float curved = ApplyEasing(p, m_colorEasing);
+        m_bar->m_fillColor = Color::Lerp(m_fromFillColor, m_toFillColor, curved);
+        if (p >= 1.0f) {
+            m_animFillColor = false;
+        }
+    }
+}
+
+bool ProgressBarAnimator::isFinished() const {
+    return ElementAnimator::isFinished() && !m_animFill && !m_animFillColor;
+}
+
+// ============================================================================
+// ProgressBar
+// ============================================================================
+
 ProgressBar::ProgressBar(float progress, std::string name)
     : UIElement(std::move(name))
     , m_progress((std::clamp)(progress, 0.0f, 1.0f))
@@ -21,8 +87,23 @@ ProgressBar& ProgressBar::progress(float p) {
     return *this;
 }
 
+ProgressBarAnimator& ProgressBar::animate() {
+    if (!m_barAnimator) {
+        m_barAnimator = std::make_unique<ProgressBarAnimator>(this);
+    }
+    return *m_barAnimator;
+}
+
+ProgressBar& ProgressBar::animateFill(float target, float duration, Easing easing) {
+    animate().fill(target, duration, easing);
+    return *this;
+}
+
 void ProgressBar::update(float deltaTime) {
     UIElement::update(deltaTime);
+    if (m_barAnimator && !m_barAnimator->isFinished()) {
+        m_barAnimator->update(deltaTime);
+    }
     m_animProgress.update(deltaTime);
 }
 

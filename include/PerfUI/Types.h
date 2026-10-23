@@ -21,6 +21,8 @@ struct Point {
 
     constexpr Point operator+(const Point& other) const { return { x + other.x, y + other.y }; }
     constexpr Point operator-(const Point& other) const { return { x - other.x, y - other.y }; }
+    constexpr Point operator*(float s) const { return { x * s, y * s }; }
+    constexpr Point operator/(float s) const { return { x / s, y / s }; }
 };
 
 struct Dimensions {
@@ -58,6 +60,7 @@ struct Rect {
 
     constexpr Point topLeft() const { return { x, y }; }
     constexpr Point bottomRight() const { return { x + width, y + height }; }
+    constexpr Dimensions size() const { return { width, height }; }
 
     constexpr bool contains(const Point& pt) const {
         return pt.x >= x && pt.x <= (x + width) && pt.y >= y && pt.y <= (y + height);

@@ -8,13 +8,45 @@
 
 namespace PerfUI {
 
+class ProgressBar;
+
+class PERFUI_API ProgressBarAnimator : public ElementAnimator {
+public:
+    explicit ProgressBarAnimator(ProgressBar* bar);
+    ProgressBarAnimator& fill(float target, float duration, Easing easing = Easing::EaseOutCubic);
+    ProgressBarAnimator& fillColor(Color target, float duration, Easing easing = Easing::Linear);
+
+    void update(float dt);
+    bool isFinished() const;
+
+private:
+    ProgressBar* m_bar{ nullptr };
+    bool m_animFill{ false };
+    float m_fromFill{ 0.0f };
+    float m_toFill{ 0.0f };
+    float m_fillDuration{ 0.3f };
+    float m_fillElapsed{ 0.0f };
+    Easing m_fillEasing{ Easing::EaseOutCubic };
+
+    bool m_animFillColor{ false };
+    Color m_fromFillColor{};
+    Color m_toFillColor{};
+    float m_colorDuration{ 0.3f };
+    float m_colorElapsed{ 0.0f };
+    Easing m_colorEasing{ Easing::Linear };
+};
+
 class PERFUI_API ProgressBar : public UIElement {
+    friend class ProgressBarAnimator;
 public:
     explicit ProgressBar(float progress = 0.0f, std::string name = "ProgressBar");
     ~ProgressBar() override = default;
 
     float progress() const { return m_progress; }
     ProgressBar& progress(float p);
+
+    ProgressBarAnimator& animate();
+    ProgressBar& animateFill(float target, float duration, Easing easing = Easing::EaseOutCubic);
 
     float value() const { return m_progress; }
     ProgressBar& value(float v) { return progress(v); }
@@ -34,6 +66,7 @@ public:
 private:
     float m_progress{ 0.0f }; // 0.0f to 1.0f
     AnimatedFloat m_animProgress{ 0.0f, 7.0f };
+    std::unique_ptr<ProgressBarAnimator> m_barAnimator;
     bool m_showLabel{ true };
     float m_barHeight{ 14.0f };
     float m_cornerRadius{ 5.0f };

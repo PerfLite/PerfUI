@@ -1,6 +1,7 @@
 #include "PerfUI/UIElement.h"
 #include "PerfUI/UIContext.h"
 #include "PerfUI/LayoutEngine.h"
+#include "PerfUI/Animation.h"
 #include <atomic>
 #include <algorithm>
 
@@ -18,6 +19,10 @@ UIElement::UIElement(std::string name)
 }
 
 UIElement::~UIElement() {
+    if (m_aliveToken) {
+        *m_aliveToken = false;
+    }
+    stopAnimations();
     if (m_context) {
         m_context->notifyElementDestroyed(this);
     }
@@ -86,8 +91,51 @@ void UIElement::markLayoutDirty() {
     }
 }
 
+void UIElement::setOpacity(float opacity) {
+    m_opacity = (std::clamp)(opacity, 0.0f, 1.0f);
+}
+
+ElementAnimator& UIElement::animate() {
+    if (!m_animator) {
+        m_animator = std::make_unique<ElementAnimator>(this);
+    }
+    return *m_animator;
+}
+
+ElementSpring& UIElement::spring() {
+    if (!m_spring) {
+        m_spring = std::make_unique<ElementSpring>(this);
+    }
+    return *m_spring;
+}
+
+void UIElement::stopAnimations() {
+    if (m_animator) {
+        m_animator->stop();
+    }
+    if (m_spring) {
+        m_spring->stop();
+    }
+}
+
+bool UIElement::isAnimating() const {
+    return (m_animator && !m_animator->isFinished()) ||
+           (m_spring && !m_spring->isResting());
+}
+
+WeakElementRef UIElement::weakRef() {
+    return WeakElementRef(this);
+}
+
 void UIElement::update(float deltaTime) {
     if (!m_visible) return;
+
+    if (m_animator && !m_animator->isFinished()) {
+        m_animator->update(deltaTime);
+    }
+    if (m_spring && !m_spring->isResting()) {
+        m_spring->update(deltaTime);
+    }
 
     for (auto& child : m_children) {
         if (child && child->isVisible()) {

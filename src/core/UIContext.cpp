@@ -1,6 +1,7 @@
 #include "PerfUI/UIContext.h"
 #include "PerfUI/ModalDialog.h"
 #include "PerfUI/ComboBox.h"
+#include "PerfUI/Animation.h"
 #include <algorithm>
 #include <chrono>
 
@@ -62,6 +63,19 @@ void UIContext::update(float deltaTime) {
 
     // Context menu lifecycle
     m_contextMenu.update(deltaTime);
+
+    // Timelines lifecycle
+    for (auto it = m_timelines.begin(); it != m_timelines.end();) {
+        auto& tl = *it;
+        if (!tl || tl->state() == Timeline::State::Finished) {
+            it = m_timelines.erase(it);
+        } else {
+            if (tl->state() == Timeline::State::Playing) {
+                tl->update(deltaTime);
+            }
+            ++it;
+        }
+    }
 
     // Tooltip timer logic
     if (m_hoveredElement && !m_hoveredElement->tooltip().empty()) {
@@ -569,6 +583,19 @@ size_t UIContext::hotkeyCount() const {
 void UIContext::clearHotkeys() {
     std::lock_guard<std::mutex> lock(m_hotkeyMutex);
     m_hotkeys.clear();
+}
+
+std::shared_ptr<Timeline> UIContext::createTimeline() {
+    auto tl = std::make_shared<Timeline>();
+    m_timelines.push_back(tl);
+    return tl;
+}
+
+void UIContext::removeTimeline(const std::shared_ptr<Timeline>& timeline) {
+    auto it = std::find(m_timelines.begin(), m_timelines.end(), timeline);
+    if (it != m_timelines.end()) {
+        m_timelines.erase(it);
+    }
 }
 
 } // namespace PerfUI

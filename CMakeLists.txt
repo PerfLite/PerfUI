@@ -60,6 +60,7 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/PerfUI.h
     src/core/UIElement.cpp
     src/core/UIContext.cpp
+    src/core/Animation.cpp
     src/core/Theme.cpp
     src/core/ConfigManager.cpp
     src/core/OverlayManager.cpp
