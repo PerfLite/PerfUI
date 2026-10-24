@@ -803,6 +803,7 @@ HRESULT STDMETHODCALLTYPE D3D11Hook::Hooked_Present(
     }
 
     if (hook.m_uiContext) {
+        WorldTrackingService::GetSingleton().Update();
         auto snapshot = WorldTrackingService::GetSingleton().GetLatestSnapshot();
         if (snapshot) {
             hook.m_uiContext->setWorldAnchorSnapshot(std::move(snapshot));

@@ -4,25 +4,6 @@
 
 namespace PerfUI::Skyrim {
 
-namespace {
-
-struct MainUpdateHook {
-    static void thunk(RE::Main* a_this, float a_budget) {
-        static std::atomic<bool> s_loggedThread{ false };
-        if (!s_loggedThread.exchange(true)) {
-            SKSE::log::info(">>> Thread Check: Main::Update Game Thread ID = {} (Main::threadID = {})",
-                ::GetCurrentThreadId(), a_this ? a_this->threadID : 0);
-        }
-
-        func(a_this, a_budget);
-
-        WorldTrackingService::GetSingleton().Update();
-    }
-    static inline REL::Relocation<decltype(thunk)> func;
-};
-
-} // namespace
-
 WorldTrackingService& WorldTrackingService::GetSingleton() {
     static WorldTrackingService s_instance;
     return s_instance;
@@ -32,11 +13,7 @@ bool WorldTrackingService::InstallHooks() {
     static std::atomic<bool> s_installed{ false };
     if (s_installed.exchange(true)) return true;
 
-    auto& trampoline = SKSE::GetTrampoline();
-    REL::Relocation<std::uintptr_t> target{ RELOCATION_ID(35551, 36544) };
-    MainUpdateHook::func = trampoline.write_branch<5>(target.address(), MainUpdateHook::thunk);
-
-    SKSE::log::info("WorldTrackingService: Main::Update hook installed at 0x{:X}", target.address());
+    SKSE::log::info("WorldTrackingService: Tracking initialized (per-frame update driven by D3D11 Present)");
     return true;
 }
 
