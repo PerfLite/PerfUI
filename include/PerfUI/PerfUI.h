@@ -46,4 +46,5 @@
 #include "MapCanvas.h"
 #include "SvgService.h"
 #include "SvgImage.h"
+#include "WorldAnchor.h"
 #include "UIWindow.h"

@@ -2,6 +2,7 @@
 #include "D3D11Hook.h"
 #include "InputHook.h"
 #include "SkyrimSoundService.h"
+#include "WorldTrackingService.h"
 #include "PerfUI/PerfUIApi.h"
 #include <spdlog/sinks/basic_file_sink.h>
 
@@ -32,6 +33,7 @@ void OnMessage(SKSE::MessagingInterface::Message* a_msg) {
         SKSE::log::info("Skyrim kDataLoaded received, installing D3D11 and Input hooks...");
 
         if (PerfUI::Skyrim::D3D11Hook::GetSingleton().Install()) {
+            PerfUI::Skyrim::WorldTrackingService::GetSingleton().InstallHooks();
             auto* renderer = RE::BSGraphics::Renderer::GetSingleton();
             if (renderer && renderer->data.renderWindows[0].hWnd) {
                 HWND hWnd = reinterpret_cast<HWND>(renderer->data.renderWindows[0].hWnd);

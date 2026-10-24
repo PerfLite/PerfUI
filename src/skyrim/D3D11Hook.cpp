@@ -6,6 +6,7 @@
 #include "PerfUI/JournalWindow.h"
 #include "SkyrimQuestService.h"
 #include "SkyrimSoundService.h"
+#include "WorldTrackingService.h"
 
 namespace PerfUI::Skyrim {
 
@@ -791,9 +792,21 @@ HRESULT STDMETHODCALLTYPE D3D11Hook::Hooked_Present(
     UINT SyncInterval,
     UINT Flags
 ) {
+    static std::atomic<bool> s_presentThreadLogged{ false };
+    if (!s_presentThreadLogged.exchange(true)) {
+        SKSE::log::info(">>> Thread Check: D3D11 Hooked_Present Render Thread ID = {}", ::GetCurrentThreadId());
+    }
+
     auto& hook = D3D11Hook::GetSingleton();
     if (!hook.m_imguiInitialized.load()) {
         hook.InitializeImGui(pSwapChain);
+    }
+
+    if (hook.m_uiContext) {
+        auto snapshot = WorldTrackingService::GetSingleton().GetLatestSnapshot();
+        if (snapshot) {
+            hook.m_uiContext->setWorldAnchorSnapshot(std::move(snapshot));
+        }
     }
 
     bool anyTreeVisible = hook.m_uiVisible.load() || hook.HasVisibleRootWindows();

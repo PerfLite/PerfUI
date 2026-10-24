@@ -21,6 +21,8 @@ namespace PerfUI {
 class ModalDialog;
 class Timeline;
 class ComboBox;
+struct WorldAnchorSnapshot;
+struct WorldAnchorPoint;
 
 class PERFUI_API UIContext {
 public:
@@ -179,6 +181,11 @@ public:
     size_t hotkeyCount() const;
     void clearHotkeys();
 
+    // World Anchors API (Stage 2)
+    void setWorldAnchorSnapshot(std::shared_ptr<const WorldAnchorSnapshot> snapshot);
+    std::shared_ptr<const WorldAnchorSnapshot> worldAnchorSnapshot() const;
+    const WorldAnchorPoint* getWorldAnchorPoint(uint32_t targetId) const;
+
 private:
     void performLayout();
 
@@ -225,6 +232,9 @@ private:
     std::thread::id m_uiThreadId{};
     mutable std::mutex m_taskMutex;
     std::vector<std::function<void()>> m_taskQueue;
+
+    // World Anchors
+    std::shared_ptr<const WorldAnchorSnapshot> m_worldAnchorSnapshot;
 };
 
 } // namespace PerfUI

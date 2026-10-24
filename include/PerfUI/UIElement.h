@@ -128,6 +128,10 @@ public:
     // Bounds & Geometry
     const Rect& bounds() const { return m_bounds; }
     void setBounds(const Rect& bounds);
+    Point position() const { return { m_bounds.x, m_bounds.y }; }
+    void setPosition(const Point& pos) { setBounds({ pos.x, pos.y, m_bounds.width, m_bounds.height }); }
+    Dimensions size() const { return { m_bounds.width, m_bounds.height }; }
+    void setSize(const Dimensions& size) { setBounds({ m_bounds.x, m_bounds.y, size.width, size.height }); }
 
     const Dimensions& desiredSize() const { return m_desiredSize; }
     void setDesiredSize(Dimensions size) { m_desiredSize = size; }

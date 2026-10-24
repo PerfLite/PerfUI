@@ -2,6 +2,7 @@
 #include "PerfUI/ModalDialog.h"
 #include "PerfUI/ComboBox.h"
 #include "PerfUI/Animation.h"
+#include "PerfUI/WorldAnchor.h"
 #include <algorithm>
 #include <chrono>
 
@@ -596,6 +597,25 @@ void UIContext::removeTimeline(const std::shared_ptr<Timeline>& timeline) {
     if (it != m_timelines.end()) {
         m_timelines.erase(it);
     }
+}
+
+void UIContext::setWorldAnchorSnapshot(std::shared_ptr<const WorldAnchorSnapshot> snapshot) {
+    m_worldAnchorSnapshot = std::move(snapshot);
+}
+
+std::shared_ptr<const WorldAnchorSnapshot> UIContext::worldAnchorSnapshot() const {
+    return m_worldAnchorSnapshot;
+}
+
+const WorldAnchorPoint* UIContext::getWorldAnchorPoint(uint32_t targetId) const {
+    if (!m_worldAnchorSnapshot) {
+        return nullptr;
+    }
+    auto it = m_worldAnchorSnapshot->points.find(targetId);
+    if (it != m_worldAnchorSnapshot->points.end()) {
+        return &it->second;
+    }
+    return nullptr;
 }
 
 } // namespace PerfUI

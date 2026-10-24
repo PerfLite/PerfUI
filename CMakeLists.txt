@@ -57,6 +57,7 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/OverlayManager.h
     include/PerfUI/JournalWindow.h
     include/PerfUI/MainMenuWindow.h
+    include/PerfUI/WorldAnchor.h
     include/PerfUI/PerfUI.h
     src/core/UIElement.cpp
     src/core/UIContext.cpp
@@ -98,6 +99,7 @@ add_library(PerfUI_Core STATIC
     src/widgets/ModalDialog.cpp
     src/widgets/JournalWindow.cpp
     src/widgets/MapCanvas.cpp
+    src/widgets/WorldAnchor.cpp
     src/widgets/MainMenuWindow.cpp
 )
 
@@ -334,6 +336,22 @@ target_link_libraries(PerfUI_Test_Style PRIVATE
 )
 
 # ---------------------------------------------------------------------------
+# 13. PerfUI_Test_WorldAnchor (3D World Anchor & Edge Clamping Test Suite)
+# ---------------------------------------------------------------------------
+add_executable(PerfUI_Test_WorldAnchor
+    tests/WorldAnchorTest.cpp
+    src/backends/mock/MockRenderBackend.h
+)
+
+target_include_directories(PerfUI_Test_WorldAnchor PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/mock
+)
+
+target_link_libraries(PerfUI_Test_WorldAnchor PRIVATE
+    PerfUI_Core
+)
+
+# ---------------------------------------------------------------------------
 # CTest Integration
 # ---------------------------------------------------------------------------
 enable_testing()
@@ -345,5 +363,6 @@ add_test(NAME OverlayTest COMMAND PerfUI_Test_Overlay)
 add_test(NAME TextureTest COMMAND PerfUI_Test_Texture)
 add_test(NAME MapCanvasTest COMMAND PerfUI_Test_MapCanvas)
 add_test(NAME StyleSystemTest COMMAND PerfUI_Test_Style)
+add_test(NAME WorldAnchorTest COMMAND PerfUI_Test_WorldAnchor)
 
 

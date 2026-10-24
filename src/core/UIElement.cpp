@@ -138,7 +138,7 @@ void UIElement::update(float deltaTime) {
     }
 
     for (auto& child : m_children) {
-        if (child && child->isVisible()) {
+        if (child) {
             child->update(deltaTime);
         }
     }
