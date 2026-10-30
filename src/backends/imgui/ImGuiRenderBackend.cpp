@@ -512,7 +512,12 @@ bool ImGuiRenderBackend::createTextureResources(uint32_t width, uint32_t height,
     *outSrv = nullptr;
     *outTexture = nullptr;
 #if defined(_WIN32)
-    ID3D11Device* device = static_cast<ID3D11Device*>(m_d3dDevice);
+    void* devicePtr = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(m_textureMutex);
+        devicePtr = m_d3dDevice;
+    }
+    ID3D11Device* device = static_cast<ID3D11Device*>(devicePtr);
     if (!device || width == 0 || height == 0) return false;
 
     D3D11_TEXTURE2D_DESC desc{};
@@ -550,8 +555,6 @@ bool ImGuiRenderBackend::createTextureResources(uint32_t width, uint32_t height,
 }
 
 TextureId ImGuiRenderBackend::loadTexture(std::string_view filePath) {
-    if (!m_d3dDevice) return 0;
-
     if (filePath.ends_with(".svg") || filePath.ends_with(".SVG")) {
         return loadSvg(filePath);
     }
