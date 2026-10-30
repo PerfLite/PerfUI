@@ -184,6 +184,37 @@ int main() {
     uiCtx.render(mockBackend, /*renderTree=*/false); // HUD mode
     TEST_ASSERT(uiOverlayCalled == true, "UIContext render rendered overlay in HUD mode");
 
+    // -------------------------------------------------------------
+    // Test 7: Native Fault (SEH) Isolation
+    // -------------------------------------------------------------
+    std::cout << "\nTest 7: Native Fault (SEH) Isolation...\n";
+    std::string faultError;
+    mgr.setErrorCallback([&](const std::string& name, const std::string& err) {
+        faultError = name + ": " + err;
+    });
+
+    auto faultId = mgr.registerOverlay("CrashingOverlay", [](PerfUI::OverlayContext&) {
+        volatile int* nullPointer = nullptr;
+        *nullPointer = 42;
+    }, 20, true);
+
+    bool survivedFault = true;
+    try {
+        mgr.renderOverlays(ctx, true);
+    } catch (...) {
+        survivedFault = false;
+    }
+
+    TEST_ASSERT(survivedFault == true, "Native fault was intercepted without terminating the process");
+    TEST_ASSERT(!mgr.isOverlayEnabled(faultId), "Overlay that faulted was automatically disabled");
+    TEST_ASSERT(faultError.find("CrashingOverlay") != std::string::npos, "Error callback received the faulting overlay name");
+    TEST_ASSERT(faultError.find("native fault") != std::string::npos, "Error message describes the native fault");
+
+    bool healthyRan = false;
+    mgr.registerOverlay("HealthyOverlay", [&](PerfUI::OverlayContext&) { healthyRan = true; }, 30, true);
+    mgr.renderOverlays(ctx, true);
+    TEST_ASSERT(healthyRan == true, "Remaining overlays keep rendering after a neighbour faulted");
+
     std::cout << "\n=========================================================\n";
     std::cout << "  Summary: " << g_testsPassed << " passed, " << g_testsFailed << " failed.\n";
     std::cout << "=========================================================\n";

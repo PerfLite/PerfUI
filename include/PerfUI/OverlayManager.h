@@ -25,6 +25,9 @@ public:
     void setOverlayEnabled(OverlayId id, bool enabled);
 
     bool hasVisibleOverlays() const;
+    // Renders enabled overlays in z-order. A callback that throws, or that triggers a
+    // hardware fault (access violation and friends), is reported through the error
+    // callback and disabled for the rest of the session instead of crashing the game.
     void renderOverlays(OverlayContext& ctx, bool isUIVisible);
 
     void setErrorCallback(ErrorCallback cb);
