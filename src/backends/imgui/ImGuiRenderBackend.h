@@ -1,8 +1,11 @@
 #pragma once
 
 #include "PerfUI/UIRenderBackend.h"
-#include <unordered_map>
+#include <atomic>
+#include <cstdint>
 #include <mutex>
+#include <string>
+#include <unordered_map>
 
 // Forward declare ImDrawList and ImFont so imgui.h is NOT exposed in this header
 struct ImDrawList;
@@ -92,15 +95,25 @@ private:
         uint32_t width{ 0 };
         uint32_t height{ 0 };
         bool dynamic{ false };
+        // File-backed textures keep their source so edits can be picked up live.
+        std::string filePath;
+        float rasterWidth{ 0.0f };
+        float rasterHeight{ 0.0f };
+        int64_t fileStamp{ 0 };
     };
 
     uint64_t resolveTexture(TextureId id);
+
+    bool createTextureResources(uint32_t width, uint32_t height, const uint8_t* rgbaPixels, void** outSrv, void** outTexture);
+    void maybeHotReloadTextures();
+    void reloadChangedTextures();
 
     void* m_d3dDevice{ nullptr };
     void* m_d3dContext{ nullptr };
     TextureId m_nextTextureId{ 1 };
     std::unordered_map<TextureId, TextureRecord> m_textures;
     mutable std::mutex m_textureMutex;
+    std::atomic<int64_t> m_lastHotReloadTick{ 0 };
 
     ImDrawList* getDrawList();
     ImFont* getFontForStyle(const TextStyle& style) const;

@@ -7,9 +7,12 @@
 #include <d3d11.h>
 #endif
 #include <imgui.h>
+#include <chrono>
 #include <filesystem>
 #include <algorithm>
 #include <cmath>
+#include <string>
+#include <vector>
 #include "PerfUI/SvgService.h"
 
 #pragma warning(push)
@@ -42,6 +45,24 @@ static inline float SanitizeWrapWidth(float wrapWidth) {
     return (std::isfinite(wrapWidth) && wrapWidth > 0.0f) ? wrapWidth : 0.0f;
 }
 
+// Hot reload: file-backed textures are re-checked at most once per second so
+// artists can iterate on SVG/PNG assets without restarting the game.
+static constexpr auto kHotReloadInterval = std::chrono::seconds(1);
+
+static int64_t QueryFileStamp(const std::string& path) {
+    std::error_code ec;
+    const auto stamp = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        return 0;
+    }
+    return static_cast<int64_t>(stamp.time_since_epoch().count());
+}
+
+static bool IsSvgPath(const std::string& path) {
+    return path.size() >= 4 &&
+        (path.compare(path.size() - 4, 4, ".svg") == 0 || path.compare(path.size() - 4, 4, ".SVG") == 0);
+}
+
 ImGuiRenderBackend::ImGuiRenderBackend() = default;
 
 ImGuiRenderBackend::~ImGuiRenderBackend() {
@@ -57,6 +78,7 @@ ImGuiRenderBackend::~ImGuiRenderBackend() {
 
 uint64_t ImGuiRenderBackend::resolveTexture(TextureId id) {
     if (id == 0) return 0;
+    maybeHotReloadTextures();
     std::lock_guard<std::mutex> lock(m_textureMutex);
     auto it = m_textures.find(id);
     if (it != m_textures.end() && it->second.srv) {
@@ -473,64 +495,12 @@ void ImGuiRenderBackend::setD3D11Device(void* device, void* context) {
     m_d3dContext = context;
 }
 
-TextureId ImGuiRenderBackend::loadTexture(std::string_view filePath) {
+bool ImGuiRenderBackend::createTextureResources(uint32_t width, uint32_t height, const uint8_t* rgbaPixels, void** outSrv, void** outTexture) {
+    *outSrv = nullptr;
+    *outTexture = nullptr;
 #if defined(_WIN32)
     ID3D11Device* device = static_cast<ID3D11Device*>(m_d3dDevice);
-    if (!device) return 0;
-
-    if (filePath.ends_with(".svg") || filePath.ends_with(".SVG")) {
-        return loadSvg(filePath);
-    }
-
-    std::string pathStr(filePath);
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-
-    unsigned char* data = stbi_load(pathStr.c_str(), &width, &height, &channels, 4);
-    if (!data) return 0;
-
-    D3D11_TEXTURE2D_DESC desc{};
-    desc.Width = static_cast<UINT>(width);
-    desc.Height = static_cast<UINT>(height);
-    desc.MipLevels = 1;
-    desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    desc.SampleDesc.Count = 1;
-    desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-
-    D3D11_SUBRESOURCE_DATA subData{};
-    subData.pSysMem = data;
-    subData.SysMemPitch = static_cast<UINT>(width * 4);
-
-    ID3D11Texture2D* texture = nullptr;
-    HRESULT hr = device->CreateTexture2D(&desc, &subData, &texture);
-    stbi_image_free(data);
-
-    if (FAILED(hr) || !texture) return 0;
-
-    ID3D11ShaderResourceView* srv = nullptr;
-    hr = device->CreateShaderResourceView(texture, nullptr, &srv);
-    if (FAILED(hr) || !srv) {
-        texture->Release();
-        return 0;
-    }
-
-    std::lock_guard<std::mutex> lock(m_textureMutex);
-    TextureId id = m_nextTextureId++;
-    m_textures[id] = TextureRecord{ srv, texture, static_cast<uint32_t>(width), static_cast<uint32_t>(height), false };
-    return id;
-#else
-    (void)filePath;
-    return 0;
-#endif
-}
-
-TextureId ImGuiRenderBackend::createDynamicTexture(uint32_t width, uint32_t height, const uint8_t* rgbaPixels) {
-#if defined(_WIN32)
-    ID3D11Device* device = static_cast<ID3D11Device*>(m_d3dDevice);
-    if (!device || width == 0 || height == 0) return 0;
+    if (!device || width == 0 || height == 0) return false;
 
     D3D11_TEXTURE2D_DESC desc{};
     desc.Width = width;
@@ -548,22 +518,137 @@ TextureId ImGuiRenderBackend::createDynamicTexture(uint32_t width, uint32_t heig
 
     ID3D11Texture2D* texture = nullptr;
     HRESULT hr = device->CreateTexture2D(&desc, rgbaPixels ? &subData : nullptr, &texture);
-    if (FAILED(hr) || !texture) return 0;
+    if (FAILED(hr) || !texture) return false;
 
     ID3D11ShaderResourceView* srv = nullptr;
     hr = device->CreateShaderResourceView(texture, nullptr, &srv);
     if (FAILED(hr) || !srv) {
         texture->Release();
-        return 0;
+        return false;
     }
+
+    *outSrv = srv;
+    *outTexture = texture;
+    return true;
+#else
+    (void)width; (void)height; (void)rgbaPixels;
+    return false;
+#endif
+}
+
+TextureId ImGuiRenderBackend::loadTexture(std::string_view filePath) {
+    if (!m_d3dDevice) return 0;
+
+    if (filePath.ends_with(".svg") || filePath.ends_with(".SVG")) {
+        return loadSvg(filePath);
+    }
+
+    std::string pathStr(filePath);
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+
+    unsigned char* data = stbi_load(pathStr.c_str(), &width, &height, &channels, 4);
+    if (!data) return 0;
+
+    void* srv = nullptr;
+    void* texture = nullptr;
+    const bool created = createTextureResources(static_cast<uint32_t>(width), static_cast<uint32_t>(height), data, &srv, &texture);
+    stbi_image_free(data);
+    if (!created) return 0;
+
+    std::lock_guard<std::mutex> lock(m_textureMutex);
+    TextureId id = m_nextTextureId++;
+    TextureRecord record{ srv, texture, static_cast<uint32_t>(width), static_cast<uint32_t>(height), false };
+    record.filePath = std::move(pathStr);
+    record.fileStamp = QueryFileStamp(record.filePath);
+    m_textures[id] = std::move(record);
+    return id;
+}
+
+TextureId ImGuiRenderBackend::createDynamicTexture(uint32_t width, uint32_t height, const uint8_t* rgbaPixels) {
+    void* srv = nullptr;
+    void* texture = nullptr;
+    if (!createTextureResources(width, height, rgbaPixels, &srv, &texture)) return 0;
 
     std::lock_guard<std::mutex> lock(m_textureMutex);
     TextureId id = m_nextTextureId++;
     m_textures[id] = TextureRecord{ srv, texture, width, height, true };
     return id;
-#else
-    (void)width; (void)height; (void)rgbaPixels;
-    return 0;
+}
+
+void ImGuiRenderBackend::maybeHotReloadTextures() {
+    const int64_t now = std::chrono::steady_clock::now().time_since_epoch().count();
+    const int64_t interval = std::chrono::duration_cast<std::chrono::steady_clock::duration>(kHotReloadInterval).count();
+    int64_t last = m_lastHotReloadTick.load(std::memory_order_relaxed);
+    if (last != 0 && now - last < interval) return;
+    if (!m_lastHotReloadTick.compare_exchange_strong(last, now)) return;
+    reloadChangedTextures();
+}
+
+void ImGuiRenderBackend::reloadChangedTextures() {
+#if defined(_WIN32)
+    struct Candidate {
+        TextureId id;
+        std::string path;
+        float rasterWidth;
+        float rasterHeight;
+        int64_t stamp;
+    };
+
+    std::vector<Candidate> changed;
+    {
+        std::lock_guard<std::mutex> lock(m_textureMutex);
+        for (const auto& [id, record] : m_textures) {
+            if (record.filePath.empty()) continue;
+            const int64_t stamp = QueryFileStamp(record.filePath);
+            if (stamp == 0 || stamp == record.fileStamp) continue;
+            changed.push_back({ id, record.filePath, record.rasterWidth, record.rasterHeight, stamp });
+        }
+    }
+    if (changed.empty()) return;
+
+    for (const auto& candidate : changed) {
+        void* srv = nullptr;
+        void* texture = nullptr;
+        uint32_t width = 0;
+        uint32_t height = 0;
+
+        if (IsSvgPath(candidate.path)) {
+            auto res = SvgService::RasterizeFile(candidate.path, candidate.rasterWidth, candidate.rasterHeight);
+            if (!res.valid()) continue;
+            width = res.width;
+            height = res.height;
+            if (!createTextureResources(width, height, res.rgbaPixels.data(), &srv, &texture)) continue;
+        } else {
+            int loadedWidth = 0;
+            int loadedHeight = 0;
+            int channels = 0;
+            unsigned char* data = stbi_load(candidate.path.c_str(), &loadedWidth, &loadedHeight, &channels, 4);
+            if (!data) continue;
+            width = static_cast<uint32_t>(loadedWidth);
+            height = static_cast<uint32_t>(loadedHeight);
+            const bool created = createTextureResources(width, height, data, &srv, &texture);
+            stbi_image_free(data);
+            if (!created) continue;
+        }
+
+        std::lock_guard<std::mutex> lock(m_textureMutex);
+        auto it = m_textures.find(candidate.id);
+        if (it == m_textures.end()) {
+            static_cast<ID3D11ShaderResourceView*>(srv)->Release();
+            static_cast<ID3D11Texture2D*>(texture)->Release();
+            continue;
+        }
+        auto& record = it->second;
+        if (record.srv) static_cast<ID3D11ShaderResourceView*>(record.srv)->Release();
+        if (record.texture) static_cast<ID3D11Texture2D*>(record.texture)->Release();
+        record.srv = srv;
+        record.texture = texture;
+        record.width = width;
+        record.height = height;
+        record.fileStamp = candidate.stamp;
+    }
 #endif
 }
 
@@ -617,7 +702,20 @@ Dimensions ImGuiRenderBackend::getTextureSize(TextureId id) {
 TextureId ImGuiRenderBackend::loadSvg(std::string_view filePath, float targetWidth, float targetHeight) {
     auto res = SvgService::RasterizeFile(filePath, targetWidth, targetHeight);
     if (!res.valid()) return 0;
-    return createDynamicTexture(res.width, res.height, res.rgbaPixels.data());
+
+    void* srv = nullptr;
+    void* texture = nullptr;
+    if (!createTextureResources(res.width, res.height, res.rgbaPixels.data(), &srv, &texture)) return 0;
+
+    std::lock_guard<std::mutex> lock(m_textureMutex);
+    TextureId id = m_nextTextureId++;
+    TextureRecord record{ srv, texture, res.width, res.height, true };
+    record.filePath = std::string(filePath);
+    record.rasterWidth = targetWidth;
+    record.rasterHeight = targetHeight;
+    record.fileStamp = QueryFileStamp(record.filePath);
+    m_textures[id] = std::move(record);
+    return id;
 }
 
 TextureId ImGuiRenderBackend::loadSvgFromMemory(std::string_view svgContent, float targetWidth, float targetHeight) {
