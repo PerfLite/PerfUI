@@ -62,6 +62,10 @@ target("PerfUI")
         if os.isfile(pdb) then
             os.cp(pdb, path.join(sdk_lib, "PerfUI.pdb"))
         end
+        local dll = path.join(target_dir, "PerfUI.dll")
+        if os.isfile(dll) then
+            os.cp(dll, path.join(sdk_lib, "PerfUI.dll"))
+        end
     end)
 
 target("PerfUI_Test_Independence")
