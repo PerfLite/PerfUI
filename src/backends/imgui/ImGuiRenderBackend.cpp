@@ -29,6 +29,19 @@ static inline ImVec2 ToImVec2(Point p) {
     return ImVec2(p.x, p.y);
 }
 
+// The dynamic font atlas (ImGui 1.92+) bakes glyphs for every requested size at runtime.
+// A non-finite size turns IM_ROUND() into INT_MIN, which produces a negative-width glyph
+// rect and crashes stb_rect_pack inside the atlas packer. Validate at the API boundary.
+static constexpr float kFallbackFontSize = 16.0f;
+
+static inline float SanitizeFontSize(float size) {
+    return (std::isfinite(size) && size > 0.0f) ? size : kFallbackFontSize;
+}
+
+static inline float SanitizeWrapWidth(float wrapWidth) {
+    return (std::isfinite(wrapWidth) && wrapWidth > 0.0f) ? wrapWidth : 0.0f;
+}
+
 ImGuiRenderBackend::ImGuiRenderBackend() = default;
 
 ImGuiRenderBackend::~ImGuiRenderBackend() {
@@ -188,14 +201,16 @@ ImFont* ImGuiRenderBackend::getFontForStyle(const TextStyle& style) const {
         return nullptr;
     }
 
+    const float fontSize = SanitizeFontSize(style.fontSize);
+
     if (style.bold) {
-        if (style.fontSize >= 25.0f) return m_fontHeader ? m_fontHeader : m_fontTitle;
-        if (style.fontSize >= 20.0f) return m_fontTitle ? m_fontTitle : m_fontBold;
+        if (fontSize >= 25.0f) return m_fontHeader ? m_fontHeader : m_fontTitle;
+        if (fontSize >= 20.0f) return m_fontTitle ? m_fontTitle : m_fontBold;
         return m_fontBold ? m_fontBold : m_fontRegular;
     } else {
-        if (style.fontSize >= 24.0f) return m_fontHeader ? m_fontHeader : m_fontMedium;
-        if (style.fontSize >= 18.0f) return m_fontMedium ? m_fontMedium : m_fontRegular;
-        if (style.fontSize <= 13.0f) return m_fontSmall ? m_fontSmall : m_fontRegular;
+        if (fontSize >= 24.0f) return m_fontHeader ? m_fontHeader : m_fontMedium;
+        if (fontSize >= 18.0f) return m_fontMedium ? m_fontMedium : m_fontRegular;
+        if (fontSize <= 13.0f) return m_fontSmall ? m_fontSmall : m_fontRegular;
         return m_fontRegular;
     }
 }
@@ -211,8 +226,8 @@ void ImGuiRenderBackend::drawText(
     const char* textBegin = text.data();
     const char* textEnd = text.data() + text.size();
     ImFont* font = getFontForStyle(style);
-    float fontSize = style.fontSize;
-    float wrapWidth = style.wrapWidth > 0.0f ? style.wrapWidth : 0.0f;
+    float fontSize = SanitizeFontSize(style.fontSize);
+    float wrapWidth = SanitizeWrapWidth(style.wrapWidth);
 
     dl->AddText(
         font,
@@ -236,8 +251,8 @@ Dimensions ImGuiRenderBackend::measureText(
     const char* textBegin = text.data();
     const char* textEnd = text.data() + text.size();
     ImFont* font = getFontForStyle(style);
-    float fontSize = style.fontSize;
-    float wrapWidth = style.wrapWidth > 0.0f ? style.wrapWidth : 0.0f;
+    float fontSize = SanitizeFontSize(style.fontSize);
+    float wrapWidth = SanitizeWrapWidth(style.wrapWidth);
 
     if (font) {
         ImVec2 size = font->CalcTextSizeA(fontSize, FLT_MAX, wrapWidth, textBegin, textEnd);
