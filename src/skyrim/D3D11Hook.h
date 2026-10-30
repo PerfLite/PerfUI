@@ -85,6 +85,8 @@ private:
     PerfUI::MainMenuWindow* m_mainMenuWindow{ nullptr };
 
     std::chrono::high_resolution_clock::time_point m_lastFrameTime;
+    std::chrono::steady_clock::time_point m_lastPresentTime{};
+    bool m_hasPresentTime{ false };
 };
 
 } // namespace PerfUI::Skyrim

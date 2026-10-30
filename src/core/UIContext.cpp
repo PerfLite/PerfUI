@@ -2,6 +2,7 @@
 #include "PerfUI/ModalDialog.h"
 #include "PerfUI/ComboBox.h"
 #include "PerfUI/Animation.h"
+#include "PerfUI/Diagnostics.h"
 #include "PerfUI/WorldAnchor.h"
 #include <algorithm>
 #include <chrono>
@@ -27,6 +28,8 @@ void UIContext::requestLayout() {
 }
 
 void UIContext::update(float deltaTime) {
+    const auto updateStart = std::chrono::high_resolution_clock::now();
+
     m_uiThreadId = std::this_thread::get_id();
     assertUIThread();
     m_lastDeltaTime = deltaTime;
@@ -94,6 +97,8 @@ void UIContext::update(float deltaTime) {
         m_tooltipAlpha.setTarget(0.0f);
     }
     m_tooltipAlpha.update(deltaTime);
+
+    m_metrics.updateTimeUs = std::chrono::duration<float, std::micro>(std::chrono::high_resolution_clock::now() - updateStart).count();
 }
 
 static uint32_t CountElementsRecursive(const UIElement* elem) {
@@ -148,6 +153,14 @@ void UIContext::render(UIRenderBackend& backend, bool renderTree) {
     auto end = std::chrono::high_resolution_clock::now();
 
     m_metrics.renderTimeUs = std::chrono::duration<float, std::micro>(end - start).count();
+
+    Diagnostics& diagnostics = Diagnostics::GetSingleton();
+    diagnostics.recordUiFrame(UiFrameTiming{
+        m_metrics.updateTimeUs / 1000.0f,
+        m_metrics.layoutTimeUs / 1000.0f,
+        m_metrics.renderTimeUs / 1000.0f,
+        m_metrics.elementCount });
+    diagnostics.render(backend, m_viewportSize);
 }
 
 void UIContext::renderOverlay(UIRenderBackend& backend) {

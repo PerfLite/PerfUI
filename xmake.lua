@@ -176,6 +176,19 @@ target("PerfUI_Test_Overlay")
         "tests/OverlayTest.cpp"
     )
 
+target("PerfUI_Test_Diagnostics")
+    set_kind("binary")
+    set_languages("c++20")
+    add_defines("PERFUI_STATIC")
+    add_syslinks("user32")
+    add_includedirs("include", "src/backends/mock", "src")
+    add_files(
+        "src/core/*.cpp",
+        "src/layout/*.cpp",
+        "src/widgets/*.cpp",
+        "tests/DiagnosticsTest.cpp"
+    )
+
 target("PerfUI_Test_Texture")
     set_kind("binary")
     set_languages("c++20")

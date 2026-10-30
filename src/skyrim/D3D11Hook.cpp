@@ -3,6 +3,7 @@
 #include <backends/imgui_impl_win32.h>
 #include <backends/imgui_impl_dx11.h>
 #include "InputHook.h"
+#include "PerfUI/Diagnostics.h"
 #include "PerfUI/JournalWindow.h"
 #include "SkyrimQuestService.h"
 #include "SkyrimSoundService.h"
@@ -532,6 +533,10 @@ void D3D11Hook::EnsureUIContext() {
         SKSE::log::error("PerfUI Overlay '{}' threw exception: {}. Disabled.", name, err);
     });
 
+    m_uiContext->registerHotkey("perfui.diagnostics", VK_F7, []() {
+        PerfUI::Diagnostics::GetSingleton().toggle();
+    });
+
     // Add retained-mode Nordic Journal Window (hidden by default)
     m_journalWindow = m_uiContext->root()->add<PerfUI::JournalWindow>();
     m_journalWindow->setVisible(false);
@@ -613,6 +618,7 @@ void D3D11Hook::RenderFrame() {
     bool anyTreeVisible = uiVis || hasRootWindows;
     bool hasOverlays = m_uiContext && m_uiContext->hasVisibleOverlays();
     bool hasPendingTasks = m_uiContext && m_uiContext->hasPendingTasks();
+    bool diagnosticsVisible = PerfUI::Diagnostics::GetSingleton().isVisible();
     bool shouldShowCursor = IsCursorNeeded();
 
     if (!shouldShowCursor) {
@@ -622,7 +628,7 @@ void D3D11Hook::RenderFrame() {
         }
     }
 
-    if (!m_imguiInitialized.load() || (!anyTreeVisible && !shouldShowCursor && !hasOverlays && !hasPendingTasks) || !m_imguiContext) return;
+    if (!m_imguiInitialized.load() || (!anyTreeVisible && !shouldShowCursor && !hasOverlays && !hasPendingTasks && !diagnosticsVisible) || !m_imguiContext) return;
 
     ImGuiContext* prevContext = ImGui::GetCurrentContext();
     ImGui::SetCurrentContext(m_imguiContext);
@@ -762,6 +768,19 @@ void D3D11Hook::RenderFrame() {
 
     ImGui::Render();
 
+    if (ImDrawData* drawData = ImGui::GetDrawData()) {
+        PerfUI::DrawStats stats;
+        for (int i = 0; i < drawData->CmdListsCount; ++i) {
+            stats.drawCalls += static_cast<uint32_t>(drawData->CmdLists[i]->CmdBuffer.Size);
+        }
+        stats.vertices = static_cast<uint32_t>(drawData->TotalVtxCount);
+        stats.textures = static_cast<uint32_t>(m_renderBackend->textureCount());
+        const Dimensions atlas = m_renderBackend->fontAtlasSize();
+        stats.fontAtlasWidth = static_cast<uint32_t>(atlas.width);
+        stats.fontAtlasHeight = static_cast<uint32_t>(atlas.height);
+        PerfUI::Diagnostics::GetSingleton().recordDrawStats(stats);
+    }
+
     // Bind back buffer target view and render draw list
     m_context->OMSetRenderTargets(1, &m_renderTargetView, nullptr);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -810,11 +829,20 @@ HRESULT STDMETHODCALLTYPE D3D11Hook::Hooked_Present(
         }
     }
 
+    const auto presentNow = std::chrono::steady_clock::now();
+    if (hook.m_hasPresentTime) {
+        const float frameMs = std::chrono::duration<float, std::milli>(presentNow - hook.m_lastPresentTime).count();
+        PerfUI::Diagnostics::GetSingleton().recordFrameInterval(frameMs);
+    }
+    hook.m_lastPresentTime = presentNow;
+    hook.m_hasPresentTime = true;
+
     bool anyTreeVisible = hook.m_uiVisible.load() || hook.HasVisibleRootWindows();
     bool hasOverlays = hook.m_uiContext && hook.m_uiContext->hasVisibleOverlays();
     bool hasPendingTasks = hook.m_uiContext && hook.m_uiContext->hasPendingTasks();
+    bool diagnosticsVisible = PerfUI::Diagnostics::GetSingleton().isVisible();
     bool cursorNeeded = hook.IsCursorNeeded();
-    if (anyTreeVisible || hasOverlays || hasPendingTasks || cursorNeeded) {
+    if (anyTreeVisible || hasOverlays || hasPendingTasks || cursorNeeded || diagnosticsVisible) {
         hook.RenderFrame();
     }
 

@@ -749,4 +749,18 @@ TextureId ImGuiRenderBackend::loadSvgFromMemory(std::string_view svgContent, flo
     return createDynamicTexture(res.width, res.height, res.rgbaPixels.data());
 }
 
+size_t ImGuiRenderBackend::textureCount() const {
+    std::lock_guard<std::mutex> lock(m_textureMutex);
+    return m_textures.size();
+}
+
+Dimensions ImGuiRenderBackend::fontAtlasSize() const {
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.Fonts && io.Fonts->TexData) {
+        return Dimensions{ static_cast<float>(io.Fonts->TexData->Width),
+                           static_cast<float>(io.Fonts->TexData->Height) };
+    }
+    return Dimensions{ 0.0f, 0.0f };
+}
+
 } // namespace PerfUI

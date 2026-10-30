@@ -89,6 +89,10 @@ public:
 
     void initFonts();
 
+    // Diagnostics panel feed
+    size_t textureCount() const;
+    Dimensions fontAtlasSize() const;
+
 private:
     struct TextureRecord {
         void* srv{ nullptr };

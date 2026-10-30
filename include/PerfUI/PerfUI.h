@@ -2,6 +2,7 @@
 
 #include "Types.h"
 #include "Threading.h"
+#include "Diagnostics.h"
 #include "Layout.h"
 #include "LayoutEngine.h"
 #include "Style.h"

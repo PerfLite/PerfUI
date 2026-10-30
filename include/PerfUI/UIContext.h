@@ -76,6 +76,7 @@ public:
 
     // Performance & Profiling (Phase 12)
     struct ProfilerMetrics {
+        float updateTimeUs{ 0.0f };
         float layoutTimeUs{ 0.0f };
         float renderTimeUs{ 0.0f };
         uint32_t elementCount{ 0 };
