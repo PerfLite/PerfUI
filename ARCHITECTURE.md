@@ -162,3 +162,14 @@ Skyrim executes logic across multiple threads (Havok physics, AI, TaskInterface)
   6. Restore D3D11 render state.
 - **Logic / Game Thread**:
   - SKSE tasks and game events post messages to a thread-safe MPSC (Multi-Producer Single-Consumer) queue in `UIContext` to avoid race conditions with rendering.
+
+### 4.1 Threading Contract
+
+1. **Widget trees are render-thread only.** `UIContext`, `UIElement`, layout and drawing state may only be touched from the `Present()` path. Game-thread code that mutates them is a bug, even when it "works" under low load.
+2. **Data crosses threads as plain copies.** Use the helpers in `include/PerfUI/Threading.h`:
+   - `Snapshot<T>` — latest-value hand-off (player stats, camera state); producers overwrite, the render thread calls `read()` or `readChanged(out, version)`.
+   - `EventQueue<T>` — ordered events (floating text, combat log); producers `push()`, the render thread `drain()`s once per frame.
+   Never publish raw engine pointers through either helper — resolve game objects into plain structs first.
+3. **Backend texture API is thread-safe.** `loadTexture`/`loadSvg`/`createDynamicTexture`/`destroyTexture`/`getTextureSize` are mutex-guarded inside `ImGuiRenderBackend` and may be called from any thread. Drawing calls (`drawRect`, `drawText`, `drawImage`, …) must stay on the render thread.
+4. **Overlay callbacks are fault-guarded.** `OverlayManager::renderOverlays` wraps each callback in an SEH frame: a C++ exception or a hardware fault (access violation, division by zero, …) disables that overlay for the session, reports through `setErrorCallback`, writes `PerfUI_faults.log` next to `PerfUI.dll`, and rendering continues for the remaining overlays. This is a last-resort net, not a license to write unsafe render code — a recovered fault can still leave half-built draw commands in the current frame.
+5. **Asset files hot-reload.** File-backed textures remember their path and raster size; the backend re-checks file mtimes at most once per second on the render thread and rebuilds changed textures in place, so SVG/PNG tweaks show up without restarting the game.
