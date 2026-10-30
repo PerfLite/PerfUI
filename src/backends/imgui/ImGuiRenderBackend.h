@@ -6,6 +6,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 // Forward declare ImDrawList and ImFont so imgui.h is NOT exposed in this header
 struct ImDrawList;
@@ -102,6 +103,11 @@ private:
         int64_t fileStamp{ 0 };
     };
 
+    struct RetiredTexture {
+        void* srv{ nullptr };
+        void* texture{ nullptr };
+    };
+
     uint64_t resolveTexture(TextureId id);
 
     bool createTextureResources(uint32_t width, uint32_t height, const uint8_t* rgbaPixels, void** outSrv, void** outTexture);
@@ -112,6 +118,10 @@ private:
     void* m_d3dContext{ nullptr };
     TextureId m_nextTextureId{ 1 };
     std::unordered_map<TextureId, TextureRecord> m_textures;
+    // Hot reload swaps GPU resources mid-frame; the previous ones may still be
+    // referenced by draw commands already queued for this frame, so they are
+    // released on the next poll instead.
+    std::vector<RetiredTexture> m_retiredTextures;
     mutable std::mutex m_textureMutex;
     std::atomic<int64_t> m_lastHotReloadTick{ 0 };
 

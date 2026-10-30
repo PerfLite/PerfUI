@@ -63,16 +63,29 @@ static bool IsSvgPath(const std::string& path) {
         (path.compare(path.size() - 4, 4, ".svg") == 0 || path.compare(path.size() - 4, 4, ".SVG") == 0);
 }
 
+static void ReleaseTexturePair(void* srv, void* texture) {
+#if defined(_WIN32)
+    if (srv) static_cast<ID3D11ShaderResourceView*>(srv)->Release();
+    if (texture) static_cast<ID3D11Texture2D*>(texture)->Release();
+#else
+    (void)srv;
+    (void)texture;
+#endif
+}
+
 ImGuiRenderBackend::ImGuiRenderBackend() = default;
 
 ImGuiRenderBackend::~ImGuiRenderBackend() {
 #if defined(_WIN32)
     std::lock_guard<std::mutex> lock(m_textureMutex);
     for (auto& [id, record] : m_textures) {
-        if (record.srv) static_cast<ID3D11ShaderResourceView*>(record.srv)->Release();
-        if (record.texture) static_cast<ID3D11Texture2D*>(record.texture)->Release();
+        ReleaseTexturePair(record.srv, record.texture);
+    }
+    for (auto& retired : m_retiredTextures) {
+        ReleaseTexturePair(retired.srv, retired.texture);
     }
     m_textures.clear();
+    m_retiredTextures.clear();
 #endif
 }
 
@@ -596,6 +609,17 @@ void ImGuiRenderBackend::reloadChangedTextures() {
         int64_t stamp;
     };
 
+    // Resources replaced by the previous poll belong to frames that have already
+    // been submitted, so they can be released now.
+    std::vector<RetiredTexture> retired;
+    {
+        std::lock_guard<std::mutex> lock(m_textureMutex);
+        retired.swap(m_retiredTextures);
+    }
+    for (const auto& entry : retired) {
+        ReleaseTexturePair(entry.srv, entry.texture);
+    }
+
     std::vector<Candidate> changed;
     {
         std::lock_guard<std::mutex> lock(m_textureMutex);
@@ -636,13 +660,11 @@ void ImGuiRenderBackend::reloadChangedTextures() {
         std::lock_guard<std::mutex> lock(m_textureMutex);
         auto it = m_textures.find(candidate.id);
         if (it == m_textures.end()) {
-            static_cast<ID3D11ShaderResourceView*>(srv)->Release();
-            static_cast<ID3D11Texture2D*>(texture)->Release();
+            ReleaseTexturePair(srv, texture);
             continue;
         }
         auto& record = it->second;
-        if (record.srv) static_cast<ID3D11ShaderResourceView*>(record.srv)->Release();
-        if (record.texture) static_cast<ID3D11Texture2D*>(record.texture)->Release();
+        m_retiredTextures.push_back({ record.srv, record.texture });
         record.srv = srv;
         record.texture = texture;
         record.width = width;
