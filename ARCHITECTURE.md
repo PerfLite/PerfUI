@@ -173,3 +173,12 @@ Skyrim executes logic across multiple threads (Havok physics, AI, TaskInterface)
 3. **Backend texture API is thread-safe.** `loadTexture`/`loadSvg`/`createDynamicTexture`/`destroyTexture`/`getTextureSize` are mutex-guarded inside `ImGuiRenderBackend` and may be called from any thread. Drawing calls (`drawRect`, `drawText`, `drawImage`, …) must stay on the render thread.
 4. **Overlay callbacks are fault-guarded.** `OverlayManager::renderOverlays` wraps each callback in an SEH frame: a C++ exception or a hardware fault (access violation, division by zero, …) disables that overlay for the session, reports through `setErrorCallback`, writes `PerfUI_faults.log` next to `PerfUI.dll`, and rendering continues for the remaining overlays. This is a last-resort net, not a license to write unsafe render code — a recovered fault can still leave half-built draw commands in the current frame.
 5. **Asset files hot-reload.** File-backed textures remember their path and raster size; the backend re-checks file mtimes at most once per second on the render thread and rebuilds changed textures in place, so SVG/PNG tweaks show up without restarting the game.
+
+---
+
+## 5. Diagnostics & Fault Containment
+
+1. **Performance panel (F7).** `Diagnostics::GetSingleton()` is drawn by `UIContext::render` at the end of every rendered frame when visible. It reports FPS and frame pacing (Present-to-Present), UI update/layout/render cost, draw calls and vertices of the submitted frame, texture count, font atlas size, element count, and the per-overlay timings collected by `OverlayManager`.
+2. **Hitch log.** Every Present interval above the threshold (50 ms by default) is appended to `PerfUI_perf.log` next to `PerfUI.dll`, together with the UI cost and the slowest overlay of that frame. Logging is throttled to one line per two seconds and ignores the first 10 seconds after startup (loading screens, shader compiles). The log runs even when the panel is closed; a clean session produces no file.
+3. **Feeds.** The Skyrim layer measures Present intervals and draw statistics (`D3D11Hook`), `UIContext` measures update/layout/render, `OverlayManager` measures each overlay callback, and the backend exposes texture/atlas counters. Everything else consumes the read-only accessors on `Diagnostics`.
+4. **Cost when idle.** One clock read per overlay per frame plus a handful of atomics-free mutex-protected writes; no file I/O unless a hitch is logged.
