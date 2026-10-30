@@ -1,8 +1,10 @@
 #include "PerfUI/OverlayManager.h"
+#include "PerfUI/Diagnostics.h"
+#include "ModuleLog.h"
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
-#include <fstream>
 #include <string>
 
 #if defined(_WIN32)
@@ -95,33 +97,11 @@ std::string DescribeFault(const FaultInfo& fault) {
     return buffer;
 }
 
-// Best-effort fault report: debugger output plus a log next to PerfUI.dll.
-// Hardware faults in mod code are otherwise invisible without a debugger.
+// Best-effort fault report: hardware faults in mod code are otherwise
+// invisible without a debugger.
 void LogOverlayFault(const std::string& overlayName, const std::string& message) {
     const std::string line = "[PerfUI] overlay '" + overlayName + "' disabled: " + message + "\n";
-#if defined(_WIN32)
-    OutputDebugStringA(line.c_str());
-    HMODULE module = nullptr;
-    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           reinterpret_cast<LPCSTR>(&LogOverlayFault), &module) &&
-        module) {
-        char modulePath[MAX_PATH]{};
-        if (GetModuleFileNameA(module, modulePath, MAX_PATH) > 0) {
-            std::string logPath(modulePath);
-            const auto slash = logPath.find_last_of("\\/");
-            if (slash != std::string::npos) {
-                logPath.resize(slash + 1);
-            }
-            logPath += "PerfUI_faults.log";
-            std::ofstream file(logPath, std::ios::app);
-            if (file) {
-                file << line;
-            }
-        }
-    }
-#else
-    (void)line;
-#endif
+    detail::AppendLogNextToModule(reinterpret_cast<const void*>(&LogOverlayFault), "PerfUI_faults.log", line);
 }
 
 } // namespace
@@ -214,13 +194,19 @@ void OverlayManager::renderOverlays(OverlayContext& ctx, bool isUIVisible) {
         errorCallback = m_errorCallback;
     }
 
+    Diagnostics::GetSingleton().beginOverlayFrame();
+
     for (const auto& e : copy) {
         if (!e.enabled || !e.visible) continue;
         if (!e.alwaysVisible && !isUIVisible) continue;
 
+        const auto overlayStart = std::chrono::steady_clock::now();
         OverlayInvocation invocation{ &e.callback, &ctx };
         FaultInfo fault;
         const bool survived = InvokeSehGuarded(&InvokeOverlayCallback, &invocation, &fault);
+        Diagnostics::GetSingleton().recordOverlayTime(
+            e.name.c_str(),
+            std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - overlayStart).count());
 
         std::string error;
         if (!survived) {
@@ -236,6 +222,8 @@ void OverlayManager::renderOverlays(OverlayContext& ctx, bool isUIVisible) {
             errorCallback(e.name, error);
         }
     }
+
+    Diagnostics::GetSingleton().endOverlayFrame();
 }
 
 void OverlayManager::setErrorCallback(ErrorCallback cb) {
