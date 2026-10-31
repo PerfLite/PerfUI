@@ -12,6 +12,9 @@
 
 namespace PerfUI {
 
+class UIContext;
+class UIElement;
+
 // Изолированная среда исполнения Lua-скриптов одного мода.
 // Каждый хост владеет собственным lua_State; общих глобалов между хостами нет.
 // Все методы, кроме SetLogSink, обязаны вызываться в UI-потоке.
@@ -30,6 +33,11 @@ public:
     bool call(std::string_view name, const ScriptArgs& args);
 
     void registerModule(std::string name, std::function<void(ModuleBuilder&)> setup);
+
+    void bindContext(UIContext* context, UIElement* rootScope = nullptr);
+    UIContext* boundContext() const;
+    UIElement* boundRoot() const;
+    void clearTimers();
 
     void update(float dt);
 

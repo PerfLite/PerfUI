@@ -388,9 +388,11 @@ if(PERFUI_ENABLE_LUA)
         modules/lua/include/PerfUI/Lua/ScriptTypes.h
         modules/lua/include/PerfUI/Lua/ScriptHost.h
         modules/lua/include/PerfUI/Lua/ModuleBuilder.h
+        modules/lua/include/PerfUI/Lua/ScriptCallbackResolver.h
         modules/lua/src/LuaInternal.h
         modules/lua/src/ScriptHost.cpp
         modules/lua/src/ModuleBuilder.cpp
+        modules/lua/src/ScriptCallbackResolver.cpp
         ${LUA_VENDOR_SOURCES}
     )
 
@@ -414,7 +416,25 @@ if(PERFUI_ENABLE_LUA)
 
     target_link_libraries(PerfUI_Test_Lua PRIVATE
         PerfUI_Lua
+        PerfUI_Core
     )
 
     add_test(NAME LuaScriptHostTest COMMAND PerfUI_Test_Lua)
+
+    add_executable(PerfUI_Test_LuaUi
+        modules/lua/tests/LuaUiApiTest.cpp
+        src/backends/mock/MockRenderBackend.h
+    )
+
+    target_include_directories(PerfUI_Test_LuaUi PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/mock
+    )
+
+    target_link_libraries(PerfUI_Test_LuaUi PRIVATE
+        PerfUI_Lua
+        PerfUI_Markup
+        PerfUI_Core
+    )
+
+    add_test(NAME LuaUiApiTest COMMAND PerfUI_Test_LuaUi)
 endif()

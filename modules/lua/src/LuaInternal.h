@@ -19,6 +19,9 @@ struct lua_State;
 
 namespace PerfUI {
 
+class UIContext;
+class UIElement;
+
 // Разделяемые внутренние детали модуля. Публичным заголовкам lua_State не виден.
 struct ModuleSink {
     lua_State* L{ nullptr };
@@ -53,6 +56,28 @@ struct ScriptHost::Impl {
     std::string lastError;
 
     std::thread::id ownerThread;
+
+    UIContext* boundContext{ nullptr };
+    UIElement* boundRoot{ nullptr };
+
+    struct TimerEntry {
+        uint32_t id{ 0 };
+        float interval{ 0.0f };
+        float remaining{ 0.0f };
+        bool repeating{ false };
+        int funcRef{ -2 };
+    };
+    std::vector<TimerEntry> timers;
+    uint32_t nextTimerId{ 1 };
+
+    uint32_t addTimer(float delay, int funcRef, bool repeating);
+    bool cancelTimer(uint32_t id);
+    void clearTimers();
+    void updateTimers(float dt);
+
+    UIElement* findElement(std::string_view name) const;
+    void pushElementHandle(UIElement* element);
+    void registerUiLibrary();
 
     bool createState();
     void destroyState();

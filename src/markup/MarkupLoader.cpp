@@ -40,19 +40,19 @@ static bool isKnownWidgetAttribute(const std::string& tag, const std::string& ke
     } else if (tag == "ScrollView") {
         return key == "scroll" || key == "scrollSpeed" || key == "scroll-speed" || key == "showScrollbar" || key == "show-scrollbar" || key == "offset";
     } else if (tag == "Checkbox") {
-        return key == "label" || key == "text" || key == "checked" || key == "boxSize" || key == "box-size" || key == "fontSize" || key == "font-size" || key == "checkColor" || key == "check-color" || key == "labelColor" || key == "label-color" || key == "onToggle";
+        return key == "label" || key == "text" || key == "checked" || key == "boxSize" || key == "box-size" || key == "fontSize" || key == "font-size" || key == "checkColor" || key == "check-color" || key == "labelColor" || key == "label-color" || key == "onToggle" || key == "onChange";
     } else if (tag == "ProgressBar") {
         return key == "value" || key == "progress" || key == "min" || key == "max" || key == "showLabel" || key == "show-label" || key == "fillColor" || key == "fill-color" || key == "trackColor" || key == "track-color" || key == "height" || key == "radius";
     } else if (tag == "Slider") {
-        return key == "value" || key == "min" || key == "max" || key == "step" || key == "label" || key == "fillColor" || key == "fill-color" || key == "trackColor" || key == "track-color" || key == "onValueChanged";
+        return key == "value" || key == "min" || key == "max" || key == "step" || key == "label" || key == "fillColor" || key == "fill-color" || key == "trackColor" || key == "track-color" || key == "onValueChanged" || key == "onChange";
     } else if (tag == "Image") {
         return key == "texture" || key == "tint";
     } else if (tag == "TabBar") {
-        return key == "tabs" || key == "selectedTab";
+        return key == "tabs" || key == "selectedTab" || key == "onTabChanged" || key == "onChange";
     } else if (tag == "ComboBox") {
-        return key == "options" || key == "selectedIndex";
+        return key == "options" || key == "selectedIndex" || key == "onSelectionChanged" || key == "onChange";
     } else if (tag == "TextInput") {
-        return key == "placeholder" || key == "text" || key == "fontSize" || key == "font-size";
+        return key == "placeholder" || key == "text" || key == "fontSize" || key == "font-size" || key == "onTextChanged" || key == "onChange" || key == "onSubmit" || key == "onEnter";
     }
 
     return false;
@@ -179,9 +179,126 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
             if (btn) {
                 if (itCb != m_callbacks.end()) {
                     btn->onClick(itCb->second);
+                } else if (m_resolver && m_resolver->has(cbName)) {
+                    btn->onClick([resolver = m_resolver, cbName]() {
+                        resolver->call(cbName);
+                    });
                 } else {
                     m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] Button '" + element->name() + "' has unbound callback '" + cbName + "'.");
                     btn->onClick([]{});
+                }
+            }
+        }
+    } else if (tag == "Checkbox") {
+        auto it = attrs.find("onToggle");
+        if (it == attrs.end()) it = attrs.find("onChange");
+        if (it != attrs.end()) {
+            const std::string& cbName = it->second;
+            auto itCb = m_callbacks.find(cbName);
+            auto* cb = dynamic_cast<Checkbox*>(element);
+            if (cb) {
+                if (itCb != m_callbacks.end()) {
+                    cb->onToggle([fn = itCb->second](bool) { fn(); });
+                } else if (m_resolver && m_resolver->has(cbName)) {
+                    cb->onToggle([resolver = m_resolver, cbName](bool checked) {
+                        resolver->callNumber(cbName, checked ? 1.0 : 0.0);
+                    });
+                } else {
+                    m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] Checkbox '" + element->name() + "' has unbound callback '" + cbName + "'.");
+                }
+            }
+        }
+    } else if (tag == "Slider") {
+        auto it = attrs.find("onValueChanged");
+        if (it == attrs.end()) it = attrs.find("onChange");
+        if (it != attrs.end()) {
+            const std::string& cbName = it->second;
+            auto itCb = m_callbacks.find(cbName);
+            auto* slider = dynamic_cast<Slider*>(element);
+            if (slider) {
+                if (itCb != m_callbacks.end()) {
+                    slider->onValueChanged([fn = itCb->second](float) { fn(); });
+                } else if (m_resolver && m_resolver->has(cbName)) {
+                    slider->onValueChanged([resolver = m_resolver, cbName](float val) {
+                        resolver->callNumber(cbName, static_cast<double>(val));
+                    });
+                } else {
+                    m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] Slider '" + element->name() + "' has unbound callback '" + cbName + "'.");
+                }
+            }
+        }
+    } else if (tag == "ComboBox") {
+        auto it = attrs.find("onSelectionChanged");
+        if (it == attrs.end()) it = attrs.find("onChange");
+        if (it != attrs.end()) {
+            const std::string& cbName = it->second;
+            auto itCb = m_callbacks.find(cbName);
+            auto* combo = dynamic_cast<ComboBox*>(element);
+            if (combo) {
+                if (itCb != m_callbacks.end()) {
+                    combo->onSelectionChanged([fn = itCb->second](size_t, const std::string&) { fn(); });
+                } else if (m_resolver && m_resolver->has(cbName)) {
+                    combo->onSelectionChanged([resolver = m_resolver, cbName](size_t idx, const std::string&) {
+                        resolver->callNumber(cbName, static_cast<double>(idx));
+                    });
+                } else {
+                    m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] ComboBox '" + element->name() + "' has unbound callback '" + cbName + "'.");
+                }
+            }
+        }
+    } else if (tag == "TabBar") {
+        auto it = attrs.find("onTabChanged");
+        if (it == attrs.end()) it = attrs.find("onChange");
+        if (it != attrs.end()) {
+            const std::string& cbName = it->second;
+            auto itCb = m_callbacks.find(cbName);
+            auto* tab = dynamic_cast<TabBar*>(element);
+            if (tab) {
+                if (itCb != m_callbacks.end()) {
+                    tab->onTabChanged([fn = itCb->second](size_t) { fn(); });
+                } else if (m_resolver && m_resolver->has(cbName)) {
+                    tab->onTabChanged([resolver = m_resolver, cbName](size_t idx) {
+                        resolver->callNumber(cbName, static_cast<double>(idx));
+                    });
+                } else {
+                    m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] TabBar '" + element->name() + "' has unbound callback '" + cbName + "'.");
+                }
+            }
+        }
+    } else if (tag == "TextInput") {
+        auto itChange = attrs.find("onTextChanged");
+        if (itChange == attrs.end()) itChange = attrs.find("onChange");
+        if (itChange != attrs.end()) {
+            const std::string& cbName = itChange->second;
+            auto itCb = m_callbacks.find(cbName);
+            auto* input = dynamic_cast<TextInput*>(element);
+            if (input) {
+                if (itCb != m_callbacks.end()) {
+                    input->onTextChanged([fn = itCb->second](const std::string&) { fn(); });
+                } else if (m_resolver && m_resolver->has(cbName)) {
+                    input->onTextChanged([resolver = m_resolver, cbName](const std::string& val) {
+                        resolver->callString(cbName, val);
+                    });
+                } else {
+                    m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] TextInput '" + element->name() + "' has unbound callback '" + cbName + "'.");
+                }
+            }
+        }
+        auto itSubmit = attrs.find("onSubmit");
+        if (itSubmit == attrs.end()) itSubmit = attrs.find("onEnter");
+        if (itSubmit != attrs.end()) {
+            const std::string& cbName = itSubmit->second;
+            auto itCb = m_callbacks.find(cbName);
+            auto* input = dynamic_cast<TextInput*>(element);
+            if (input) {
+                if (itCb != m_callbacks.end()) {
+                    input->onEnter([fn = itCb->second](const std::string&) { fn(); });
+                } else if (m_resolver && m_resolver->has(cbName)) {
+                    input->onEnter([resolver = m_resolver, cbName](const std::string& val) {
+                        resolver->callString(cbName, val);
+                    });
+                } else {
+                    m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] TextInput '" + element->name() + "' has unbound callback '" + cbName + "'.");
                 }
             }
         }
@@ -219,6 +336,9 @@ UIElement* MarkupLoader::parseAndBuildTree(std::string_view xml, UIElement* pare
         int line = calculateLineNumber(xml, node.offset_debug());
 
         if (tag == "UI") {
+            if (auto scriptAttr = node.attribute("script")) {
+                m_scriptAttribute = scriptAttr.as_string();
+            }
             UIElement* firstCreated = nullptr;
             for (pugi::xml_node child : node.children()) {
                 UIElement* created = buildElement(child, currentParent);
@@ -319,6 +439,10 @@ void MarkupLoader::poll() {
         m_root = newRoot;
     }
     m_lastWriteTime = currentWriteTime;
+
+    if (!m_scriptAttribute.empty() && m_onScriptReload) {
+        m_onScriptReload(m_scriptAttribute);
+    }
 
     // Restore state
     for (const auto& [name, offset] : scrollOffsets) {

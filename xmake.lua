@@ -274,5 +274,36 @@ if has_config("perfui_lua") then
         else
             add_files("third_party/lua/*.c", { cflags = "-w" })
         end
-        add_tests("script_host", { kind = "binary", files = "modules/lua/tests/ScriptHostTest.cpp" })
+
+    target("PerfUI_Test_Lua")
+        set_kind("binary")
+        set_languages("c++20")
+        add_defines("PERFUI_STATIC")
+        add_syslinks("user32")
+        add_deps("PerfUI_Lua")
+        add_includedirs("include", "modules/lua/include", "src/backends/mock", "src")
+        add_files(
+            "src/core/*.cpp",
+            "src/layout/*.cpp",
+            "src/widgets/*.cpp",
+            "modules/lua/tests/ScriptHostTest.cpp"
+        )
+        add_tests("script_host")
+
+    target("PerfUI_Test_LuaUi")
+        set_kind("binary")
+        set_languages("c++20")
+        add_defines("PERFUI_STATIC")
+        add_syslinks("user32")
+        add_deps("PerfUI_Lua")
+        add_includedirs("include", "modules/lua/include", "src/backends/mock", "src/markup", "third_party/pugixml", "src")
+        add_files(
+            "src/core/*.cpp",
+            "src/layout/*.cpp",
+            "src/widgets/*.cpp",
+            "src/markup/*.cpp",
+            "third_party/pugixml/pugixml.cpp",
+            "modules/lua/tests/LuaUiApiTest.cpp"
+        )
+        add_tests("lua_ui_api")
 end

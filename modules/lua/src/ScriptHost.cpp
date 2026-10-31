@@ -1,6 +1,20 @@
 #include "PerfUI/Lua/ScriptHost.h"
 
 #include "LuaInternal.h"
+#include "PerfUI/UIContext.h"
+#include "PerfUI/UIElement.h"
+#include "PerfUI/Text.h"
+#include "PerfUI/Label.h"
+#include "PerfUI/Button.h"
+#include "PerfUI/Slider.h"
+#include "PerfUI/ProgressBar.h"
+#include "PerfUI/Checkbox.h"
+#include "PerfUI/ComboBox.h"
+#include "PerfUI/TabBar.h"
+#include "PerfUI/TextInput.h"
+#include "PerfUI/Theme.h"
+#include "PerfUI/Toast.h"
+#include "PerfUI/Animation.h"
 
 extern "C" {
 #include "lauxlib.h"
@@ -290,6 +304,528 @@ void ApplySandbox(lua_State* L)
     RegisterLogTable(L);
 }
 
+// ---------------------------------------------------------------------------
+// UI Element Handles & 'ui' Library
+// ---------------------------------------------------------------------------
+
+struct LuaElementHandle {
+    ElementId id{ 0 };
+    std::string name;
+    WeakElementRef ref;
+};
+
+constexpr const char* kElementHandleMeta = "PerfUI.ElementHandle";
+
+UIElement* CheckHandleElement(lua_State* L, int argIdx, const char* methodName)
+{
+    auto* handle = static_cast<LuaElementHandle*>(luaL_checkudata(L, argIdx, kElementHandleMeta));
+    if (!handle) {
+        luaL_error(L, "bad self to '%s' (expected UIElement handle)", methodName);
+        return nullptr;
+    }
+    UIElement* elem = handle->ref.get();
+    if (!elem) {
+        ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+        if (impl) {
+            impl->log(ScriptLogLevel::Warn,
+                      "attempt to use destroyed element '" + handle->name + "' in method '" + methodName + "'");
+        }
+        return nullptr;
+    }
+    return elem;
+}
+
+int Handle_id(lua_State* L)
+{
+    auto* handle = static_cast<LuaElementHandle*>(luaL_checkudata(L, 1, kElementHandleMeta));
+    lua_pushinteger(L, static_cast<lua_Integer>(handle->id));
+    return 1;
+}
+
+int Handle_name(lua_State* L)
+{
+    auto* handle = static_cast<LuaElementHandle*>(luaL_checkudata(L, 1, kElementHandleMeta));
+    lua_pushstring(L, handle->name.c_str());
+    return 1;
+}
+
+int Handle_isValid(lua_State* L)
+{
+    auto* handle = static_cast<LuaElementHandle*>(luaL_checkudata(L, 1, kElementHandleMeta));
+    lua_pushboolean(L, handle->ref.isValid() ? 1 : 0);
+    return 1;
+}
+
+int Handle_isVisible(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "isVisible");
+    if (!elem) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    lua_pushboolean(L, elem->isVisible() ? 1 : 0);
+    return 1;
+}
+
+int Handle_setVisible(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setVisible");
+    luaL_checktype(L, 2, LUA_TBOOLEAN);
+    bool visible = lua_toboolean(L, 2) != 0;
+    if (elem) {
+        elem->setVisible(visible);
+    }
+    return 0;
+}
+
+int Handle_isEnabled(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "isEnabled");
+    if (!elem) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    lua_pushboolean(L, elem->isEnabled() ? 1 : 0);
+    return 1;
+}
+
+int Handle_setEnabled(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setEnabled");
+    luaL_checktype(L, 2, LUA_TBOOLEAN);
+    bool enabled = lua_toboolean(L, 2) != 0;
+    if (elem) {
+        elem->setEnabled(enabled);
+    }
+    return 0;
+}
+
+int Handle_isFocused(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "isFocused");
+    if (!elem) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    lua_pushboolean(L, elem->isFocused() ? 1 : 0);
+    return 1;
+}
+
+int Handle_opacity(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "opacity");
+    if (!elem) {
+        lua_pushnumber(L, 0.0);
+        return 1;
+    }
+    lua_pushnumber(L, static_cast<lua_Number>(elem->opacity()));
+    return 1;
+}
+
+int Handle_setOpacity(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setOpacity");
+    lua_Number opacity = luaL_checknumber(L, 2);
+    if (elem) {
+        elem->setOpacity(static_cast<float>(opacity));
+    }
+    return 0;
+}
+
+int Handle_text(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "text");
+    if (!elem) {
+        lua_pushnil(L);
+        return 1;
+    }
+    if (auto* t = dynamic_cast<Text*>(elem)) {
+        lua_pushstring(L, t->text().c_str());
+        return 1;
+    }
+    if (auto* b = dynamic_cast<Button*>(elem)) {
+        lua_pushstring(L, b->text().c_str());
+        return 1;
+    }
+    if (auto* ti = dynamic_cast<TextInput*>(elem)) {
+        lua_pushstring(L, ti->text().c_str());
+        return 1;
+    }
+    if (auto* cb = dynamic_cast<Checkbox*>(elem)) {
+        lua_pushstring(L, cb->label().c_str());
+        return 1;
+    }
+    lua_pushstring(L, "");
+    return 1;
+}
+
+int Handle_setText(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setText");
+    const char* str = luaL_checkstring(L, 2);
+    if (elem) {
+        if (auto* t = dynamic_cast<Text*>(elem)) {
+            t->text(str);
+        } else if (auto* b = dynamic_cast<Button*>(elem)) {
+            b->text(str);
+        } else if (auto* ti = dynamic_cast<TextInput*>(elem)) {
+            ti->text(str);
+        } else if (auto* cb = dynamic_cast<Checkbox*>(elem)) {
+            cb->label(str);
+        } else if (auto* sl = dynamic_cast<Slider*>(elem)) {
+            sl->label(str);
+        }
+    }
+    return 0;
+}
+
+int Handle_value(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "value");
+    if (!elem) {
+        lua_pushnil(L);
+        return 1;
+    }
+    if (auto* sl = dynamic_cast<Slider*>(elem)) {
+        lua_pushnumber(L, static_cast<lua_Number>(sl->value()));
+        return 1;
+    }
+    if (auto* pb = dynamic_cast<ProgressBar*>(elem)) {
+        lua_pushnumber(L, static_cast<lua_Number>(pb->value()));
+        return 1;
+    }
+    if (auto* cb = dynamic_cast<Checkbox*>(elem)) {
+        lua_pushnumber(L, cb->isChecked() ? 1.0 : 0.0);
+        return 1;
+    }
+    lua_pushnumber(L, 0.0);
+    return 1;
+}
+
+int Handle_setValue(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setValue");
+    lua_Number val = luaL_checknumber(L, 2);
+    if (elem) {
+        if (auto* sl = dynamic_cast<Slider*>(elem)) {
+            sl->value(static_cast<float>(val));
+        } else if (auto* pb = dynamic_cast<ProgressBar*>(elem)) {
+            pb->value(static_cast<float>(val));
+        } else if (auto* cb = dynamic_cast<Checkbox*>(elem)) {
+            cb->checked(val != 0.0);
+        }
+    }
+    return 0;
+}
+
+int Handle_isChecked(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "isChecked");
+    if (!elem) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    if (auto* cb = dynamic_cast<Checkbox*>(elem)) {
+        lua_pushboolean(L, cb->isChecked() ? 1 : 0);
+        return 1;
+    }
+    lua_pushboolean(L, 0);
+    return 1;
+}
+
+int Handle_setChecked(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setChecked");
+    luaL_checktype(L, 2, LUA_TBOOLEAN);
+    bool chk = lua_toboolean(L, 2) != 0;
+    if (elem) {
+        if (auto* cb = dynamic_cast<Checkbox*>(elem)) {
+            cb->checked(chk);
+        }
+    }
+    return 0;
+}
+
+int Handle_selectedIndex(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "selectedIndex");
+    if (!elem) {
+        lua_pushnil(L);
+        return 1;
+    }
+    if (auto* cb = dynamic_cast<ComboBox*>(elem)) {
+        lua_pushinteger(L, static_cast<lua_Integer>(cb->selectedIndex()));
+        return 1;
+    }
+    if (auto* tb = dynamic_cast<TabBar*>(elem)) {
+        lua_pushinteger(L, static_cast<lua_Integer>(tb->selectedTab()));
+        return 1;
+    }
+    lua_pushinteger(L, 0);
+    return 1;
+}
+
+int Handle_selectIndex(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "selectIndex");
+    lua_Integer idx = luaL_checkinteger(L, 2);
+    if (idx < 0) {
+        return luaL_error(L, "index must be non-negative");
+    }
+    if (elem) {
+        if (auto* cb = dynamic_cast<ComboBox*>(elem)) {
+            cb->selectIndex(static_cast<size_t>(idx));
+        } else if (auto* tb = dynamic_cast<TabBar*>(elem)) {
+            tb->selectTab(static_cast<size_t>(idx));
+        }
+    }
+    return 0;
+}
+
+int Handle_tostring(lua_State* L)
+{
+    auto* handle = static_cast<LuaElementHandle*>(luaL_checkudata(L, 1, kElementHandleMeta));
+    std::string str = "UIElement('" + handle->name + "', id=" + std::to_string(handle->id) +
+                      ", alive=" + (handle->ref.isValid() ? "true" : "false") + ")";
+    lua_pushstring(L, str.c_str());
+    return 1;
+}
+
+int Handle_gc(lua_State* L)
+{
+    auto* handle = static_cast<LuaElementHandle*>(luaL_checkudata(L, 1, kElementHandleMeta));
+    if (handle) {
+        handle->~LuaElementHandle();
+    }
+    return 0;
+}
+
+void RegisterElementHandleMeta(lua_State* L)
+{
+    if (luaL_newmetatable(L, kElementHandleMeta)) {
+        lua_pushcfunction(L, Handle_gc);
+        lua_setfield(L, -2, "__gc");
+
+        lua_pushcfunction(L, Handle_tostring);
+        lua_setfield(L, -2, "__tostring");
+
+        lua_newtable(L);
+
+        lua_pushcfunction(L, Handle_id);
+        lua_setfield(L, -2, "id");
+        lua_pushcfunction(L, Handle_name);
+        lua_setfield(L, -2, "name");
+        lua_pushcfunction(L, Handle_isValid);
+        lua_setfield(L, -2, "isValid");
+        lua_pushcfunction(L, Handle_isVisible);
+        lua_setfield(L, -2, "isVisible");
+        lua_pushcfunction(L, Handle_setVisible);
+        lua_setfield(L, -2, "setVisible");
+        lua_pushcfunction(L, Handle_isEnabled);
+        lua_setfield(L, -2, "isEnabled");
+        lua_pushcfunction(L, Handle_setEnabled);
+        lua_setfield(L, -2, "setEnabled");
+        lua_pushcfunction(L, Handle_isFocused);
+        lua_setfield(L, -2, "isFocused");
+        lua_pushcfunction(L, Handle_opacity);
+        lua_setfield(L, -2, "opacity");
+        lua_pushcfunction(L, Handle_setOpacity);
+        lua_setfield(L, -2, "setOpacity");
+        lua_pushcfunction(L, Handle_text);
+        lua_setfield(L, -2, "text");
+        lua_pushcfunction(L, Handle_setText);
+        lua_setfield(L, -2, "setText");
+        lua_pushcfunction(L, Handle_value);
+        lua_setfield(L, -2, "value");
+        lua_pushcfunction(L, Handle_setValue);
+        lua_setfield(L, -2, "setValue");
+        lua_pushcfunction(L, Handle_isChecked);
+        lua_setfield(L, -2, "isChecked");
+        lua_pushcfunction(L, Handle_setChecked);
+        lua_setfield(L, -2, "setChecked");
+        lua_pushcfunction(L, Handle_selectedIndex);
+        lua_setfield(L, -2, "selectedIndex");
+        lua_pushcfunction(L, Handle_selectIndex);
+        lua_setfield(L, -2, "selectIndex");
+
+        lua_setfield(L, -2, "__index");
+    }
+    lua_pop(L, 1);
+}
+
+int LL_UiFind(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    const char* name = luaL_checkstring(L, 1);
+    UIElement* elem = impl ? impl->findElement(name) : nullptr;
+    if (!elem) {
+        lua_pushnil(L);
+        return 1;
+    }
+    impl->pushElementHandle(elem);
+    return 1;
+}
+
+int LL_UiToast(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    int top = lua_gettop(L);
+    if (top < 1) {
+        return luaL_error(L, "ui.toast requires at least 1 argument");
+    }
+
+    std::string title;
+    std::string message;
+    std::string typeStr = "info";
+
+    if (top == 1) {
+        title = impl ? impl->name : "PerfUI";
+        message = luaL_checkstring(L, 1);
+    } else if (top == 2) {
+        message = luaL_checkstring(L, 1);
+        typeStr = luaL_checkstring(L, 2);
+        title = impl ? impl->name : "PerfUI";
+    } else {
+        title = luaL_checkstring(L, 1);
+        message = luaL_checkstring(L, 2);
+        typeStr = luaL_checkstring(L, 3);
+    }
+
+    ToastType type = ToastType::Info;
+    if (typeStr == "success") type = ToastType::Success;
+    else if (typeStr == "warning") type = ToastType::Warning;
+    else if (typeStr == "error") type = ToastType::Error;
+
+    if (impl && impl->boundContext) {
+        impl->boundContext->showToast(std::move(title), std::move(message), type);
+    } else if (impl) {
+        impl->log(ScriptLogLevel::Info, "toast [" + typeStr + "] " + message);
+    }
+    return 0;
+}
+
+int LL_UiTimer(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    lua_Number delay = luaL_checknumber(L, 1);
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+
+    lua_pushvalue(L, 2);
+    int funcRef = luaL_ref(L, LUA_REGISTRYINDEX);
+
+    uint32_t id = impl->addTimer(static_cast<float>(delay), funcRef, false);
+    lua_pushinteger(L, static_cast<lua_Integer>(id));
+    return 1;
+}
+
+int LL_UiInterval(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    lua_Number interval = luaL_checknumber(L, 1);
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+
+    lua_pushvalue(L, 2);
+    int funcRef = luaL_ref(L, LUA_REGISTRYINDEX);
+
+    uint32_t id = impl->addTimer(static_cast<float>(interval), funcRef, true);
+    lua_pushinteger(L, static_cast<lua_Integer>(id));
+    return 1;
+}
+
+int LL_UiCancel(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    lua_Integer id = luaL_checkinteger(L, 1);
+    bool cancelled = impl->cancelTimer(static_cast<uint32_t>(id));
+    lua_pushboolean(L, cancelled ? 1 : 0);
+    return 1;
+}
+
+int LL_UiThemeColor(lua_State* L)
+{
+    const char* token = luaL_checkstring(L, 1);
+    const auto& c = Theme::Current().colors;
+    Color foundColor;
+    bool found = false;
+
+    if (std::strcmp(token, "surfaceBase") == 0) { foundColor = c.surfaceBase; found = true; }
+    else if (std::strcmp(token, "surfaceElevated") == 0) { foundColor = c.surfaceElevated; found = true; }
+    else if (std::strcmp(token, "surfaceActive") == 0) { foundColor = c.surfaceActive; found = true; }
+    else if (std::strcmp(token, "borderSubtle") == 0) { foundColor = c.borderSubtle; found = true; }
+    else if (std::strcmp(token, "borderStrong") == 0) { foundColor = c.borderStrong; found = true; }
+    else if (std::strcmp(token, "borderFocus") == 0) { foundColor = c.borderFocus; found = true; }
+    else if (std::strcmp(token, "textPrimary") == 0) { foundColor = c.textPrimary; found = true; }
+    else if (std::strcmp(token, "textSecondary") == 0) { foundColor = c.textSecondary; found = true; }
+    else if (std::strcmp(token, "textAccent") == 0) { foundColor = c.textAccent; found = true; }
+    else if (std::strcmp(token, "textSuccess") == 0) { foundColor = c.textSuccess; found = true; }
+    else if (std::strcmp(token, "textDisabled") == 0) { foundColor = c.textDisabled; found = true; }
+    else if (std::strcmp(token, "focusGlow") == 0) { foundColor = c.focusGlow; found = true; }
+    else if (std::strcmp(token, "selectionFill") == 0) { foundColor = c.selectionFill; found = true; }
+
+    if (!found) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    char hexBuf[16];
+    std::snprintf(hexBuf, sizeof(hexBuf), "#%02X%02X%02X%02X", foundColor.r, foundColor.g, foundColor.b, foundColor.a);
+
+    lua_createtable(L, 0, 5);
+    lua_pushinteger(L, foundColor.r);
+    lua_setfield(L, -2, "r");
+    lua_pushinteger(L, foundColor.g);
+    lua_setfield(L, -2, "g");
+    lua_pushinteger(L, foundColor.b);
+    lua_setfield(L, -2, "b");
+    lua_pushinteger(L, foundColor.a);
+    lua_setfield(L, -2, "a");
+    lua_pushstring(L, hexBuf);
+    lua_setfield(L, -2, "hex");
+
+    return 1;
+}
+
+void RegisterUiTable(lua_State* L)
+{
+    RegisterElementHandleMeta(L);
+
+    lua_newtable(L);
+
+    lua_pushcfunction(L, LL_UiFind);
+    lua_setfield(L, -2, "find");
+
+    lua_pushcfunction(L, LL_UiToast);
+    lua_setfield(L, -2, "toast");
+
+    lua_pushcfunction(L, LL_UiTimer);
+    lua_setfield(L, -2, "timer");
+
+    lua_pushcfunction(L, LL_UiInterval);
+    lua_setfield(L, -2, "interval");
+
+    lua_pushcfunction(L, LL_UiCancel);
+    lua_setfield(L, -2, "cancel");
+
+    lua_newtable(L);
+    lua_pushcfunction(L, LL_UiThemeColor);
+    lua_setfield(L, -2, "color");
+    lua_setfield(L, -2, "theme");
+
+    lua_setglobal(L, "ui");
+}
+
+UIElement* FindElementRecursive(UIElement* current, std::string_view name)
+{
+    if (!current) return nullptr;
+    if (current->name() == name) return current;
+    for (const auto& child : current->children()) {
+        if (UIElement* found = FindElementRecursive(child.get(), name)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
 void LimitHook(lua_State* L, lua_Debug*)
 {
     ScriptHost::Impl* host = ScriptHost::Impl::FromState(L);
@@ -353,11 +889,13 @@ bool ScriptHost::Impl::createState()
     }
 
     ApplySandbox(L);
+    registerUiLibrary();
     return true;
 }
 
 void ScriptHost::Impl::destroyState()
 {
+    clearTimers();
     if (L) {
         lua_close(L);
         L = nullptr;
@@ -495,6 +1033,122 @@ void ScriptHost::Impl::log(ScriptLogLevel level, const std::string& body) const
     std::fprintf(stderr, "%s\n", line.c_str());
 }
 
+uint32_t ScriptHost::Impl::addTimer(float delay, int funcRef, bool repeating)
+{
+    uint32_t id = nextTimerId++;
+    float d = (repeating && delay <= 0.0f) ? 0.001f : delay;
+    timers.push_back(TimerEntry{ id, d, d, repeating, funcRef });
+    return id;
+}
+
+bool ScriptHost::Impl::cancelTimer(uint32_t id)
+{
+    auto it = std::find_if(timers.begin(), timers.end(), [id](const TimerEntry& e) { return e.id == id; });
+    if (it != timers.end()) {
+        if (L && it->funcRef >= 0) {
+            luaL_unref(L, LUA_REGISTRYINDEX, it->funcRef);
+        }
+        timers.erase(it);
+        return true;
+    }
+    return false;
+}
+
+void ScriptHost::Impl::clearTimers()
+{
+    if (L) {
+        for (const auto& t : timers) {
+            if (t.funcRef >= 0) {
+                luaL_unref(L, LUA_REGISTRYINDEX, t.funcRef);
+            }
+        }
+    }
+    timers.clear();
+}
+
+void ScriptHost::Impl::updateTimers(float dt)
+{
+    if (timers.empty() || !L || disabled) {
+        return;
+    }
+
+    std::vector<uint32_t> expiredIds;
+    for (auto& t : timers) {
+        t.remaining -= dt;
+        if (t.remaining <= 0.0f) {
+            expiredIds.push_back(t.id);
+        }
+    }
+
+    for (uint32_t id : expiredIds) {
+        if (disabled || !L) {
+            break;
+        }
+        auto it = std::find_if(timers.begin(), timers.end(), [id](const TimerEntry& e) { return e.id == id; });
+        if (it == timers.end()) {
+            continue;
+        }
+
+        int funcRef = it->funcRef;
+        bool repeating = it->repeating;
+        if (repeating) {
+            it->remaining = (std::max)(0.001f, it->interval);
+        } else {
+            timers.erase(it);
+        }
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, funcRef);
+        if (!repeating) {
+            luaL_unref(L, LUA_REGISTRYINDEX, funcRef);
+        }
+
+        if (lua_isfunction(L, -1)) {
+            protectedCall(0, 0);
+        } else {
+            lua_pop(L, 1);
+        }
+    }
+}
+
+UIElement* ScriptHost::Impl::findElement(std::string_view elementName) const
+{
+    if (boundRoot) {
+        if (UIElement* found = FindElementRecursive(boundRoot, elementName)) {
+            return found;
+        }
+    }
+    if (boundContext && boundContext->root()) {
+        if (UIElement* found = FindElementRecursive(boundContext->root(), elementName)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+void ScriptHost::Impl::pushElementHandle(UIElement* element)
+{
+    if (!element || !L) {
+        lua_pushnil(L);
+        return;
+    }
+
+    void* mem = lua_newuserdata(L, sizeof(LuaElementHandle));
+    auto* handle = new (mem) LuaElementHandle();
+    handle->id = element->id();
+    handle->name = element->name();
+    handle->ref = WeakElementRef(element);
+
+    luaL_getmetatable(L, kElementHandleMeta);
+    lua_setmetatable(L, -2);
+}
+
+void ScriptHost::Impl::registerUiLibrary()
+{
+    if (L) {
+        RegisterUiTable(L);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // ScriptHost
 // ---------------------------------------------------------------------------
@@ -599,12 +1253,35 @@ void ScriptHost::registerModule(std::string name, std::function<void(ModuleBuild
     }
 }
 
+void ScriptHost::bindContext(UIContext* context, UIElement* rootScope)
+{
+    PERFUI_LUA_ASSERT_THREAD(m_impl);
+    m_impl->boundContext = context;
+    m_impl->boundRoot = rootScope;
+}
+
+UIContext* ScriptHost::boundContext() const
+{
+    PERFUI_LUA_ASSERT_THREAD(m_impl);
+    return m_impl->boundContext;
+}
+
+UIElement* ScriptHost::boundRoot() const
+{
+    PERFUI_LUA_ASSERT_THREAD(m_impl);
+    return m_impl->boundRoot;
+}
+
+void ScriptHost::clearTimers()
+{
+    PERFUI_LUA_ASSERT_THREAD(m_impl);
+    m_impl->clearTimers();
+}
+
 void ScriptHost::update(float dt)
 {
     PERFUI_LUA_ASSERT_THREAD(m_impl);
-
-    // Таймеры (ui.timer/interval) появятся вместе с API интерфейса на Этапе 2.
-    (void)dt;
+    m_impl->updateTimers(dt);
 }
 
 ScriptStatus ScriptHost::status() const

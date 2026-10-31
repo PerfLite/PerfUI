@@ -12,6 +12,7 @@
 #include "PerfUI/UIElement.h"
 #include "MarkupTypes.h"
 #include "WidgetRegistry.h"
+#include "ICallbackResolver.h"
 
 namespace PerfUI {
 
@@ -24,6 +25,10 @@ public:
     UIElement* loadString(std::string_view xml, UIElement* parent = nullptr);
     UIElement* findByName(std::string_view name) const;
     void bindCallback(std::string name, std::function<void()> cb);
+    void setCallbackResolver(ICallbackResolver* resolver) { m_resolver = resolver; }
+    ICallbackResolver* callbackResolver() const { return m_resolver; }
+    const std::string& scriptAttribute() const { return m_scriptAttribute; }
+    void onScriptReload(std::function<void(const std::string&)> cb) { m_onScriptReload = std::move(cb); }
     LoadResult lastResult() const { return m_lastResult; }
 
     void enableHotReload(bool on);
@@ -46,6 +51,9 @@ private:
     std::filesystem::path m_sourceFilePath;
 
     CallbackMap m_callbacks;
+    ICallbackResolver* m_resolver{ nullptr };
+    std::string m_scriptAttribute;
+    std::function<void(const std::string&)> m_onScriptReload;
     LoadResult m_lastResult;
 
     bool m_hotReloadEnabled{ false };
