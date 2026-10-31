@@ -9,6 +9,8 @@
 #include "PerfUI/Markup/WidgetRegistry.h"
 #include "PerfUI/LayoutEngine.h"
 #include "PerfUI/MapCanvas.h"
+#include "PerfUI/WorldAnchor.h"
+#include "PerfUI/Localization.h"
 #include "../src/backends/mock/MockRenderBackend.h"
 
 #include <iostream>
@@ -414,6 +416,128 @@ int main() {
             TEST_ASSERT(approxEqual(map->bounds().height, 200.0f), "MapCanvas honours height=\"200\"");
             TEST_ASSERT(map->projectedCount() == 0, "Canvas without data source projects nothing");
         }
+    }
+
+    // -------------------------------------------------------------
+    // Test 10: WorldAnchor Tag Parsing and Attributes
+    // -------------------------------------------------------------
+    std::cout << "\nTest 10: WorldAnchor Tag Parsing...\n";
+    {
+        PerfUI::UIContext context;
+        PerfUI::MarkupLoader loader(context);
+
+        const std::string xml = R"(
+<UI>
+  <WorldAnchor name="BossAnchor" targetId="100" align="center" offset="10 -20"
+               distanceScaling="true" minDist="50" maxDist="2000" minScale="0.25" maxScale="1.5"
+               distanceAlpha="true" minAlpha="0.1" maxAlpha="0.9"
+               edgeClamping="true" screenMargin="45">
+    <Text name="BossTitle" text="Alduin" />
+  </WorldAnchor>
+</UI>
+)";
+
+        UIElement* root = loader.loadString(xml);
+        TEST_ASSERT(root != nullptr, "WorldAnchor loaded successfully");
+
+        auto* anchor = dynamic_cast<PerfUI::WorldAnchor*>(loader.findByName("BossAnchor"));
+        TEST_ASSERT(anchor != nullptr, "WorldAnchor element created by tag");
+        if (anchor) {
+            TEST_ASSERT(anchor->targetId() == 100, "targetId=\"100\" parsed");
+            TEST_ASSERT(anchor->anchorAlignment() == PerfUI::AnchorAlignment::Center, "align=\"center\" parsed");
+            TEST_ASSERT(approxEqual(anchor->screenOffset().x, 10.0f) && approxEqual(anchor->screenOffset().y, -20.0f), "offset=\"10 -20\" parsed");
+            TEST_ASSERT(anchor->isDistanceScalingEnabled(), "distanceScaling=\"true\" parsed");
+            TEST_ASSERT(anchor->isDistanceAlphaEnabled(), "distanceAlpha=\"true\" parsed");
+            TEST_ASSERT(anchor->isEdgeClampingEnabled(), "edgeClamping=\"true\" parsed");
+            TEST_ASSERT(approxEqual(anchor->screenMargin(), 45.0f), "screenMargin=\"45\" parsed");
+            TEST_ASSERT(anchor->children().size() == 1, "Child Text element attached to WorldAnchor");
+        }
+    }
+
+    // -------------------------------------------------------------
+    // Test 11: Image UV and FlipY Tag Parsing
+    // -------------------------------------------------------------
+    std::cout << "\nTest 11: Image UV and FlipY Tag Parsing...\n";
+    {
+        PerfUI::UIContext context;
+        PerfUI::MarkupLoader loader(context);
+
+        const std::string xml = R"(
+<UI>
+  <Panel>
+    <Image name="Preview3D" texture="1234" uv="0.1 0.2 0.9 0.8" flip-y="true" />
+  </Panel>
+</UI>
+)";
+
+        UIElement* root = loader.loadString(xml);
+        TEST_ASSERT(root != nullptr, "Image markup loaded");
+
+        auto* img = dynamic_cast<PerfUI::Image*>(loader.findByName("Preview3D"));
+        TEST_ASSERT(img != nullptr, "Image found");
+        if (img) {
+            TEST_ASSERT(img->texture() == 1234, "texture=\"1234\" parsed");
+            TEST_ASSERT(img->flipY() == true, "flip-y=\"true\" parsed");
+            TEST_ASSERT(approxEqual(img->uv0().x, 0.1f) && approxEqual(img->uv0().y, 0.2f), "uv0 parsed");
+            TEST_ASSERT(approxEqual(img->uv1().x, 0.9f) && approxEqual(img->uv1().y, 0.8f), "uv1 parsed");
+        }
+    }
+
+    // -------------------------------------------------------------
+    // Test 12: Localization in Markup ($KEY expansion)
+    // -------------------------------------------------------------
+    std::cout << "\nTest 12: Localization in Markup ($KEY expansion)...\n";
+    {
+        auto& loc = PerfUI::LocalizationService::instance();
+        loc.clear();
+        loc.setLanguage("en");
+        loc.setTranslation("en", "BT_START", "Start Adventure");
+        loc.setTranslation("en", "PL_SEARCH", "Type to filter items...");
+        loc.setTranslation("ru", "BT_START", "Начать приключение");
+        loc.setTranslation("ru", "PL_SEARCH", "Поиск предметов...");
+
+        PerfUI::UIContext context;
+        PerfUI::MarkupLoader loader(context);
+
+        const std::string xml = R"(
+<UI>
+  <Panel>
+    <Button name="BtnStart" text="$BT_START" />
+    <TextInput name="SearchBox" placeholder="$PL_SEARCH" />
+  </Panel>
+</UI>
+)";
+
+        loader.loadString(xml);
+        auto* btn = dynamic_cast<PerfUI::Button*>(loader.findByName("BtnStart"));
+        auto* input = dynamic_cast<PerfUI::TextInput*>(loader.findByName("SearchBox"));
+
+        TEST_ASSERT(btn && btn->text() == "Start Adventure", "Button text localized in EN");
+        TEST_ASSERT(input && input->placeholder() == "Type to filter items...", "TextInput placeholder localized in EN");
+
+        // Switch to Russian and reload
+        loc.setLanguage("ru");
+        loader.loadString(xml);
+        auto* btnRu = dynamic_cast<PerfUI::Button*>(loader.findByName("BtnStart"));
+        auto* inputRu = dynamic_cast<PerfUI::TextInput*>(loader.findByName("SearchBox"));
+
+        TEST_ASSERT(btnRu && btnRu->text() == "Начать приключение", "Button text localized in RU");
+        TEST_ASSERT(inputRu && inputRu->placeholder() == "Поиск предметов...", "TextInput placeholder localized in RU");
+
+        // Test JSON dictionary content parsing
+        const std::string jsonDict = R"({
+            "UI_SAVE": "Сохранить игру",
+            "UI_EXIT": "Выйти в меню"
+        })";
+        loc.loadDictionaryContent("ru", jsonDict);
+        TEST_ASSERT(loc.translate("UI_SAVE") == "Сохранить игру", "JSON dictionary parsed UI_SAVE");
+        TEST_ASSERT(loc.translate("UI_EXIT") == "Выйти в меню", "JSON dictionary parsed UI_EXIT");
+
+        // Test SKSE key-value tab dictionary parsing
+        const std::string skseDict = "$QUEST_NAME\tДраконоборец\n$GOLD_AMOUNT\t1000 золота\n";
+        loc.loadDictionaryContent("ru", skseDict);
+        TEST_ASSERT(loc.translate("QUEST_NAME") == "Драконоборец", "SKSE tab dictionary parsed QUEST_NAME");
+        TEST_ASSERT(loc.translate("$GOLD_AMOUNT") == "1000 золота", "SKSE tab dictionary parsed GOLD_AMOUNT");
     }
 
     // -------------------------------------------------------------

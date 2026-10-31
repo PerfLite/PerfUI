@@ -1,4 +1,5 @@
 #include "MarkupLayoutParser.h"
+#include "PerfUI/Localization.h"
 #include <sstream>
 #include <algorithm>
 #include <cctype>
@@ -178,6 +179,10 @@ void parsePaddingOrMargin(std::string_view val, LayoutProps& props, bool isPaddi
     }
 }
 
+std::string resolveLocalizedText(std::string_view val) {
+    return LocalizationService::instance().expandText(val);
+}
+
 bool isCommonLayoutAttribute(const std::string& key) {
     static const std::unordered_map<std::string, bool> s_keys = {
         { "name", true },
@@ -284,7 +289,7 @@ bool applyCommonLayoutAttribute(UIElement* element, const std::string& key, cons
         return true;
     }
     if (key == "tooltip") {
-        element->tooltip(std::string(val));
+        element->tooltip(resolveLocalizedText(val));
         return true;
     }
     if (key == "class") {

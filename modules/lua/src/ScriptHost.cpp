@@ -16,6 +16,9 @@
 #include "PerfUI/Theme.h"
 #include "PerfUI/Toast.h"
 #include "PerfUI/Animation.h"
+#include "PerfUI/WorldAnchor.h"
+#include "PerfUI/Image.h"
+#include "PerfUI/Localization.h"
 
 extern "C" {
 #include "lauxlib.h"
@@ -616,6 +619,131 @@ int Handle_setSize(lua_State* L)
     return 0;
 }
 
+int Handle_targetId(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "targetId");
+    if (!elem) {
+        lua_pushnil(L);
+        return 1;
+    }
+    if (auto* wa = dynamic_cast<WorldAnchor*>(elem)) {
+        lua_pushinteger(L, static_cast<lua_Integer>(wa->targetId()));
+        return 1;
+    }
+    lua_pushinteger(L, 0);
+    return 1;
+}
+
+int Handle_setTargetId(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setTargetId");
+    lua_Integer id = luaL_checkinteger(L, 2);
+    if (elem) {
+        if (auto* wa = dynamic_cast<WorldAnchor*>(elem)) {
+            wa->setTargetId(static_cast<uint32_t>(id));
+        }
+    }
+    return 0;
+}
+
+int Handle_setScreenOffset(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setScreenOffset");
+    lua_Number ox = luaL_checknumber(L, 2);
+    lua_Number oy = luaL_checknumber(L, 3);
+    if (elem) {
+        if (auto* wa = dynamic_cast<WorldAnchor*>(elem)) {
+            wa->setScreenOffset(Point{ static_cast<float>(ox), static_cast<float>(oy) });
+        }
+    }
+    return 0;
+}
+
+int Handle_isClamped(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "isClamped");
+    if (!elem) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    if (auto* wa = dynamic_cast<WorldAnchor*>(elem)) {
+        lua_pushboolean(L, wa->isClamped() ? 1 : 0);
+        return 1;
+    }
+    lua_pushboolean(L, 0);
+    return 1;
+}
+
+int Handle_clampedAngle(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "clampedAngle");
+    if (!elem) {
+        lua_pushnumber(L, 0.0);
+        return 1;
+    }
+    if (auto* wa = dynamic_cast<WorldAnchor*>(elem)) {
+        lua_pushnumber(L, static_cast<lua_Number>(wa->clampedAngle()));
+        return 1;
+    }
+    lua_pushnumber(L, 0.0);
+    return 1;
+}
+
+int Handle_currentScale(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "currentScale");
+    if (!elem) {
+        lua_pushnumber(L, 1.0);
+        return 1;
+    }
+    if (auto* wa = dynamic_cast<WorldAnchor*>(elem)) {
+        lua_pushnumber(L, static_cast<lua_Number>(wa->currentScale()));
+        return 1;
+    }
+    lua_pushnumber(L, 1.0);
+    return 1;
+}
+
+int Handle_setTexture(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setTexture");
+    lua_Integer texId = luaL_checkinteger(L, 2);
+    if (elem) {
+        if (auto* img = dynamic_cast<Image*>(elem)) {
+            img->texture(static_cast<TextureId>(texId));
+        }
+    }
+    return 0;
+}
+
+int Handle_setUV(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setUV");
+    lua_Number u0 = luaL_checknumber(L, 2);
+    lua_Number v0 = luaL_checknumber(L, 3);
+    lua_Number u1 = luaL_checknumber(L, 4);
+    lua_Number v1 = luaL_checknumber(L, 5);
+    if (elem) {
+        if (auto* img = dynamic_cast<Image*>(elem)) {
+            img->uv({ static_cast<float>(u0), static_cast<float>(v0) },
+                    { static_cast<float>(u1), static_cast<float>(v1) });
+        }
+    }
+    return 0;
+}
+
+int Handle_setFlipY(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setFlipY");
+    bool flip = lua_toboolean(L, 2) != 0;
+    if (elem) {
+        if (auto* img = dynamic_cast<Image*>(elem)) {
+            img->flipY(flip);
+        }
+    }
+    return 0;
+}
+
 int Handle_tostring(lua_State* L)
 {
     auto* handle = static_cast<LuaElementHandle*>(luaL_checkudata(L, 1, kElementHandleMeta));
@@ -685,6 +813,28 @@ void RegisterElementHandleMeta(lua_State* L)
         lua_setfield(L, -2, "setColor");
         lua_pushcfunction(L, Handle_setSize);
         lua_setfield(L, -2, "setSize");
+
+        // WorldAnchor
+        lua_pushcfunction(L, Handle_targetId);
+        lua_setfield(L, -2, "targetId");
+        lua_pushcfunction(L, Handle_setTargetId);
+        lua_setfield(L, -2, "setTargetId");
+        lua_pushcfunction(L, Handle_setScreenOffset);
+        lua_setfield(L, -2, "setScreenOffset");
+        lua_pushcfunction(L, Handle_isClamped);
+        lua_setfield(L, -2, "isClamped");
+        lua_pushcfunction(L, Handle_clampedAngle);
+        lua_setfield(L, -2, "clampedAngle");
+        lua_pushcfunction(L, Handle_currentScale);
+        lua_setfield(L, -2, "currentScale");
+
+        // Image
+        lua_pushcfunction(L, Handle_setTexture);
+        lua_setfield(L, -2, "setTexture");
+        lua_pushcfunction(L, Handle_setUV);
+        lua_setfield(L, -2, "setUV");
+        lua_pushcfunction(L, Handle_setFlipY);
+        lua_setfield(L, -2, "setFlipY");
 
         lua_setfield(L, -2, "__index");
     }
@@ -823,6 +973,38 @@ int LL_UiThemeColor(lua_State* L)
     return 1;
 }
 
+int LL_UiTranslate(lua_State* L)
+{
+    const char* key = luaL_checkstring(L, 1);
+    const char* fallback = lua_isstring(L, 2) ? lua_tostring(L, 2) : "";
+    std::string res = LocalizationService::instance().translate(key, fallback);
+    lua_pushstring(L, res.c_str());
+    return 1;
+}
+
+int LL_UiSetLanguage(lua_State* L)
+{
+    const char* lang = luaL_checkstring(L, 1);
+    LocalizationService::instance().setLanguage(lang);
+    return 0;
+}
+
+int LL_UiGetLanguage(lua_State* L)
+{
+    const std::string& lang = LocalizationService::instance().currentLanguage();
+    lua_pushstring(L, lang.c_str());
+    return 1;
+}
+
+int LL_UiLoadDictionary(lua_State* L)
+{
+    const char* lang = luaL_checkstring(L, 1);
+    const char* path = luaL_checkstring(L, 2);
+    bool ok = LocalizationService::instance().loadDictionary(lang, path);
+    lua_pushboolean(L, ok ? 1 : 0);
+    return 1;
+}
+
 void RegisterUiTable(lua_State* L)
 {
     RegisterElementHandleMeta(L);
@@ -843,6 +1025,18 @@ void RegisterUiTable(lua_State* L)
 
     lua_pushcfunction(L, LL_UiCancel);
     lua_setfield(L, -2, "cancel");
+
+    // Localization
+    lua_pushcfunction(L, LL_UiTranslate);
+    lua_setfield(L, -2, "translate");
+    lua_pushcfunction(L, LL_UiTranslate);
+    lua_setfield(L, -2, "tr");
+    lua_pushcfunction(L, LL_UiSetLanguage);
+    lua_setfield(L, -2, "setLanguage");
+    lua_pushcfunction(L, LL_UiGetLanguage);
+    lua_setfield(L, -2, "getLanguage");
+    lua_pushcfunction(L, LL_UiLoadDictionary);
+    lua_setfield(L, -2, "loadDictionary");
 
     lua_newtable(L);
     lua_pushcfunction(L, LL_UiThemeColor);

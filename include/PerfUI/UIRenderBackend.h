@@ -133,6 +133,15 @@ public:
         (void)id;
     }
 
+    virtual TextureId registerExternalTexture(void* srv, uint32_t width, uint32_t height) {
+        (void)srv; (void)width; (void)height;
+        return 0;
+    }
+
+    virtual void unregisterExternalTexture(TextureId id) {
+        (void)id;
+    }
+
     virtual Dimensions getTextureSize(TextureId id) {
         (void)id;
         return Dimensions{ 0.0f, 0.0f };

@@ -258,6 +258,36 @@ static PerfUI::API::IPerfUI_v2 g_perfUI_API_v2{
 #if defined(PERFUI_ENABLE_LUA)
 #include "PerfUI/Lua/ScriptHost.h"
 
+static PerfUI::TextureId API_RegisterExternalTexture(void* srv, uint32_t width, uint32_t height) {
+    auto* ctx = API_GetContext();
+    return ctx ? ctx->registerExternalTexture(srv, width, height) : 0;
+}
+
+static void API_UnregisterExternalTexture(PerfUI::TextureId id) {
+    auto* ctx = API_GetContext();
+    if (ctx) {
+        ctx->unregisterExternalTexture(id);
+    }
+}
+
+static uint32_t API_TrackPosition(float x, float y, float z, bool checkLoS) {
+    return PerfUI::Skyrim::WorldTrackingService::GetSingleton().RegisterStatic(
+        RE::NiPoint3{ x, y, z }, checkLoS);
+}
+
+static uint32_t API_TrackActor(uint32_t formId, float offsetX, float offsetY, float offsetZ, bool checkLoS) {
+    auto* form = RE::TESForm::LookupByID(formId);
+    if (!form) return 0;
+    auto* refr = form->As<RE::TESObjectREFR>();
+    if (!refr) return 0;
+    return PerfUI::Skyrim::WorldTrackingService::GetSingleton().RegisterHandle(
+        refr->GetHandle(), RE::NiPoint3{ offsetX, offsetY, offsetZ }, checkLoS);
+}
+
+static void API_Untrack(uint32_t targetId) {
+    PerfUI::Skyrim::WorldTrackingService::GetSingleton().Unregister(targetId);
+}
+
 static PerfUI::ScriptHost* API_CreateScriptHost(const char* modName, unsigned long luaApiVersion) {
     if (luaApiVersion != PerfUI::API::PERFUI_LUA_API_VERSION) {
         SKSE::log::error("CreateScriptHost failed: Lua API version mismatch! Host={}, Client={}",
@@ -270,6 +300,19 @@ static PerfUI::ScriptHost* API_CreateScriptHost(const char* modName, unsigned lo
     if (ctx) {
         host->bindContext(ctx, ctx->root());
     }
+
+    host->registerModule("skyrim", [](PerfUI::ModuleBuilder& m) {
+        m.function("trackActor", [](uint32_t formId, double ox, double oy, double oz, bool checkLoS) -> double {
+            return static_cast<double>(API_TrackActor(formId, static_cast<float>(ox), static_cast<float>(oy), static_cast<float>(oz), checkLoS));
+        });
+        m.function("trackPosition", [](double x, double y, double z, bool checkLoS) -> double {
+            return static_cast<double>(API_TrackPosition(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), checkLoS));
+        });
+        m.function("untrack", [](uint32_t targetId) {
+            API_Untrack(targetId);
+        });
+    });
+
     return host;
 }
 
@@ -280,7 +323,12 @@ static void API_DestroyScriptHost(PerfUI::ScriptHost* host) {
 static PerfUI::API::IPerfUI_v3 g_perfUI_API_v3{
     .v2 = g_perfUI_API_v2,
     .CreateScriptHost = API_CreateScriptHost,
-    .DestroyScriptHost = API_DestroyScriptHost
+    .DestroyScriptHost = API_DestroyScriptHost,
+    .RegisterExternalTexture = API_RegisterExternalTexture,
+    .UnregisterExternalTexture = API_UnregisterExternalTexture,
+    .TrackPosition = API_TrackPosition,
+    .TrackActor = API_TrackActor,
+    .Untrack = API_Untrack
 };
 #endif
 

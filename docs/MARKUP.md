@@ -177,9 +177,26 @@ Numeric range slider with drag handle and value tracking.
 ```
 
 ### `<Image>`
-DirectX 11 texture display widget with color tinting.
+DirectX 11 texture display widget supporting files, UV coordinates, and 3D Render Target previews.
 ```xml
-<Image texture="1001" tint="$white" width="64" height="64"/>
+<!-- Файловая текстура -->
+<Image src="Data/Textures/MyMod/icon.png" width="64" height="64"/>
+
+<!-- Внешний Render Target с 3D-превью модели и инверсией Y -->
+<Image texture="1001" uv="0 0 1 1" flip-y="true" width="256" height="256"/>
+```
+
+### `<WorldAnchor>`
+3D-якорь, проецирующий UI-элементы в экранные координаты по позиции цели/актера в Skyrim. Поддерживает масштабирование от дистанции, прозрачность, прижим к экрану и скрытие за спиной.
+```xml
+<WorldAnchor targetId="42" align="bottom-center" offset="0 -60"
+             distanceScaling="true" minDist="100" maxDist="3500" minScale="0.4" maxScale="1.0"
+             distanceAlpha="true" minAlpha="0.0" maxAlpha="1.0"
+             edgeClamping="true" screenMargin="40">
+  <!-- Вложенные виджеты отображаются над целью в 3D мире -->
+  <ProgressBar name="BossHp" value="0.8" width="120" height="12"/>
+  <Text name="BossName" text="$BOSS_NAME" color="$nordicGold"/>
+</WorldAnchor>
 ```
 
 ### `<TabBar>`
@@ -241,6 +258,22 @@ end
 ```
 
 Подробное руководство по функциям скриптов, квотам и ручкам элементов доступно в [`docs/LUA.md`](LUA.md).
+
+---
+
+## 🌐 Мультиязычная локализация (`$KEY`)
+
+Любые текстовые атрибуты в XML (`text`, `label`, `placeholder`, `tooltip`, `title`, `message`) поддерживают автоматическую подстановку переводов. Если значение начинается с `$`, парсер запрашивает перевод в `LocalizationService`:
+
+```xml
+<Panel gap="12">
+  <Text text="$MENU_HEADER"/>
+  <Button text="$BTN_SAVE" tooltip="$TIP_SAVE"/>
+  <TextInput placeholder="$SEARCH_PLACEHOLDER"/>
+</Panel>
+```
+
+Поддерживаются словари в форматах JSON (`lang/ru.json`), INI (`KEY=Значение`) и SKSE (`$KEY\tЗначение`). При смене языка в игре интерфейс мгновенно обновляет все тексты.
 
 ---
 

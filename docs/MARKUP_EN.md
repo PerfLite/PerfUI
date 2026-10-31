@@ -177,9 +177,26 @@ Continuous or stepped numeric range slider with drag handle:
 ```
 
 ### `<Image>`
-DirectX 11 texture display widget with color tinting:
+DirectX 11 texture display widget supporting disk files, UV coordinates, and offscreen 3D Render Target previews.
 ```xml
-<Image texture="1001" tint="$white" width="64" height="64"/>
+<!-- File-backed texture -->
+<Image src="Data/Textures/MyMod/icon.png" width="64" height="64"/>
+
+<!-- External D3D11 Render Target with 3D item preview and vertical flip -->
+<Image texture="1001" uv="0 0 1 1" flip-y="true" width="256" height="256"/>
+```
+
+### `<WorldAnchor>`
+3D anchor widget projecting UI hierarchies into screen coordinates based on Skyrim target/actor positions. Supports distance scaling, alpha fading, screen edge clamping, and behind-camera culling.
+```xml
+<WorldAnchor targetId="42" align="bottom-center" offset="0 -60"
+             distanceScaling="true" minDist="100" maxDist="3500" minScale="0.4" maxScale="1.0"
+             distanceAlpha="true" minAlpha="0.0" maxAlpha="1.0"
+             edgeClamping="true" screenMargin="40">
+  <!-- Nested elements follow the 3D target in the game world -->
+  <ProgressBar name="BossHp" value="0.8" width="120" height="12"/>
+  <Text name="BossName" text="$BOSS_NAME" color="$nordicGold"/>
+</WorldAnchor>
 ```
 
 ### `<TabBar>`
@@ -241,6 +258,22 @@ end
 ```
 
 See [`docs/LUA_EN.md`](LUA_EN.md) for full scripting details, quotas, and element handles.
+
+---
+
+## 🌐 Multilingual Localization (`$KEY`)
+
+Textual attributes in XML (`text`, `label`, `placeholder`, `tooltip`, `title`, `message`) automatically resolve translations. When an attribute value begins with `$`, the parser looks up the key in `LocalizationService`:
+
+```xml
+<Panel gap="12">
+  <Text text="$MENU_HEADER"/>
+  <Button text="$BTN_SAVE" tooltip="$TIP_SAVE"/>
+  <TextInput placeholder="$SEARCH_PLACEHOLDER"/>
+</Panel>
+```
+
+Supports JSON dictionaries (`lang/en.json`), standard INI key-value (`KEY=Value`), and native Skyrim SKSE translation files (`$KEY\tValue`). Switching languages live immediately updates all displayed text.
 
 ---
 

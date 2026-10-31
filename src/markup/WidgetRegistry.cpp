@@ -29,6 +29,8 @@
 #include "PerfUI/Notification.h"
 #include "PerfUI/Sidebar.h"
 #include "PerfUI/SvgImage.h"
+#include "PerfUI/WorldAnchor.h"
+#include "PerfUI/UIContext.h"
 
 #include <sstream>
 
@@ -106,7 +108,7 @@ void WidgetRegistry::registerBuiltinWidgets() {
         auto itName = attrs.find("name");
         if (itName != attrs.end()) name = itName->second;
         auto itText = attrs.find("text");
-        if (itText != attrs.end()) textContent = itText->second;
+        if (itText != attrs.end()) textContent = resolveLocalizedText(itText->second);
 
         auto txt = std::make_unique<Text>(textContent, name);
 
@@ -137,10 +139,10 @@ void WidgetRegistry::registerBuiltinWidgets() {
         auto itName = attrs.find("name");
         if (itName != attrs.end()) name = itName->second;
         auto itText = attrs.find("text");
-        if (itText != attrs.end()) labelText = itText->second;
+        if (itText != attrs.end()) labelText = resolveLocalizedText(itText->second);
         else {
             auto itLabel = attrs.find("label");
-            if (itLabel != attrs.end()) labelText = itLabel->second;
+            if (itLabel != attrs.end()) labelText = resolveLocalizedText(itLabel->second);
         }
 
         auto btn = std::make_unique<Button>(labelText, name);
@@ -191,10 +193,10 @@ void WidgetRegistry::registerBuiltinWidgets() {
         auto itName = attrs.find("name");
         if (itName != attrs.end()) name = itName->second;
         auto itLabel = attrs.find("label");
-        if (itLabel != attrs.end()) labelText = itLabel->second;
+        if (itLabel != attrs.end()) labelText = resolveLocalizedText(itLabel->second);
         else {
             auto itText = attrs.find("text");
-            if (itText != attrs.end()) labelText = itText->second;
+            if (itText != attrs.end()) labelText = resolveLocalizedText(itText->second);
         }
         auto itChecked = attrs.find("checked");
         if (itChecked != attrs.end()) chk = parseBool(itChecked->second, false);
@@ -300,11 +302,26 @@ void WidgetRegistry::registerBuiltinWidgets() {
         auto itTex = attrs.find("texture");
         if (itTex != attrs.end()) tex = static_cast<uint64_t>(std::strtoull(itTex->second.c_str(), nullptr, 10));
 
+        auto itSrc = attrs.find("src");
+        if (itSrc != attrs.end() && tex == 0 && parent && parent->context()) {
+            tex = parent->context()->loadTexture(itSrc->second);
+        }
+
         auto img = std::make_unique<Image>(tex, name);
 
         for (const auto& [k, v] : attrs) {
             if (k == "tint") {
                 img->tint(parseColorOrToken(v));
+            } else if (k == "flip-y" || k == "flipY") {
+                img->flipY(parseBool(v, true));
+            } else if (k == "uv") {
+                std::string s = v;
+                std::replace(s.begin(), s.end(), ',', ' ');
+                std::stringstream ss(s);
+                float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;
+                if (ss >> u0 >> v0 >> u1 >> v1) {
+                    img->uv({ u0, v0 }, { u1, v1 });
+                }
             }
         }
 
@@ -426,7 +443,7 @@ void WidgetRegistry::registerBuiltinWidgets() {
     registerWidget("TextInput", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
         std::string placeholder = "Search...";
         auto itPl = attrs.find("placeholder");
-        if (itPl != attrs.end()) placeholder = itPl->second;
+        if (itPl != attrs.end()) placeholder = resolveLocalizedText(itPl->second);
 
         auto ti = std::make_unique<TextInput>(placeholder);
 
@@ -435,7 +452,7 @@ void WidgetRegistry::registerBuiltinWidgets() {
 
         for (const auto& [k, v] : attrs) {
             if (k == "text") {
-                ti->text(v);
+                ti->text(resolveLocalizedText(v));
             } else if (k == "fontSize" || k == "font-size") {
                 ti->fontSize(parseNumberOrToken(v, 13.0f));
             }
@@ -873,6 +890,97 @@ void WidgetRegistry::registerBuiltinWidgets() {
             return parent->addChild(std::move(sb));
         }
         return sb.release();
+    });
+
+    // 30. WorldAnchor
+    registerWidget("WorldAnchor", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "WorldAnchor";
+        uint32_t targetId = 0;
+
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        auto itTarget = attrs.find("targetId");
+        if (itTarget == attrs.end()) itTarget = attrs.find("target");
+        if (itTarget != attrs.end()) {
+            targetId = static_cast<uint32_t>(std::strtoul(itTarget->second.c_str(), nullptr, 0));
+        }
+
+        auto anchor = std::make_unique<WorldAnchor>(targetId);
+        anchor->setName(name);
+
+        float baseW = 100.0f, baseH = 40.0f;
+        float minDist = 100.0f, maxDist = 3000.0f;
+        float minScale = 0.5f, maxScale = 1.0f;
+        bool distScaleEnabled = false;
+
+        float minAlphaDist = 100.0f, maxAlphaDist = 3000.0f;
+        float minAlpha = 0.0f, maxAlpha = 1.0f;
+        bool distAlphaEnabled = false;
+
+        bool edgeClamping = false;
+        float screenMargin = 30.0f;
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "align" || k == "alignment") {
+                if (v == "center") anchor->setAnchorAlignment(AnchorAlignment::Center);
+                else if (v == "top-center" || v == "topCenter") anchor->setAnchorAlignment(AnchorAlignment::TopCenter);
+                else if (v == "top-left" || v == "topLeft") anchor->setAnchorAlignment(AnchorAlignment::TopLeft);
+                else anchor->setAnchorAlignment(AnchorAlignment::BottomCenter);
+            } else if (k == "offset" || k == "screen-offset" || k == "screenOffset") {
+                std::string s = v;
+                std::replace(s.begin(), s.end(), ',', ' ');
+                std::stringstream ss(s);
+                float ox = 0.0f, oy = 0.0f;
+                if (ss >> ox >> oy) {
+                    anchor->setScreenOffset({ ox, oy });
+                }
+            } else if (k == "width" || k == "base-width" || k == "baseWidth") {
+                baseW = parseNumberOrToken(v, 100.0f);
+            } else if (k == "height" || k == "base-height" || k == "baseHeight") {
+                baseH = parseNumberOrToken(v, 40.0f);
+            } else if (k == "distance-scaling" || k == "distanceScaling") {
+                distScaleEnabled = parseBool(v, true);
+            } else if (k == "min-dist" || k == "minDist") {
+                minDist = parseNumberOrToken(v, 100.0f);
+            } else if (k == "max-dist" || k == "maxDist") {
+                maxDist = parseNumberOrToken(v, 3000.0f);
+            } else if (k == "min-scale" || k == "minScale") {
+                minScale = parseNumberOrToken(v, 0.5f);
+            } else if (k == "max-scale" || k == "maxScale") {
+                maxScale = parseNumberOrToken(v, 1.0f);
+            } else if (k == "distance-alpha" || k == "distanceAlpha") {
+                distAlphaEnabled = parseBool(v, true);
+            } else if (k == "min-alpha" || k == "minAlpha") {
+                minAlpha = parseNumberOrToken(v, 0.0f);
+            } else if (k == "max-alpha" || k == "maxAlpha") {
+                maxAlpha = parseNumberOrToken(v, 1.0f);
+            } else if (k == "hide-behind-camera" || k == "hideBehindCamera") {
+                anchor->setHideBehindCamera(parseBool(v, true));
+            } else if (k == "hide-when-occluded" || k == "hideWhenOccluded") {
+                anchor->setHideWhenOccluded(parseBool(v, true));
+            } else if (k == "edge-clamping" || k == "edgeClamping") {
+                edgeClamping = parseBool(v, true);
+            } else if (k == "screen-margin" || k == "screenMargin") {
+                screenMargin = parseNumberOrToken(v, 30.0f);
+            }
+        }
+
+        anchor->setBaseSize({ baseW, baseH });
+        if (distScaleEnabled) {
+            anchor->setDistanceScaling(minDist, maxDist, minScale, maxScale, true);
+        }
+        if (distAlphaEnabled) {
+            anchor->setDistanceAlpha(minAlphaDist, maxAlphaDist, minAlpha, maxAlpha, true);
+        }
+        if (edgeClamping) {
+            anchor->setEdgeClamping(true, screenMargin);
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(anchor));
+        }
+        return anchor.release();
     });
 
     m_builtinsRegistered = true;

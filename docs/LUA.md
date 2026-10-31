@@ -104,8 +104,32 @@ local color = ui.theme.color("borderFocus")
 - `handle:setChecked(bool)` -> установить флаг `Checkbox`.
 - `handle:selectedIndex()` -> индекс выбранного элемента (`ComboBox`, `TabBar`).
 - `handle:selectIndex(index)` -> выбрать индекс.
+- `handle:targetId()` / `handle:setTargetId(id)` -> FormID / TargetID для `WorldAnchor`.
+- `handle:setScreenOffset(ox, oy)` -> экранное смещение в пикселях для `WorldAnchor`.
+- `handle:isClamped()` -> `true`, если `WorldAnchor` прижат к границе экрана.
+- `handle:clampedAngle()` -> угол стрелки прижима в радианах для `WorldAnchor`.
+- `handle:currentScale()` -> текущий масштаб `WorldAnchor` от дистанции.
+- `handle:setTexture(texId)` -> смена текстуры/D3D11 SRV для `Image`.
+- `handle:setUV(u0, v0, u1, v1)` -> UV-координаты для `Image`.
+- `handle:setFlipY(bool)` -> инверсия по вертикали (D3D Render Target) для `Image`.
 
-### 4.3 Логирование `log`
+### 4.3 Локализация (`ui.tr`, `ui.translate`)
+
+PerfUI включает встроенную подсистему локализации с поддержкой форматов JSON (`{ "KEY": "Text" }`) и файлов переводов Скайрима (`$KEY\tText` или `KEY=Text`):
+
+```lua
+-- Получение перевода ключа
+local saveText = ui.tr("BTN_SAVE", "Сохранить") -- второй аргумент — fallback
+
+-- Переключение активного языка
+ui.setLanguage("ru")
+log.info("Текущий язык интерфейса: " .. ui.getLanguage())
+
+-- Динамическая загрузка словаря мода
+ui.loadDictionary("ru", "Data/Interface/MyMod/lang_ru.json")
+```
+
+### 4.4 Логирование `log`
 
 Скрипт пишет в систему логирования PerfUI (в игре — в `SKSE.log` с префиксом `[Lua:<ModName>]` и указанием файла и строки):
 ```lua

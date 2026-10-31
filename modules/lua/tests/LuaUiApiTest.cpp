@@ -8,6 +8,9 @@
 #include "PerfUI/Lua/ScriptHost.h"
 #include "PerfUI/Lua/ScriptCallbackResolver.h"
 #include "PerfUI/Markup/MarkupLoader.h"
+#include "PerfUI/WorldAnchor.h"
+#include "PerfUI/Image.h"
+#include "PerfUI/Localization.h"
 #include "MockRenderBackend.h"
 
 #include <cmath>
@@ -441,6 +444,85 @@ void Test7_InvalidArguments()
                 "Correct error message for ui.cancel bad id");
 }
 
+void Test8_WorldAnchorAndImageHandles()
+{
+    std::cout << "\nTest 8: WorldAnchor & Image Lua Handles...\n";
+
+    UIContext context;
+    ScriptHost host("Test8Mod");
+
+    auto anchor = std::make_unique<WorldAnchor>(10);
+    anchor->setName("BossAnchor");
+    WorldAnchor* pAnchor = anchor.get();
+    context.root()->addChild(std::move(anchor));
+
+    auto img = std::make_unique<Image>(100, "ItemImage");
+    Image* pImg = img.get();
+    context.root()->addChild(std::move(img));
+
+    host.bindContext(&context, context.root());
+
+    const char* script = R"(
+        local a = ui.find("BossAnchor")
+        if a then
+            a:setTargetId(42)
+            a:setScreenOffset(15, -25)
+        end
+
+        local img = ui.find("ItemImage")
+        if img then
+            img:setTexture(888)
+            img:setUV(0.2, 0.3, 0.7, 0.8)
+            img:setFlipY(true)
+        end
+    )";
+
+    bool ok = host.loadString(script, "test8");
+    TEST_ASSERT(ok, "Test 8 script executed successfully");
+    TEST_ASSERT(pAnchor->targetId() == 42, "WorldAnchor targetId changed to 42 via Lua");
+    TEST_ASSERT(std::abs(pAnchor->screenOffset().x - 15.0f) < 0.01f &&
+                std::abs(pAnchor->screenOffset().y - (-25.0f)) < 0.01f, "WorldAnchor screenOffset changed via Lua");
+
+    TEST_ASSERT(pImg->texture() == 888, "Image texture changed to 888 via Lua");
+    TEST_ASSERT(pImg->flipY() == true, "Image flipY enabled via Lua");
+    TEST_ASSERT(std::abs(pImg->uv0().x - 0.2f) < 0.01f && std::abs(pImg->uv0().y - 0.3f) < 0.01f, "Image uv0 changed via Lua");
+}
+
+void Test9_LuaLocalization()
+{
+    std::cout << "\nTest 9: Lua Localization API...\n";
+
+    auto& loc = LocalizationService::instance();
+    loc.clear();
+    loc.setLanguage("en");
+    loc.setTranslation("en", "GREETING", "Hello, Dragonborn!");
+    loc.setTranslation("ru", "GREETING", "Привет, Довакин!");
+
+    ScriptHost host("Test9Mod");
+
+    std::string resultGreeting;
+    std::string resultLang;
+
+    host.registerModule("test", [&](ModuleBuilder& m) {
+        m.function("recordResult", [&](std::string s, std::string lang) {
+            resultGreeting = std::move(s);
+            resultLang = std::move(lang);
+        });
+    });
+
+    const char* script = R"(
+        ui.setLanguage("ru")
+        local g = ui.tr("GREETING")
+        local l = ui.getLanguage()
+        test.recordResult(g, l)
+    )";
+
+    bool ok = host.loadString(script, "test9");
+    TEST_ASSERT(ok, "Test 9 script executed");
+    TEST_ASSERT(resultGreeting == "Привет, Довакин!", "ui.tr returned Russian translation");
+    TEST_ASSERT(resultLang == "ru", "ui.getLanguage returned 'ru'");
+}
+
 } // namespace
 
 int main()
@@ -454,6 +536,8 @@ int main()
     Test5_HotReload();
     Test6_ModuleException();
     Test7_InvalidArguments();
+    Test8_WorldAnchorAndImageHandles();
+    Test9_LuaLocalization();
 
     std::cout << "\n========================================\n";
     std::cout << "Tests Passed: " << g_testsPassed << "\n";

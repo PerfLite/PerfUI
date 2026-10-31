@@ -79,7 +79,9 @@ ImGuiRenderBackend::~ImGuiRenderBackend() {
 #if defined(_WIN32)
     std::lock_guard<std::mutex> lock(m_textureMutex);
     for (auto& [id, record] : m_textures) {
-        ReleaseTexturePair(record.srv, record.texture);
+        if (!record.external) {
+            ReleaseTexturePair(record.srv, record.texture);
+        }
     }
     for (auto& retired : m_retiredTextures) {
         ReleaseTexturePair(retired.srv, retired.texture);
@@ -702,17 +704,37 @@ void ImGuiRenderBackend::destroyTexture(TextureId id) {
     std::lock_guard<std::mutex> lock(m_textureMutex);
     auto it = m_textures.find(id);
     if (it != m_textures.end()) {
-        if (it->second.srv) {
-            static_cast<ID3D11ShaderResourceView*>(it->second.srv)->Release();
-        }
-        if (it->second.texture) {
-            static_cast<ID3D11Texture2D*>(it->second.texture)->Release();
+        if (!it->second.external) {
+            if (it->second.srv) {
+                static_cast<ID3D11ShaderResourceView*>(it->second.srv)->Release();
+            }
+            if (it->second.texture) {
+                static_cast<ID3D11Texture2D*>(it->second.texture)->Release();
+            }
         }
         m_textures.erase(it);
     }
 #else
     (void)id;
 #endif
+}
+
+TextureId ImGuiRenderBackend::registerExternalTexture(void* srv, uint32_t width, uint32_t height) {
+    if (!srv) return 0;
+    std::lock_guard<std::mutex> lock(m_textureMutex);
+    TextureId id = m_nextTextureId++;
+    TextureRecord rec;
+    rec.srv = srv;
+    rec.texture = nullptr;
+    rec.width = width;
+    rec.height = height;
+    rec.external = true;
+    m_textures[id] = rec;
+    return id;
+}
+
+void ImGuiRenderBackend::unregisterExternalTexture(TextureId id) {
+    destroyTexture(id);
 }
 
 Dimensions ImGuiRenderBackend::getTextureSize(TextureId id) {

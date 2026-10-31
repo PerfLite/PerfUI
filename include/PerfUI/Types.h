@@ -23,6 +23,8 @@ struct Point {
     constexpr Point operator-(const Point& other) const { return { x - other.x, y - other.y }; }
     constexpr Point operator*(float s) const { return { x * s, y * s }; }
     constexpr Point operator/(float s) const { return { x / s, y / s }; }
+    constexpr bool operator==(const Point& other) const { return x == other.x && y == other.y; }
+    constexpr bool operator!=(const Point& other) const { return !(*this == other); }
 };
 
 struct Dimensions {

@@ -104,8 +104,32 @@ Handles **never store raw C++ pointers**. Each handle encapsulates an `ElementId
 - `handle:setChecked(bool)` -> toggle checkbox checkmark state.
 - `handle:selectedIndex()` -> selected index (`ComboBox`, `TabBar`).
 - `handle:selectIndex(index)` -> select item by index.
+- `handle:targetId()` / `handle:setTargetId(id)` -> TargetID / FormID for `WorldAnchor`.
+- `handle:setScreenOffset(ox, oy)` -> pixel offset for `WorldAnchor`.
+- `handle:isClamped()` -> `true` if `WorldAnchor` is clamped against screen boundary.
+- `handle:clampedAngle()` -> clamping arrow orientation in radians for `WorldAnchor`.
+- `handle:currentScale()` -> distance-based scale factor for `WorldAnchor`.
+- `handle:setTexture(texId)` -> update texture / D3D11 SRV ID for `Image`.
+- `handle:setUV(u0, v0, u1, v1)` -> UV bounds mapping for `Image`.
+- `handle:setFlipY(bool)` -> vertical inversion (Direct3D Render Target) for `Image`.
 
-### 4.3 Logging `log`
+### 4.3 Localization (`ui.tr`, `ui.translate`)
+
+PerfUI provides a built-in localization service supporting both JSON (`{ "KEY": "Text" }`) and standard Skyrim translation files (`$KEY\tText` or `KEY=Text`):
+
+```lua
+-- Retrieve localized string with fallback
+local saveText = ui.tr("BTN_SAVE", "Save")
+
+-- Switch active language code
+ui.setLanguage("ru")
+log.info("Active language: " .. ui.getLanguage())
+
+-- Load mod translation dictionary dynamically
+ui.loadDictionary("ru", "Data/Interface/MyMod/lang_ru.json")
+```
+
+### 4.4 Logging `log`
 
 Scripts output messages into the PerfUI logging pipeline (in-game written to `SKSE.log` prefixed with `[Lua:<ModName>]` alongside file and line references):
 ```lua

@@ -83,6 +83,8 @@ public:
     TextureId createDynamicTexture(uint32_t width, uint32_t height, const uint8_t* rgbaPixels) override;
     bool updateDynamicTexture(TextureId id, uint32_t width, uint32_t height, const uint8_t* rgbaPixels) override;
     void destroyTexture(TextureId id) override;
+    TextureId registerExternalTexture(void* srv, uint32_t width, uint32_t height) override;
+    void unregisterExternalTexture(TextureId id) override;
     Dimensions getTextureSize(TextureId id) override;
     TextureId loadSvg(std::string_view filePath, float targetWidth = 0.0f, float targetHeight = 0.0f) override;
     TextureId loadSvgFromMemory(std::string_view svgContent, float targetWidth = 0.0f, float targetHeight = 0.0f) override;
@@ -100,6 +102,7 @@ private:
         uint32_t width{ 0 };
         uint32_t height{ 0 };
         bool dynamic{ false };
+        bool external{ false };
         // File-backed textures keep their source so edits can be picked up live.
         std::string filePath;
         float rasterWidth{ 0.0f };

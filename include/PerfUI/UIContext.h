@@ -175,6 +175,12 @@ public:
     void destroyTexture(TextureId id) {
         if (m_renderBackend) m_renderBackend->destroyTexture(id);
     }
+    TextureId registerExternalTexture(void* srv, uint32_t width, uint32_t height) {
+        return m_renderBackend ? m_renderBackend->registerExternalTexture(srv, width, height) : 0;
+    }
+    void unregisterExternalTexture(TextureId id) {
+        if (m_renderBackend) m_renderBackend->unregisterExternalTexture(id);
+    }
     Dimensions getTextureSize(TextureId id) {
         return m_renderBackend ? m_renderBackend->getTextureSize(id) : Dimensions{ 0.0f, 0.0f };
     }

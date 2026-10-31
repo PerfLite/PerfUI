@@ -71,12 +71,22 @@ struct IPerfUI_v2 {
     void (*SetCaptureKeyboard)(bool capture);
 };
 
-// v3: adds ScriptHost lifecycle for modders to execute sandboxed Lua 5.4 scripts.
+// v3: adds ScriptHost lifecycle for modders to execute sandboxed Lua 5.4 scripts,
+// external texture registration, and WorldAnchor target tracking.
 struct IPerfUI_v3 {
     IPerfUI_v2 v2;
 
     ScriptHost* (*CreateScriptHost)(const char* modName, unsigned long luaApiVersion);
     void        (*DestroyScriptHost)(ScriptHost* host);
+
+    // External Texture Support (Render Targets / 3D item preview)
+    TextureId   (*RegisterExternalTexture)(void* srv, uint32_t width, uint32_t height);
+    void        (*UnregisterExternalTexture)(TextureId id);
+
+    // WorldAnchor Tracking API
+    uint32_t    (*TrackPosition)(float x, float y, float z, bool checkLoS);
+    uint32_t    (*TrackActor)(uint32_t formId, float offsetX, float offsetY, float offsetZ, bool checkLoS);
+    void        (*Untrack)(uint32_t targetId);
 };
 
 struct ClientABIInfo {
@@ -182,6 +192,50 @@ inline void DestroyScriptHost(ScriptHost* host) {
     auto* api = GetApiV3();
     if (api && api->DestroyScriptHost && host) {
         api->DestroyScriptHost(host);
+    }
+}
+
+inline TextureId RegisterExternalTexture(void* srv, uint32_t width, uint32_t height) {
+    auto* api = GetApiV3();
+    if (api && api->RegisterExternalTexture) {
+        return api->RegisterExternalTexture(srv, width, height);
+    }
+    auto* ctx = GetContext();
+    return ctx ? ctx->registerExternalTexture(srv, width, height) : 0;
+}
+
+inline void UnregisterExternalTexture(TextureId id) {
+    auto* api = GetApiV3();
+    if (api && api->UnregisterExternalTexture) {
+        api->UnregisterExternalTexture(id);
+        return;
+    }
+    auto* ctx = GetContext();
+    if (ctx) {
+        ctx->unregisterExternalTexture(id);
+    }
+}
+
+inline uint32_t TrackPosition(float x, float y, float z, bool checkLoS = false) {
+    auto* api = GetApiV3();
+    if (api && api->TrackPosition) {
+        return api->TrackPosition(x, y, z, checkLoS);
+    }
+    return 0;
+}
+
+inline uint32_t TrackActor(uint32_t formId, float offsetX = 0.0f, float offsetY = 0.0f, float offsetZ = 120.0f, bool checkLoS = false) {
+    auto* api = GetApiV3();
+    if (api && api->TrackActor) {
+        return api->TrackActor(formId, offsetX, offsetY, offsetZ, checkLoS);
+    }
+    return 0;
+}
+
+inline void Untrack(uint32_t targetId) {
+    auto* api = GetApiV3();
+    if (api && api->Untrack) {
+        api->Untrack(targetId);
     }
 }
 
