@@ -28,6 +28,7 @@ target("PerfUI")
     if has_config("perfui_lua") then
         add_deps("PerfUI_Lua")
         add_defines("PERFUI_ENABLE_LUA")
+        add_includedirs("modules/lua/include")
     end
 
     add_includedirs("include")

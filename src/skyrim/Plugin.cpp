@@ -255,17 +255,67 @@ static PerfUI::API::IPerfUI_v2 g_perfUI_API_v2{
     .SetCaptureKeyboard = API_SetCaptureKeyboard
 };
 
+#if defined(PERFUI_ENABLE_LUA)
+#include "PerfUI/Lua/ScriptHost.h"
+
+static PerfUI::ScriptHost* API_CreateScriptHost(const char* modName, unsigned long luaApiVersion) {
+    if (luaApiVersion != PerfUI::API::PERFUI_LUA_API_VERSION) {
+        SKSE::log::error("CreateScriptHost failed: Lua API version mismatch! Host={}, Client={}",
+            PerfUI::API::PERFUI_LUA_API_VERSION, luaApiVersion);
+        return nullptr;
+    }
+    std::string name = (modName && *modName) ? modName : "UnnamedMod";
+    auto* host = new PerfUI::ScriptHost(std::move(name));
+    auto* ctx = API_GetContext();
+    if (ctx) {
+        host->bindContext(ctx, ctx->root());
+    }
+    return host;
+}
+
+static void API_DestroyScriptHost(PerfUI::ScriptHost* host) {
+    delete host;
+}
+
+static PerfUI::API::IPerfUI_v3 g_perfUI_API_v3{
+    .v2 = g_perfUI_API_v2,
+    .CreateScriptHost = API_CreateScriptHost,
+    .DestroyScriptHost = API_DestroyScriptHost
+};
+#endif
+
 extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interfaceVersion, const PerfUI::API::ClientABIInfo* a_clientAbi) {
-    if (a_interfaceVersion != PerfUI::API::InterfaceVersion_1 && a_interfaceVersion != PerfUI::API::InterfaceVersion_2) {
+    if (a_interfaceVersion != PerfUI::API::InterfaceVersion_1 &&
+        a_interfaceVersion != PerfUI::API::InterfaceVersion_2 &&
+        a_interfaceVersion != PerfUI::API::InterfaceVersion_3) {
         SKSE::log::warn("RequestPluginAPIEx called with unsupported version: {}", a_interfaceVersion);
         return nullptr;
     }
 
-    const size_t expectedApiSize = (a_interfaceVersion == PerfUI::API::InterfaceVersion_2)
-        ? sizeof(PerfUI::API::IPerfUI_v2)
-        : sizeof(PerfUI::API::IPerfUI_v1);
+#if !defined(PERFUI_ENABLE_LUA)
+    if (a_interfaceVersion == PerfUI::API::InterfaceVersion_3) {
+        SKSE::log::warn("RequestPluginAPIEx(v3) requested, but PerfUI was built without Lua support (PERFUI_ENABLE_LUA=OFF)");
+        return nullptr;
+    }
+#endif
+
+    size_t expectedApiSize = sizeof(PerfUI::API::IPerfUI_v1);
+    if (a_interfaceVersion == PerfUI::API::InterfaceVersion_2) {
+        expectedApiSize = sizeof(PerfUI::API::IPerfUI_v2);
+    }
+#if defined(PERFUI_ENABLE_LUA)
+    else if (a_interfaceVersion == PerfUI::API::InterfaceVersion_3) {
+        expectedApiSize = sizeof(PerfUI::API::IPerfUI_v3);
+    }
+#endif
 
     if (a_clientAbi) {
+        if (a_clientAbi->structSize < sizeof(PerfUI::API::ClientABIInfo)) {
+            SKSE::log::error("PerfUI API Rejected: ClientABIInfo structSize too small! Host requires {}, client provided {}.",
+                sizeof(PerfUI::API::ClientABIInfo), a_clientAbi->structSize);
+            return nullptr;
+        }
+
         constexpr unsigned long hostMscVer =
 #if defined(_MSC_VER)
             _MSC_VER;
@@ -291,16 +341,19 @@ extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interf
             return nullptr;
         }
 
-        if (a_clientAbi->structSize >= sizeof(PerfUI::API::ClientABIInfo)) {
-            if (a_clientAbi->apiStructSize != expectedApiSize) {
-                SKSE::log::error("PerfUI API Rejected: interface v{} struct size mismatch! Host={}, Client={}. Recompile mod against latest PerfUIApi.h.",
-                    a_interfaceVersion, expectedApiSize, a_clientAbi->apiStructSize);
-                return nullptr;
-            }
+        if (a_clientAbi->apiStructSize != expectedApiSize) {
+            SKSE::log::error("PerfUI API Rejected: interface v{} struct size mismatch! Host={}, Client={}. Recompile mod against latest PerfUIApi.h.",
+                a_interfaceVersion, expectedApiSize, a_clientAbi->apiStructSize);
+            return nullptr;
         }
     }
 
     SKSE::log::info("RequestPluginAPIEx(v{}) called by external mod - ABI verified, granting API pointer!", a_interfaceVersion);
+#if defined(PERFUI_ENABLE_LUA)
+    if (a_interfaceVersion == PerfUI::API::InterfaceVersion_3) {
+        return static_cast<void*>(&g_perfUI_API_v3);
+    }
+#endif
     return (a_interfaceVersion == PerfUI::API::InterfaceVersion_2)
         ? static_cast<void*>(&g_perfUI_API_v2)
         : static_cast<void*>(&g_perfUI_API_v1);

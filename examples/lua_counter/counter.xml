@@ -1,0 +1,21 @@
+<UI script="main.lua">
+  <Panel name="CounterWindow" direction="column" width="360" padding="20" gap="14" bg="$surfaceElevated" border="$borderSubtle" radius="10" shadow="true">
+    <Text text="Lua Interactive Counter" font="$fontTitle" color="$borderFocus" bold="true"/>
+    <Text text="Pure Lua UI logic with zero C++ re-compilation." font="$fontSmall" color="$textSecondary"/>
+
+    <Panel direction="column" gap="8" width="100%" align="center">
+      <Text name="CounterDisplay" text="Count: 0" font="$fontHeader" bold="true"/>
+    </Panel>
+
+    <Panel direction="row" gap="10" justify="center" width="100%">
+      <Button name="BtnDecrement" text="-1" onClick="onDecrement"/>
+      <Button name="BtnReset" text="Reset" onClick="onReset"/>
+      <Button name="BtnIncrement" text="+1" onClick="onIncrement" class="primary"/>
+    </Panel>
+
+    <Panel direction="column" gap="6" width="100%">
+      <Checkbox name="AutoIncrementCheck" label="Auto-increment timer (every 1s)" checked="false" onToggle="onAutoToggle"/>
+      <Slider name="StepSlider" label="Step" min="1" max="10" value="1" step="1" onValueChanged="onStepChanged"/>
+    </Panel>
+  </Panel>
+</UI>

@@ -12,10 +12,18 @@
 #endif
 #include <windows.h>
 
+namespace PerfUI {
+class ScriptHost;
+}
+
 namespace PerfUI::API {
 
 constexpr unsigned long InterfaceVersion_1 = 1;
 constexpr unsigned long InterfaceVersion_2 = 2;
+constexpr unsigned long InterfaceVersion_3 = 3;
+
+constexpr unsigned long LuaApiVersion_1 = 1;
+constexpr unsigned long PERFUI_LUA_API_VERSION = LuaApiVersion_1;
 
 struct IPerfUI_v1 {
     unsigned long version{ InterfaceVersion_1 };
@@ -61,6 +69,14 @@ struct IPerfUI_v2 {
     // Blocks gameplay keyboard (pause menu, movement) while keeping PerfUI hotkeys alive.
     // Pair this with CaptureInput(true) for modal-style overlay interactions such as editors.
     void (*SetCaptureKeyboard)(bool capture);
+};
+
+// v3: adds ScriptHost lifecycle for modders to execute sandboxed Lua 5.4 scripts.
+struct IPerfUI_v3 {
+    IPerfUI_v2 v2;
+
+    ScriptHost* (*CreateScriptHost)(const char* modName, unsigned long luaApiVersion);
+    void        (*DestroyScriptHost)(ScriptHost* host);
 };
 
 struct ClientABIInfo {
@@ -132,6 +148,41 @@ inline API::IPerfUI_v2* GetApiV2() {
         }
     }
     return s_api;
+}
+
+// Returns nullptr when the loaded PerfUI.dll predates interface v3 or was built without Lua.
+inline API::IPerfUI_v3* GetApiV3() {
+    static API::IPerfUI_v3* s_api = nullptr;
+    static bool s_requested = false;
+    if (!s_requested) {
+        s_requested = true;
+        auto hModule = ::GetModuleHandleW(L"PerfUI.dll");
+        if (hModule) {
+            typedef void* (*RequestPluginAPIExFn)(unsigned long, const API::ClientABIInfo*);
+            auto fnEx = reinterpret_cast<RequestPluginAPIExFn>(::GetProcAddress(hModule, "RequestPluginAPIEx"));
+            if (fnEx) {
+                API::ClientABIInfo abi;
+                abi.apiStructSize = sizeof(API::IPerfUI_v3);
+                s_api = static_cast<API::IPerfUI_v3*>(fnEx(API::InterfaceVersion_3, &abi));
+            }
+        }
+    }
+    return s_api;
+}
+
+inline ScriptHost* CreateScriptHost(const char* modName) {
+    auto* api = GetApiV3();
+    if (api && api->CreateScriptHost) {
+        return api->CreateScriptHost(modName, API::PERFUI_LUA_API_VERSION);
+    }
+    return nullptr;
+}
+
+inline void DestroyScriptHost(ScriptHost* host) {
+    auto* api = GetApiV3();
+    if (api && api->DestroyScriptHost && host) {
+        api->DestroyScriptHost(host);
+    }
 }
 
 inline void ShowToast(const std::string& title, const std::string& message, ToastType type = ToastType::Info, float duration = 3.2f) {
