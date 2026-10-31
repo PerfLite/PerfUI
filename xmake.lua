@@ -11,6 +11,12 @@ add_includedirs("third_party/nanosvg")
 
 add_requires("commonlibsse-ng", {optional = true})
 
+option("perfui_lua")
+    set_default(true)
+    set_showmenu(true)
+    set_description("Build the PerfUI_Lua module (Lua 5.4 scripting)")
+option_end()
+
 target("PerfUI")
     set_default(true)
     set_kind("shared")
@@ -18,6 +24,11 @@ target("PerfUI")
     set_symbols("debug")
     add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN", "PERFUI_BUILD_DLL")
     add_packages("commonlibsse-ng")
+
+    if has_config("perfui_lua") then
+        add_deps("PerfUI_Lua")
+        add_defines("PERFUI_ENABLE_LUA")
+    end
 
     add_includedirs("include")
     add_includedirs("third_party/imgui")
@@ -250,3 +261,18 @@ target("PerfUI_Test_Svg")
     )
 
 
+
+if has_config("perfui_lua") then
+    target("PerfUI_Lua")
+        set_kind("static")
+        set_languages("c++20", "c11")
+        add_defines("PERFUI_STATIC")
+        add_includedirs("modules/lua/include", "include", "third_party/lua")
+        add_files("modules/lua/src/*.cpp")
+        if is_plat("windows") then
+            add_files("third_party/lua/*.c", { cflags = "/w" })
+        else
+            add_files("third_party/lua/*.c", { cflags = "-w" })
+        end
+        add_tests("script_host", { kind = "binary", files = "modules/lua/tests/ScriptHostTest.cpp" })
+end

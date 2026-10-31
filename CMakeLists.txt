@@ -366,3 +366,55 @@ add_test(NAME StyleSystemTest COMMAND PerfUI_Test_Style)
 add_test(NAME WorldAnchorTest COMMAND PerfUI_Test_WorldAnchor)
 
 
+
+# ---------------------------------------------------------------------------
+# 15. PerfUI_Lua (Lua 5.4 scripting for mod logic; no Lua leaks into Core/Markup)
+# ---------------------------------------------------------------------------
+option(PERFUI_ENABLE_LUA "Build the PerfUI_Lua module (Lua 5.4 runtime)" ON)
+
+if(PERFUI_ENABLE_LUA)
+    file(GLOB LUA_VENDOR_SOURCES CONFIGURE_DEPENDS
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lua/*.c
+    )
+    set_source_files_properties(${LUA_VENDOR_SOURCES} PROPERTIES LANGUAGE C)
+
+    if(MSVC)
+        set_source_files_properties(${LUA_VENDOR_SOURCES} PROPERTIES COMPILE_OPTIONS "/w")
+    else()
+        set_source_files_properties(${LUA_VENDOR_SOURCES} PROPERTIES COMPILE_OPTIONS "-w")
+    endif()
+
+    add_library(PerfUI_Lua STATIC
+        modules/lua/include/PerfUI/Lua/ScriptTypes.h
+        modules/lua/include/PerfUI/Lua/ScriptHost.h
+        modules/lua/include/PerfUI/Lua/ModuleBuilder.h
+        modules/lua/src/LuaInternal.h
+        modules/lua/src/ScriptHost.cpp
+        modules/lua/src/ModuleBuilder.cpp
+        ${LUA_VENDOR_SOURCES}
+    )
+
+    target_include_directories(PerfUI_Lua PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/modules/lua/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+    )
+
+    target_include_directories(PerfUI_Lua PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lua
+    )
+
+    target_compile_definitions(PerfUI_Lua PUBLIC
+        PERFUI_STATIC
+    )
+
+    add_executable(PerfUI_Test_Lua
+        modules/lua/tests/ScriptHostTest.cpp
+    )
+
+    target_link_libraries(PerfUI_Test_Lua PRIVATE
+        PerfUI_Lua
+    )
+
+    add_test(NAME LuaScriptHostTest COMMAND PerfUI_Test_Lua)
+endif()
