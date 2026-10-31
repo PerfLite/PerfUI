@@ -193,8 +193,11 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
     if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) {
         auto* uiCtx = D3D11Hook::GetSingleton().GetContext();
         bool capturingKeybind = uiCtx && uiCtx->isCapturingKeybind();
+        // Auto-repeat would toggle a hotkey on every repeat (F8 opening and closing
+        // an editor within a single press), so only the initial key-down counts.
+        const bool autoRepeat = (lParam & (1 << 30)) != 0;
 
-        if (!capturingKeybind) {
+        if (!capturingKeybind && !autoRepeat) {
             // First check user registered hotkeys via UIContext
             if (uiCtx && uiCtx->triggerHotkey(static_cast<uint32_t>(wParam))) {
                 return 0;
