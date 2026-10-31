@@ -216,6 +216,34 @@ When `loader.enableHotReload(true)` is enabled:
 
 ---
 
+## 📜 Lua Script Binding (`<UI script="...">`)
+
+Markup supports zero-C++ event logic when paired with the `PerfUI_Lua` module. By specifying the `script` attribute on `<UI>`, events like `onClick`, `onToggle`, and `onValueChanged` are resolved directly into Lua functions via `ScriptCallbackResolver`:
+
+```xml
+<UI script="main.lua">
+  <Panel direction="column" gap="10">
+    <Button name="BtnAccept" text="Accept" onClick="onAccept"/>
+    <Checkbox name="MuteAudio" label="Mute Audio" onToggle="onMuteToggled"/>
+  </Panel>
+</UI>
+```
+
+In `main.lua`:
+```lua
+function onAccept()
+    ui.toast("Accepted!", "success")
+end
+
+function onMuteToggled(checked)
+    log.info("Mute state: " .. tostring(checked))
+end
+```
+
+See [`docs/LUA_EN.md`](LUA_EN.md) for full scripting details, quotas, and element handles.
+
+---
+
 ## 🛠️ Registering Custom Modder Widgets in C++
 
 Third-party modders can register custom XML tags in one call via `WidgetRegistry`:

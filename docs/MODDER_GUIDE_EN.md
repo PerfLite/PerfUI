@@ -266,3 +266,137 @@ To test UI widgets outside of Skyrim, build and run `PerfUI_Sandbox.exe`:
 - **`[H]`** — Restore 15 health.
 - **`[F10]`** — Open fullscreen Main Menu.
 - **`[F11]`** — Open Nordic Quest Journal.
+
+---
+
+## 11. "Clean Client" Architecture Model
+
+PerfUI implements a **"Clean Client"** model, allowing mod developers to create HUD overlays and interactive menus **without writing a single DirectX 11 or WndProc hook**.
+
+### Advantages of the Clean Client Model:
+1. **Single Hook Owner:** Only one `Present`, `ResizeBuffers`, and `WndProc` hook exists in the game process (owned by `PerfUI.dll`). This completely eliminates hook conflicts, crashes during window resize, and alt-tab screen-mode transitions.
+2. **Zero ImGui Footprint in Client Mods:** Modders do not compile ImGui, never instantiate secondary `ImGui::Context` instances, and save memory.
+3. **Safe Delay-Loading:** When built with `/DELAYLOAD:PerfUI.dll`, your mod never crashes on startup if `PerfUI.dll` is absent — it can gracefully disable UI features and inform the player via logs.
+
+### 11.1 Registering Overlays (HUD, Compass, Status Indicators)
+
+To render HUD elements directly onto the screen, use `PerfUI::Client::RegisterOverlay`:
+
+```cpp
+#include <PerfUI/PerfUIApi.h>
+
+// Register overlay: identifier, render callback, z-order, alwaysVisible flag
+auto overlayId = PerfUI::Client::RegisterOverlay(
+    "MyCustomCompass",
+    [](PerfUI::OverlayContext& ctx) {
+        // ctx.renderer provides a clean UIRenderBackend:
+        // drawLine, drawCircle, drawRect, drawImage, drawText, etc.
+        float cx = ctx.screenSize.width * 0.5f;
+        float cy = 30.0f;
+        ctx.renderer.drawCircle(PerfUI::Point(cx, cy), 16.0f, PerfUI::Color(255, 215, 0, 200));
+        ctx.renderer.drawText("N", PerfUI::Point(cx - 5.0f, cy - 8.0f), { 16.0f, PerfUI::Color::White() });
+    },
+    /*zOrder=*/10,
+    /*alwaysVisible=*/true
+);
+```
+
+### 11.2 Hotkeys and Input Capture
+
+```cpp
+// 1. Register a global hotkey (e.g., F7, virtual-key 0x76)
+PerfUI::Client::RegisterHotkey("MyMod_Toggle", 0x76, []() {
+    SKSE::log::info("F7 pressed!");
+});
+
+// 2. Capture game input when opening an interactive fullscreen modal menu
+// When true: the mouse cursor switches to the hardware Skyrim arrow cursor,
+// and gameplay inputs (camera, character actions) are blocked via kStop in ProcessEvent.
+PerfUI::Client::CaptureInput(true);
+```
+
+### 11.3 Textures & Sprites Without DirectX 11 Boilerplate
+
+```cpp
+// Load texture (PNG, JPG, BMP) via PerfUI:
+PerfUI::TextureId myTex = PerfUI::Client::LoadTexture("Data/Textures/MyMod/icon.png");
+
+// Draw within an overlay:
+ctx.renderer.drawImage(myTex, PerfUI::Rect(100.0f, 100.0f, 48.0f, 48.0f), PerfUI::Color::White());
+
+// Unload when done:
+PerfUI::Client::DestroyTexture(myTex);
+```
+
+### 11.4 Safe Preloading of PerfUI.dll by Path
+
+```cpp
+bool PreloadPerfUI() {
+    HMODULE hSelf = nullptr;
+    if (::GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&PreloadPerfUI),
+            &hSelf)) {
+        wchar_t selfPath[MAX_PATH];
+        DWORD len = ::GetModuleFileNameW(hSelf, selfPath, MAX_PATH);
+        if (len > 0 && len < MAX_PATH) {
+            std::filesystem::path p(selfPath);
+            std::filesystem::path perfUIPath = p.parent_path() / L"PerfUI.dll";
+            if (std::filesystem::exists(perfUIPath)) {
+                HMODULE hPerf = ::LoadLibraryExW(perfUIPath.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+                if (hPerf) return true;
+            }
+        }
+    }
+    return ::GetModuleHandleW(L"PerfUI.dll") != nullptr;
+}
+```
+
+---
+
+## 12. Lua Scripting (PerfUI_Lua Module): When to Choose Lua vs C++
+
+Starting with API v3 (`PerfUI::API::InterfaceVersion_3`), PerfUI embeds a sandboxed **Lua 5.4** runtime. Modders can implement UI behavior and handlers entirely in scripts without recompiling C++ DLLs.
+
+### 12.1 Division of Responsibilities
+
+| Task | Recommended Choice | Rationale |
+| :--- | :---: | :--- |
+| **Button, checkbox, and slider event handlers** | **Lua** | Rapid iteration without recompilation, bound declaratively via `onClick="fn"` in XML. |
+| **One-shot delays & timers** | **Lua** | `ui.timer(2.0, callback)` avoids manual timer tracking in C++. |
+| **Periodic UI polling (intervals)** | **Lua** | `ui.interval(0.5, callback)` for lightweight state polling. |
+| **String formatting and notifications** | **Lua** | String concatenation, localization, and popups via `ui.toast` / `element:setText`. |
+| **Direct access to SKSE/Skyrim engine internals** | **C++** | Lua operates within a secure sandbox and cannot read arbitrary process memory. |
+| **Per-frame calculations (every frame)** | **C++** | Runs smoothly at 60–144 FPS without interpreter overhead. |
+| **3D World-to-Screen projection (WorldAnchor)** | **C++** | Requires vector math and synchronization with Skyrim's gameplay thread. |
+| **Dynamic DirectX 11 textures / Render Targets** | **C++** | Direct access to GPU resources and Direct3D 11 pipelines. |
+
+### 12.2 Creating a ScriptHost via SDK v3
+
+```cpp
+#include "PerfUI/PerfUIApi.h"
+#include "PerfUI/Lua/ScriptHost.h"
+
+// 1. Create an isolated script host for your mod
+auto* host = PerfUI::Client::CreateScriptHost("MyInventoryMod");
+if (!host) {
+    SKSE::log::warn("PerfUI v3 (Lua) is not supported or host creation failed");
+    return;
+}
+
+// 2. Register C++ helper functions for safe mod data queries
+host->registerModule("game", [](PerfUI::ModuleBuilder& m) {
+    m.function("getPlayerGold", []() -> double {
+        return static_cast<double>(CachedPlayerGold());
+    });
+});
+
+// 3. Load script file
+host->loadFile("Data/Interface/MyInventoryMod/inventory.lua");
+
+// 4. On mod shutdown
+PerfUI::Client::DestroyScriptHost(host);
+```
+
+For complete documentation on sandboxing, resource quotas, element handles, and troubleshooting, refer to [`docs/LUA_EN.md`](file:///c:/Dev/C++/Skyrim%20mods/PerfUI/docs/LUA_EN.md).
+

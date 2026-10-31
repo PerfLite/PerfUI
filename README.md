@@ -57,6 +57,7 @@ High-performance, retained-mode C++20 UI framework for *The Elder Scrolls V: Sky
 - 🎭 **Theme Tokens & Design System:** Built-in design tokens with 4 visual presets: `SkyrimClassic`, `NordicDark`, `GlassFrost`, `WarmParchment`.
 - 🌐 **Cyrillic & Symbol Typography:** Native UTF-8 string support with Cyrillic glyph preloading and merged Segoe UI Symbol font for quest diamond markers, dingbats, and geometric symbols.
 - 🔄 **Declarative XML Markup & Instant Hot-Reload:** Static library (`PerfUI_Markup`) allowing authors to declare UIs in XML and edit layouts live with instant state-preserving hot-reload without restarting the game.
+- 📜 **Lua 5.4 Scripting & Data-Driven Logic:** Embedded sandboxed Lua runtime (`PerfUI_Lua`) enabling zero-C++ mod development via `<UI script="main.lua">`, safe element handles, timers (`ui.timer`, `ui.interval`), toasts, and per-call instruction/memory limits.
 - 📊 **Built-in Diagnostics & Fault Guard:** `F7` performance panel (frame pacing, UI cost, draw calls, per-overlay timings), automatic hitch log next to the DLL, live SVG/PNG asset reload, and an SEH watchdog that disables a crashing overlay instead of taking the game down.
 - 🛡️ **Complete Backend Decoupling:** Dear ImGui is used strictly as an internal rasterization foundation (`ImDrawList`). The public API never exposes `<imgui.h>`, enabling future backend swaps (native D3D11, Vulkan, D3D12) with zero client code changes.
 
@@ -149,6 +150,7 @@ Licensed under the **MIT License** — see [LICENSE](LICENSE).
 - 🎭 **Стилизация и темы:** Дизайн-токены и 4 встроенные темы (`SkyrimClassic`, `NordicDark`, `GlassFrost`, `WarmParchment`), движок плавных анимаций.
 - 🌐 **Поддержка кириллицы и значков:** Встроенная загрузка кириллических диапазонов глифов и объединённый шрифт Segoe UI Symbol для маркеров квестов и геометрических значков.
 - 🔄 **Декларативный XML Markup & Hot-Reload:** Описание интерфейсов в XML с горячей перезагрузкой прямо в игре без перезапуска (`PerfUI_Markup`).
+- 📜 **Скриптовый движок Lua 5.4 (PerfUI_Lua):** Встроенная песочница Lua для создания UI-модов вообще без C++ плагинов через `<UI script="main.lua">`, безопасные ручки элементов, таймеры (`ui.timer`, `ui.interval`), уведомления и строгие лимиты инструкций и памяти.
 - 📊 **Встроенная диагностика и защита:** панель производительности по `F7` (стабильность кадров, стоимость UI, вызовы отрисовки, время каждого оверлея), автоматический лог подтормаживаний рядом с DLL, горячая перезагрузка SVG/PNG и SEH-сторож, который отключает упавший оверлей вместо вылета игры.
 - 🛡️ **Полная изоляция бэкенда:** Библиотека ImGui изолирована внутри реализации (`ImDrawList`). Внешний API фреймворка на 100% независим от `<imgui.h>`.
 

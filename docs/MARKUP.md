@@ -216,6 +216,34 @@ When `loader.enableHotReload(true)` is activated:
 
 ---
 
+## 📜 Привязка скриптов Lua (`<UI script="...">`)
+
+Разметка поддерживает логику событий вообще без C++ плагинов при использовании модуля `PerfUI_Lua`. Указание атрибута `script` в корневом теге `<UI>` направляет обработчики `onClick`, `onToggle`, `onValueChanged` прямо в функции Lua через `ScriptCallbackResolver`:
+
+```xml
+<UI script="main.lua">
+  <Panel direction="column" gap="10">
+    <Button name="BtnAccept" text="Принять" onClick="onAccept"/>
+    <Checkbox name="MuteAudio" label="Отключить звук" onToggle="onMuteToggled"/>
+  </Panel>
+</UI>
+```
+
+В `main.lua`:
+```lua
+function onAccept()
+    ui.toast("Принято!", "success")
+end
+
+function onMuteToggled(checked)
+    log.info("Состояние звука: " .. tostring(checked))
+end
+```
+
+Подробное руководство по функциям скриптов, квотам и ручкам элементов доступно в [`docs/LUA.md`](LUA.md).
+
+---
+
 ## 🛠️ Registering Custom Modder Widgets
 
 Third-party modders can register custom widgets in one line via `WidgetRegistry`:
