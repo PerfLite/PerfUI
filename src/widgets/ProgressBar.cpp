@@ -81,7 +81,7 @@ ProgressBar& ProgressBar::progress(float p) {
     float clamped = (std::clamp)(p, 0.0f, 1.0f);
     if (m_progress != clamped) {
         m_progress = clamped;
-        m_animProgress.setTarget(m_progress);
+        m_animProgress.snapTo(m_progress);
         markLayoutDirty();
     }
     return *this;
