@@ -146,7 +146,8 @@ void UIContext::render(UIRenderBackend& backend, bool renderTree) {
     }
 
     // 5. Client Overlays (Clean Client Stage 1)
-    OverlayContext overlayCtx{ backend, m_viewportSize, 1.0f, m_lastDeltaTime };
+    OverlayContext overlayCtx{ backend, m_viewportSize, 1.0f, m_lastDeltaTime,
+                               m_lastMousePos, m_leftButtonDown, m_inputCaptured };
     m_overlayManager.renderOverlays(overlayCtx, renderTree);
 
     backend.endFrame();
@@ -263,6 +264,9 @@ void UIContext::onMouseMove(const Point& screenPos) {
 
 void UIContext::onMouseDown(int button, const Point& screenPos) {
     m_lastMousePos = screenPos;
+    if (button == 0) {
+        m_leftButtonDown = true;
+    }
 
     // 1. Context Menu has top priority
     if (m_contextMenu.isOpen()) {
@@ -348,6 +352,9 @@ void UIContext::onMouseDown(int button, const Point& screenPos) {
 
 void UIContext::onMouseUp(int button, const Point& screenPos) {
     m_lastMousePos = screenPos;
+    if (button == 0) {
+        m_leftButtonDown = false;
+    }
     if (button == 0 && m_pressedElement) {
         Point localPoint = screenPos - m_pressedElement->bounds().topLeft();
         m_pressedElement->onPointerUp(localPoint);

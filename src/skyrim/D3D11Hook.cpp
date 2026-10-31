@@ -677,7 +677,9 @@ void D3D11Hook::RenderFrame() {
     while (::ShowCursor(FALSE) >= 0);
     ::SetCursor(nullptr);
 
-    if (anyTreeVisible) {
+    // Overlays that asked for input capture (drag modes, editors) need cursor updates
+    // even when no retained-mode window is visible.
+    if (anyTreeVisible || shouldShowCursor) {
 
         // Poll mouse position every frame via GetCursorPos
         POINT pt;
@@ -728,6 +730,7 @@ void D3D11Hook::RenderFrame() {
         }
     }
 
+    m_uiContext->setInputCaptured(InputHook::GetSingleton().IsCaptureInput());
     m_uiContext->update(dt);
     m_uiContext->render(*m_renderBackend, anyTreeVisible);
 

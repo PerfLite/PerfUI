@@ -115,6 +115,16 @@ public:
     bool isCapturingKeybind() const { return m_capturingKeybind; }
     void setCapturingKeybind(bool capturing) { m_capturingKeybind = capturing; }
 
+    // Cursor state exposed to overlays through OverlayContext
+    bool isMouseDown() const { return m_leftButtonDown; }
+    bool isInputCaptured() const { return m_inputCaptured; }
+    void setInputCaptured(bool captured) {
+        if (!captured && m_inputCaptured) {
+            m_leftButtonDown = false; // release events are not delivered after capture stops
+        }
+        m_inputCaptured = captured;
+    }
+
     // ComboBox Dropdown Overlay Tracking
     void setActiveComboBox(ComboBox* cb);
     void clearActiveComboBox(ComboBox* cb = nullptr);
@@ -199,6 +209,8 @@ private:
     UIElement* m_pressedElement{ nullptr };
 
     Point m_lastMousePos{ -1.0f, -1.0f };
+    bool m_leftButtonDown{ false };
+    bool m_inputCaptured{ false };
     bool m_layoutDirty{ true };
     ProfilerMetrics m_metrics;
 
