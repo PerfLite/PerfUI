@@ -26,9 +26,14 @@ target("PerfUI")
     add_packages("commonlibsse-ng")
 
     if has_config("perfui_lua") then
-        add_deps("PerfUI_Lua")
         add_defines("PERFUI_ENABLE_LUA")
-        add_includedirs("modules/lua/include")
+        add_includedirs("modules/lua/include", "third_party/lua")
+        add_files("modules/lua/src/*.cpp")
+        if is_plat("windows") then
+            add_files("third_party/lua/*.c", { cflags = "/w" })
+        else
+            add_files("third_party/lua/*.c", { cflags = "-w" })
+        end
     end
 
     add_includedirs("include")
@@ -65,6 +70,7 @@ target("PerfUI")
         os.mkdir(sdk_include)
         os.mkdir(sdk_lib)
         os.cp(path.join(projectdir, "include", "PerfUI", "*"), sdk_include)
+        os.cp(path.join(projectdir, "modules", "lua", "include", "PerfUI", "*"), sdk_include)
         local target_dir = target:targetdir()
         local implib = path.join(target_dir, "PerfUI.lib")
         if os.isfile(implib) then

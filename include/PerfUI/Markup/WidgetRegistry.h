@@ -11,7 +11,7 @@ namespace PerfUI {
 
 using WidgetFactory = std::function<UIElement*(UIElement* parent, const AttrMap& attrs)>;
 
-class WidgetRegistry {
+class PERFUI_API WidgetRegistry {
 public:
     static WidgetRegistry& instance();
 

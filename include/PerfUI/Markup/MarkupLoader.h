@@ -16,7 +16,7 @@
 
 namespace PerfUI {
 
-class MarkupLoader {
+class PERFUI_API MarkupLoader {
 public:
     explicit MarkupLoader(UIContext& ctx);
     ~MarkupLoader();

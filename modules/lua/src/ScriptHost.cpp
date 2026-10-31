@@ -12,6 +12,7 @@
 #include "PerfUI/ComboBox.h"
 #include "PerfUI/TabBar.h"
 #include "PerfUI/TextInput.h"
+#include "PerfUI/Panel.h"
 #include "PerfUI/Theme.h"
 #include "PerfUI/Toast.h"
 #include "PerfUI/Animation.h"
@@ -582,6 +583,39 @@ int Handle_selectIndex(lua_State* L)
     return 0;
 }
 
+int Handle_setColor(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setColor");
+    if (!elem) return 0;
+    lua_Number r = luaL_checknumber(L, 2);
+    lua_Number g = luaL_checknumber(L, 3);
+    lua_Number b = luaL_checknumber(L, 4);
+    lua_Number a = lua_isnumber(L, 5) ? lua_tonumber(L, 5) : 255.0;
+    Color col(static_cast<uint8_t>(std::clamp(r, 0.0, 255.0)),
+              static_cast<uint8_t>(std::clamp(g, 0.0, 255.0)),
+              static_cast<uint8_t>(std::clamp(b, 0.0, 255.0)),
+              static_cast<uint8_t>(std::clamp(a, 0.0, 255.0)));
+
+    if (auto* txt = dynamic_cast<Text*>(elem)) {
+        txt->color(col);
+    } else if (auto* pb = dynamic_cast<ProgressBar*>(elem)) {
+        pb->fillColor(col);
+    } else if (auto* pnl = dynamic_cast<Panel*>(elem)) {
+        pnl->backgroundColor(col);
+    }
+    return 0;
+}
+
+int Handle_setSize(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setSize");
+    if (!elem) return 0;
+    lua_Number w = luaL_checknumber(L, 2);
+    lua_Number h = luaL_checknumber(L, 3);
+    elem->setSize(Dimensions{ static_cast<float>(w), static_cast<float>(h) });
+    return 0;
+}
+
 int Handle_tostring(lua_State* L)
 {
     auto* handle = static_cast<LuaElementHandle*>(luaL_checkudata(L, 1, kElementHandleMeta));
@@ -647,6 +681,10 @@ void RegisterElementHandleMeta(lua_State* L)
         lua_setfield(L, -2, "selectedIndex");
         lua_pushcfunction(L, Handle_selectIndex);
         lua_setfield(L, -2, "selectIndex");
+        lua_pushcfunction(L, Handle_setColor);
+        lua_setfield(L, -2, "setColor");
+        lua_pushcfunction(L, Handle_setSize);
+        lua_setfield(L, -2, "setSize");
 
         lua_setfield(L, -2, "__index");
     }
