@@ -15,6 +15,7 @@
 namespace PerfUI::API {
 
 constexpr unsigned long InterfaceVersion_1 = 1;
+constexpr unsigned long InterfaceVersion_2 = 2;
 
 struct IPerfUI_v1 {
     unsigned long version{ InterfaceVersion_1 };
@@ -51,6 +52,15 @@ struct IPerfUI_v1 {
     // Must be set before SetUIVisible. Modal (default) swallows the whole input; overlay keeps
     // the keyboard and the game controls alive so the world stays playable under the panel.
     void (*SetOverlayMode)(bool overlay);
+};
+
+// v2 appends to v1 without changing the v1 layout, so mods built against v1 keep working.
+struct IPerfUI_v2 {
+    IPerfUI_v1 v1;
+
+    // Blocks gameplay keyboard (pause menu, movement) while keeping PerfUI hotkeys alive.
+    // Pair this with CaptureInput(true) for modal-style overlay interactions such as editors.
+    void (*SetCaptureKeyboard)(bool capture);
 };
 
 struct ClientABIInfo {
@@ -102,6 +112,26 @@ inline API::IPerfUI_v1* GetApi() {
 inline UIContext* GetContext() {
     auto* api = GetApi();
     return api ? api->GetContext() : nullptr;
+}
+
+// Returns nullptr when the loaded PerfUI.dll predates interface v2.
+inline API::IPerfUI_v2* GetApiV2() {
+    static API::IPerfUI_v2* s_api = nullptr;
+    static bool s_requested = false;
+    if (!s_requested) {
+        s_requested = true;
+        auto hModule = ::GetModuleHandleW(L"PerfUI.dll");
+        if (hModule) {
+            typedef void* (*RequestPluginAPIExFn)(unsigned long, const API::ClientABIInfo*);
+            auto fnEx = reinterpret_cast<RequestPluginAPIExFn>(::GetProcAddress(hModule, "RequestPluginAPIEx"));
+            if (fnEx) {
+                API::ClientABIInfo abi;
+                abi.apiStructSize = sizeof(API::IPerfUI_v2);
+                s_api = static_cast<API::IPerfUI_v2*>(fnEx(API::InterfaceVersion_2, &abi));
+            }
+        }
+    }
+    return s_api;
 }
 
 inline void ShowToast(const std::string& title, const std::string& message, ToastType type = ToastType::Info, float duration = 3.2f) {
@@ -275,6 +305,17 @@ inline void UnregisterHotkey(const char* id) {
     if (ctx && id) {
         ctx->unregisterHotkey(id);
     }
+}
+
+// v2: stop gameplay keyboard input while an overlay drives a modal interaction.
+// Returns false when the host does not implement v2 (older PerfUI.dll).
+inline bool SetCaptureKeyboard(bool capture) {
+    auto* api = GetApiV2();
+    if (api && api->SetCaptureKeyboard) {
+        api->SetCaptureKeyboard(capture);
+        return true;
+    }
+    return false;
 }
 
 // Call before SetUIVisible(true) if the window is an overlay on top of the live game world.

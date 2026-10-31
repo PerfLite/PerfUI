@@ -222,6 +222,10 @@ static void API_SetOverlayMode(bool overlay) {
     PerfUI::Skyrim::D3D11Hook::GetSingleton().SetOverlayMode(overlay);
 }
 
+static void API_SetCaptureKeyboard(bool capture) {
+    PerfUI::Skyrim::InputHook::GetSingleton().SetCaptureKeyboard(capture);
+}
+
 static PerfUI::API::IPerfUI_v1 g_perfUI_API_v1{
     .version = PerfUI::API::InterfaceVersion_1,
     .GetContext = API_GetContext,
@@ -246,11 +250,20 @@ static PerfUI::API::IPerfUI_v1 g_perfUI_API_v1{
     .SetOverlayMode = API_SetOverlayMode
 };
 
+static PerfUI::API::IPerfUI_v2 g_perfUI_API_v2{
+    .v1 = g_perfUI_API_v1,
+    .SetCaptureKeyboard = API_SetCaptureKeyboard
+};
+
 extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interfaceVersion, const PerfUI::API::ClientABIInfo* a_clientAbi) {
-    if (a_interfaceVersion != PerfUI::API::InterfaceVersion_1) {
+    if (a_interfaceVersion != PerfUI::API::InterfaceVersion_1 && a_interfaceVersion != PerfUI::API::InterfaceVersion_2) {
         SKSE::log::warn("RequestPluginAPIEx called with unsupported version: {}", a_interfaceVersion);
         return nullptr;
     }
+
+    const size_t expectedApiSize = (a_interfaceVersion == PerfUI::API::InterfaceVersion_2)
+        ? sizeof(PerfUI::API::IPerfUI_v2)
+        : sizeof(PerfUI::API::IPerfUI_v1);
 
     if (a_clientAbi) {
         constexpr unsigned long hostMscVer =
@@ -279,16 +292,18 @@ extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interf
         }
 
         if (a_clientAbi->structSize >= sizeof(PerfUI::API::ClientABIInfo)) {
-            if (a_clientAbi->apiStructSize != sizeof(PerfUI::API::IPerfUI_v1)) {
-                SKSE::log::error("PerfUI API Rejected: IPerfUI_v1 struct size mismatch! Host={}, Client={}. Recompile mod against latest PerfUIApi.h.",
-                    sizeof(PerfUI::API::IPerfUI_v1), a_clientAbi->apiStructSize);
+            if (a_clientAbi->apiStructSize != expectedApiSize) {
+                SKSE::log::error("PerfUI API Rejected: interface v{} struct size mismatch! Host={}, Client={}. Recompile mod against latest PerfUIApi.h.",
+                    a_interfaceVersion, expectedApiSize, a_clientAbi->apiStructSize);
                 return nullptr;
             }
         }
     }
 
-    SKSE::log::info("RequestPluginAPIEx(v1) called by external mod - ABI verified, granting API pointer!");
-    return &g_perfUI_API_v1;
+    SKSE::log::info("RequestPluginAPIEx(v{}) called by external mod - ABI verified, granting API pointer!", a_interfaceVersion);
+    return (a_interfaceVersion == PerfUI::API::InterfaceVersion_2)
+        ? static_cast<void*>(&g_perfUI_API_v2)
+        : static_cast<void*>(&g_perfUI_API_v1);
 }
 
 extern "C" __declspec(dllexport) void* RequestPluginAPI(unsigned long a_interfaceVersion) {
