@@ -46,7 +46,7 @@ void LayoutEngine::Measure(UIElement* element, Dimensions availableSize) {
         int visCount = 0;
 
         for (const auto& child : element->children()) {
-            if (!child || !child->isVisible()) continue;
+            if (!child || !child->isVisible() || child->isAbsolute()) continue;
             visCount++;
             float flex = child->layout().flexGrow();
             if (flex <= 0.0f && child->layout().width().mode == SizeMode::Flex) {
@@ -65,7 +65,7 @@ void LayoutEngine::Measure(UIElement* element, Dimensions availableSize) {
         float flexPerUnit = (totalFlex > 0.0f) ? (remainingW / totalFlex) : 0.0f;
 
         for (const auto& child : element->children()) {
-            if (!child || !child->isVisible()) continue;
+            if (!child || !child->isVisible() || child->isAbsolute()) continue;
             float flex = child->layout().flexGrow();
             if (flex <= 0.0f && child->layout().width().mode == SizeMode::Flex) {
                 flex = child->layout().width().value;
@@ -90,7 +90,7 @@ void LayoutEngine::Measure(UIElement* element, Dimensions availableSize) {
         int visCount = 0;
 
         for (const auto& child : element->children()) {
-            if (!child || !child->isVisible()) continue;
+            if (!child || !child->isVisible() || child->isAbsolute()) continue;
             visCount++;
             float flex = child->layout().flexGrow();
             if (flex <= 0.0f && child->layout().height().mode == SizeMode::Flex) {
@@ -109,7 +109,7 @@ void LayoutEngine::Measure(UIElement* element, Dimensions availableSize) {
         float flexPerUnit = (totalFlex > 0.0f) ? (remainingH / totalFlex) : 0.0f;
 
         for (const auto& child : element->children()) {
-            if (!child || !child->isVisible()) continue;
+            if (!child || !child->isVisible() || child->isAbsolute()) continue;
             float flex = child->layout().flexGrow();
             if (flex <= 0.0f && child->layout().height().mode == SizeMode::Flex) {
                 flex = child->layout().height().value;
@@ -165,12 +165,19 @@ void LayoutEngine::ArrangeContent(UIElement* element, const Rect& contentRect) {
     } else {
         ArrangeVertical(element, contentRect);
     }
+
+    for (const auto& child : element->children()) {
+        if (child && child->isVisible() && child->isAbsolute()) {
+            child->measure(child->size());
+            child->arrange(child->bounds());
+        }
+    }
 }
 
 void LayoutEngine::ArrangeHorizontal(UIElement* element, const Rect& contentRect) {
     std::vector<UIElement*> visible;
     for (const auto& child : element->children()) {
-        if (child && child->isVisible()) {
+        if (child && child->isVisible() && !child->isAbsolute()) {
             visible.push_back(child.get());
         }
     }
@@ -276,7 +283,7 @@ void LayoutEngine::ArrangeHorizontal(UIElement* element, const Rect& contentRect
 void LayoutEngine::ArrangeVertical(UIElement* element, const Rect& contentRect) {
     std::vector<UIElement*> visible;
     for (const auto& child : element->children()) {
-        if (child && child->isVisible()) {
+        if (child && child->isVisible() && !child->isAbsolute()) {
             visible.push_back(child.get());
         }
     }

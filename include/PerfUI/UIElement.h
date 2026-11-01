@@ -134,6 +134,9 @@ public:
     Dimensions size() const { return { m_bounds.width, m_bounds.height }; }
     void setSize(const Dimensions& size) { setBounds({ m_bounds.x, m_bounds.y, size.width, size.height }); }
 
+    bool isAbsolute() const { return m_isAbsolute; }
+    void setAbsolute(bool abs) { m_isAbsolute = abs; }
+
     const Dimensions& desiredSize() const { return m_desiredSize; }
     void setDesiredSize(Dimensions size) { m_desiredSize = size; }
 
@@ -202,6 +205,7 @@ protected:
     bool m_hovered{ false };
     bool m_pressed{ false };
 
+    bool m_isAbsolute{ false };
     bool m_layoutDirty{ true };
     WidgetStyle m_style{};
     std::string m_tooltip;
