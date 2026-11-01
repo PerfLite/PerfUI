@@ -533,6 +533,8 @@ void D3D11Hook::EnsureUIContext() {
 
     m_uiContext->overlayManager().setErrorCallback([](const std::string& name, const std::string& err) {
         SKSE::log::error("PerfUI Overlay '{}' threw exception: {}. Disabled.", name, err);
+        InputHook::GetSingleton().SetCaptureInput(false);
+        InputHook::GetSingleton().SetCaptureKeyboard(false);
     });
 
     m_uiContext->registerHotkey("perfui.diagnostics", PerfUI::Diagnostics::GetSingleton().toggleHotkey(), []() {

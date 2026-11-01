@@ -191,6 +191,14 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
     }
 
     if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) {
+        if (wParam == VK_ESCAPE && hook.m_captureInput.load() &&
+            (((::GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) || ((::GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0))) {
+            SKSE::log::warn("InputHook: Emergency input release triggered via Shift/Ctrl+Escape");
+            hook.SetCaptureKeyboard(false);
+            hook.SetCaptureInput(false);
+            return 0;
+        }
+
         auto* uiCtx = D3D11Hook::GetSingleton().GetContext();
         bool capturingKeybind = uiCtx && uiCtx->isCapturingKeybind();
         // Auto-repeat would toggle a hotkey on every repeat (F8 opening and closing
