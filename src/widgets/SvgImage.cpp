@@ -101,8 +101,10 @@ void SvgImage::render(UIRenderBackend& backend) {
 
     ensureTextureLoaded(backend);
 
-    if (m_texture != 0) {
-        backend.drawImage(m_texture, m_bounds, m_tint);
+    float effAlpha = effectiveOpacity();
+    if (m_texture != 0 && effAlpha > 0.001f) {
+        Color effTint(m_tint.r, m_tint.g, m_tint.b, static_cast<uint8_t>(std::clamp(static_cast<float>(m_tint.a) * effAlpha, 0.0f, 255.0f)));
+        backend.drawImage(m_texture, m_bounds, effTint);
     }
 
     UIElement::render(backend);

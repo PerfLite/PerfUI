@@ -54,7 +54,12 @@ void Text::measure(Dimensions availableSize) {
 void Text::render(UIRenderBackend& backend) {
     if (!isVisible() || m_text.empty()) return;
 
+    float effAlpha = effectiveOpacity();
+    if (effAlpha <= 0.001f) return;
+
     TextStyle renderStyle = m_style;
+    renderStyle.color = Color(renderStyle.color.r, renderStyle.color.g, renderStyle.color.b,
+                              static_cast<uint8_t>(std::clamp(static_cast<float>(renderStyle.color.a) * effAlpha, 0.0f, 255.0f)));
     if (m_wrap && m_bounds.width > 0.0f) {
         renderStyle.wrapWidth = m_bounds.width;
     }

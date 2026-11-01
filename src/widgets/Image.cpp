@@ -30,6 +30,10 @@ Image& Image::flipY(bool flip) {
 void Image::render(UIRenderBackend& backend) {
     if (!isVisible() || m_texture == 0) return;
 
+    float effAlpha = effectiveOpacity();
+    if (effAlpha <= 0.001f) return;
+    Color effTint(m_tint.r, m_tint.g, m_tint.b, static_cast<uint8_t>(std::clamp(static_cast<float>(m_tint.a) * effAlpha, 0.0f, 255.0f)));
+
     Point p0 = m_uv0;
     Point p1 = m_uv1;
     if (m_flipY) {
@@ -37,9 +41,9 @@ void Image::render(UIRenderBackend& backend) {
     }
 
     if (p0 == Point(0.0f, 0.0f) && p1 == Point(1.0f, 1.0f)) {
-        backend.drawImage(m_texture, m_bounds, m_tint);
+        backend.drawImage(m_texture, m_bounds, effTint);
     } else {
-        backend.drawImageUV(m_texture, m_bounds, p0, p1, m_tint);
+        backend.drawImageUV(m_texture, m_bounds, p0, p1, effTint);
     }
     UIElement::render(backend);
 }

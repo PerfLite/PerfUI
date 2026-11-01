@@ -113,6 +113,7 @@ public:
 
     // Opacity
     float opacity() const { return m_opacity; }
+    float effectiveOpacity() const;
     void setOpacity(float opacity);
     UIElement& opacity(float opacity) { setOpacity(opacity); return *this; }
 

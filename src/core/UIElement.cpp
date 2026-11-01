@@ -95,6 +95,16 @@ void UIElement::setOpacity(float opacity) {
     m_opacity = (std::clamp)(opacity, 0.0f, 1.0f);
 }
 
+float UIElement::effectiveOpacity() const {
+    float eff = (std::clamp)(m_opacity, 0.0f, 1.0f);
+    const UIElement* p = m_parent;
+    while (p) {
+        eff *= (std::clamp)(p->m_opacity, 0.0f, 1.0f);
+        p = p->m_parent;
+    }
+    return eff;
+}
+
 ElementAnimator& UIElement::animate() {
     if (!m_animator) {
         m_animator = std::make_unique<ElementAnimator>(this);
