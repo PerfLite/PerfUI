@@ -218,29 +218,26 @@ void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize) {
 
     const Rect panelRect{ kPanelX, kPanelY, kPanelWidth, panelHeight };
 
-    // --- Liquid Glass Background Effect ---
-    // 1. Soft ambient drop shadow underneath the glass plate
-    backend.drawShadow(panelRect, 10.0f, Color(0, 0, 0, 160), 16.0f, Point{ 0.0f, 6.0f });
+    // --- Pure Liquid Glass (No muddy outer side-shadows, softer buttery blur) ---
+    // 1. Hardware Dual Kawase blur with soft translucent obsidian glass tint
+    backend.drawBackdropBlur(panelRect, 10.0f, Color(14, 18, 26, 115));
 
-    // 2. Hardware Dual Kawase blur with icy-obsidian dark glass tint
-    backend.drawBackdropBlur(panelRect, 10.0f, Color(12, 16, 24, 150));
-
-    // 3. Specular gloss reflection and top light refraction lip
+    // 2. Specular gloss reflection and top light refraction lip
     backend.pushClipRect(panelRect);
     // Upper specular highlight wash
     backend.drawGradientRect(Rect{ kPanelX, kPanelY, kPanelWidth, panelHeight * 0.48f },
-                             Color(255, 255, 255, 36), Color(255, 255, 255, 18),
-                             Color(160, 215, 255, 4), Color(160, 215, 255, 6));
+                             Color(255, 255, 255, 28), Color(255, 255, 255, 12),
+                             Color(160, 215, 255, 2), Color(160, 215, 255, 4));
     // Top-lip sharp highlight line
     backend.drawLine(Point{ kPanelX + 10.0f, kPanelY + 1.0f },
                      Point{ kPanelX + kPanelWidth - 10.0f, kPanelY + 1.0f },
-                     Color(255, 255, 255, 120), 1.0f);
+                     Color(255, 255, 255, 130), 1.0f);
     backend.popClipRect();
 
-    // 4. Refractive dual glass border
-    backend.drawRectOutline(panelRect, Color(130, 175, 220, 110), 1.0f, 10.0f);
+    // 3. Clean refractive dual glass border (crisp crystal edges)
+    backend.drawRectOutline(panelRect, Color(160, 200, 245, 95), 1.0f, 10.0f);
     backend.drawRectOutline(Rect{ kPanelX + 1.0f, kPanelY + 1.0f, kPanelWidth - 2.0f, panelHeight - 2.0f },
-                            Color(255, 255, 255, 28), 1.0f, 9.0f);
+                            Color(255, 255, 255, 22), 1.0f, 9.0f);
 
     float cursorY = kPanelY + kPanelPadding;
     const float textX = kPanelX + kPanelPadding;

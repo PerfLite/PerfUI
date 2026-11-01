@@ -300,32 +300,47 @@ bool D3D11BlurPass::Process(IDXGISwapChain* swapChain, float blurRadius) {
     m_context->OMSetRenderTargets(1, &nullRTV, nullptr);
     m_context->PSSetShaderResources(0, 1, &nullSRV);
 
-    // --- Pass 3: Kawase Iteration 1 (Ping -> Pong) ---
+    // --- Kawase Progressive Soft Blur (5 Passes) ---
     float radiusFactor = (std::clamp)(blurRadius, 0.5f, 3.0f);
+
+    // Pass 3 (Ping -> Pong) offset 1.0
     m_context->OMSetRenderTargets(1, &m_pongRTV, nullptr);
     m_context->PSSetShader(m_psKawase, nullptr, 0);
     m_context->PSSetShaderResources(0, 1, &m_pingSRV);
-    updateConstants(1.0f / static_cast<float>(m_down2Width), 1.0f / static_cast<float>(m_down2Height), 0.8f * radiusFactor);
+    updateConstants(1.0f / static_cast<float>(m_down2Width), 1.0f / static_cast<float>(m_down2Height), 1.0f * radiusFactor);
     m_context->Draw(3, 0);
-
     m_context->OMSetRenderTargets(1, &nullRTV, nullptr);
     m_context->PSSetShaderResources(0, 1, &nullSRV);
 
-    // --- Pass 4: Kawase Iteration 2 (Pong -> Ping) ---
+    // Pass 4 (Pong -> Ping) offset 2.0
     m_context->OMSetRenderTargets(1, &m_pingRTV, nullptr);
     m_context->PSSetShaderResources(0, 1, &m_pongSRV);
-    updateConstants(1.0f / static_cast<float>(m_down2Width), 1.0f / static_cast<float>(m_down2Height), 1.6f * radiusFactor);
+    updateConstants(1.0f / static_cast<float>(m_down2Width), 1.0f / static_cast<float>(m_down2Height), 2.0f * radiusFactor);
     m_context->Draw(3, 0);
-
     m_context->OMSetRenderTargets(1, &nullRTV, nullptr);
     m_context->PSSetShaderResources(0, 1, &nullSRV);
 
-    // --- Pass 5: Kawase Iteration 3 (Ping -> Pong) ---
+    // Pass 5 (Ping -> Pong) offset 3.0
+    m_context->OMSetRenderTargets(1, &m_pongRTV, nullptr);
+    m_context->PSSetShaderResources(0, 1, &m_pingSRV);
+    updateConstants(1.0f / static_cast<float>(m_down2Width), 1.0f / static_cast<float>(m_down2Height), 3.0f * radiusFactor);
+    m_context->Draw(3, 0);
+    m_context->OMSetRenderTargets(1, &nullRTV, nullptr);
+    m_context->PSSetShaderResources(0, 1, &nullSRV);
+
+    // Pass 6 (Pong -> Ping) offset 4.2
+    m_context->OMSetRenderTargets(1, &m_pingRTV, nullptr);
+    m_context->PSSetShaderResources(0, 1, &m_pongSRV);
+    updateConstants(1.0f / static_cast<float>(m_down2Width), 1.0f / static_cast<float>(m_down2Height), 4.2f * radiusFactor);
+    m_context->Draw(3, 0);
+    m_context->OMSetRenderTargets(1, &nullRTV, nullptr);
+    m_context->PSSetShaderResources(0, 1, &nullSRV);
+
+    // Pass 7 (Ping -> Pong) offset 2.5 (final smooth resolve)
     m_context->OMSetRenderTargets(1, &m_pongRTV, nullptr);
     m_context->PSSetShaderResources(0, 1, &m_pingSRV);
     updateConstants(1.0f / static_cast<float>(m_down2Width), 1.0f / static_cast<float>(m_down2Height), 2.5f * radiusFactor);
     m_context->Draw(3, 0);
-
     m_context->OMSetRenderTargets(1, &nullRTV, nullptr);
     m_context->PSSetShaderResources(0, 1, &nullSRV);
 
