@@ -187,13 +187,20 @@ bool isCommonLayoutAttribute(const std::string& key) {
     static const std::unordered_map<std::string, bool> s_keys = {
         { "name", true },
         { "direction", true },
+        { "flex-direction", true },
         { "align", true },
+        { "align-items", true },
         { "justify", true },
+        { "justify-content", true },
         { "width", true },
         { "height", true },
         { "flex", true },
         { "padding", true },
         { "margin", true },
+        { "margin-top", true },
+        { "margin-bottom", true },
+        { "margin-left", true },
+        { "margin-right", true },
         { "gap", true },
         { "min-width", true },
         { "max-width", true },
@@ -213,13 +220,13 @@ bool applyCommonLayoutAttribute(UIElement* element, const std::string& key, cons
     if (!element) return false;
     auto& props = element->layout();
 
-    if (key == "direction") {
+    if (key == "direction" || key == "flex-direction") {
         std::string lower = toLower(trim(val));
         if (lower == "row" || lower == "horizontal") props.direction(LayoutDirection::Horizontal);
         else if (lower == "column" || lower == "vertical") props.direction(LayoutDirection::Vertical);
         return true;
     }
-    if (key == "align") {
+    if (key == "align" || key == "align-items") {
         std::string lower = toLower(trim(val));
         if (lower == "start") props.alignment(Alignment::Start);
         else if (lower == "center") props.alignment(Alignment::Center);
@@ -227,7 +234,7 @@ bool applyCommonLayoutAttribute(UIElement* element, const std::string& key, cons
         else if (lower == "stretch") props.alignment(Alignment::Stretch);
         return true;
     }
-    if (key == "justify") {
+    if (key == "justify" || key == "justify-content") {
         std::string lower = toLower(trim(val));
         if (lower == "start") props.justify(JustifyContent::Start);
         else if (lower == "center") props.justify(JustifyContent::Center);
@@ -254,6 +261,30 @@ bool applyCommonLayoutAttribute(UIElement* element, const std::string& key, cons
     }
     if (key == "margin") {
         parsePaddingOrMargin(val, props, false);
+        return true;
+    }
+    if (key == "margin-top") {
+        auto m = props.margin();
+        m.top = parseNumberOrToken(val);
+        props.margin(m.left, m.top, m.right, m.bottom);
+        return true;
+    }
+    if (key == "margin-bottom") {
+        auto m = props.margin();
+        m.bottom = parseNumberOrToken(val);
+        props.margin(m.left, m.top, m.right, m.bottom);
+        return true;
+    }
+    if (key == "margin-left") {
+        auto m = props.margin();
+        m.left = parseNumberOrToken(val);
+        props.margin(m.left, m.top, m.right, m.bottom);
+        return true;
+    }
+    if (key == "margin-right") {
+        auto m = props.margin();
+        m.right = parseNumberOrToken(val);
+        props.margin(m.left, m.top, m.right, m.bottom);
         return true;
     }
     if (key == "gap") {

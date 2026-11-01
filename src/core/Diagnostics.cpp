@@ -384,7 +384,9 @@ void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize, UICont
         }
 
         root->measure(screenSize);
-        root->arrange(Rect{ 0.0f, 0.0f, screenSize.width, screenSize.height });
+        const float panelW = 410.0f;
+        const float panelH = (std::max)(root->desiredSize().height, 220.0f);
+        root->arrange(Rect{ 16.0f, 16.0f, panelW, panelH });
         root->render(backend);
         return;
     }
