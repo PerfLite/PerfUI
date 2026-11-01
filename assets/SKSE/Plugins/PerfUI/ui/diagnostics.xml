@@ -30,27 +30,27 @@
         <Text name="OverlayHeader" text="Overlays:" font-size="13" bold="true" color="#aabae2" margin-top="6" />
 
         <!-- Overlay execution timings (up to 6 rows) -->
-        <Panel name="OverlayRow0" flex-direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow0" flex-direction="row" justify="space-between" width="100%" height="18" margin-top="2">
             <Text name="OverlayName0" text="  none" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime0" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>
-        <Panel name="OverlayRow1" flex-direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow1" flex-direction="row" justify="space-between" width="100%" height="18" margin-top="2">
             <Text name="OverlayName1" text="" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime1" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>
-        <Panel name="OverlayRow2" flex-direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow2" flex-direction="row" justify="space-between" width="100%" height="18" margin-top="2">
             <Text name="OverlayName2" text="" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime2" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>
-        <Panel name="OverlayRow3" flex-direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow3" flex-direction="row" justify="space-between" width="100%" height="18" margin-top="2">
             <Text name="OverlayName3" text="" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime3" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>
-        <Panel name="OverlayRow4" flex-direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow4" flex-direction="row" justify="space-between" width="100%" height="18" margin-top="2">
             <Text name="OverlayName4" text="" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime4" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>
-        <Panel name="OverlayRow5" flex-direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow5" flex-direction="row" justify="space-between" width="100%" height="18" margin-top="2">
             <Text name="OverlayName5" text="" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime5" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>

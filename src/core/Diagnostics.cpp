@@ -274,7 +274,9 @@ void Diagnostics::ensureMarkup(UIContext* context) {
         m_markupLoader = std::make_unique<MarkupLoader>(*context);
         m_markupLoader->enableHotReload(true);
         m_markupLoader->setPollInterval(std::chrono::milliseconds(300));
-        m_markupLoader->loadFile(foundXml);
+        m_isolatedRoot = std::make_unique<Panel>("DiagnosticsIsolatedRoot");
+        m_isolatedRoot->setContext(context);
+        m_markupLoader->loadFile(foundXml, m_isolatedRoot.get());
     }
 }
 
@@ -297,7 +299,7 @@ void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize, UICont
     uint64_t hitches = 0;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (!m_visible) return;
+        if (!m_visible || m_suppressed) return;
         ui = m_uiTiming;
         draw = m_drawStats;
         overlays = m_overlays;
@@ -382,7 +384,7 @@ void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize, UICont
         }
 
         root->measure(screenSize);
-        root->arrange(root->bounds());
+        root->arrange(Rect{ 0.0f, 0.0f, screenSize.width, screenSize.height });
         root->render(backend);
         return;
     }

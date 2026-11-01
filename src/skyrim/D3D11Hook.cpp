@@ -519,7 +519,9 @@ void D3D11Hook::SetUIVisible(bool visible) {
 }
 
 bool D3D11Hook::HasVisibleRootWindows() const {
-    return m_uiContext && m_uiContext->root() && m_uiContext->root()->hasVisibleChildren();
+    if (m_journalWindow && m_journalWindow->isVisible()) return true;
+    if (m_mainMenuWindow && m_mainMenuWindow->isVisible()) return true;
+    return false;
 }
 
 void D3D11Hook::EnsureUIContext() {
@@ -534,6 +536,10 @@ void D3D11Hook::EnsureUIContext() {
     });
 
     m_uiContext->registerHotkey("perfui.diagnostics", PerfUI::Diagnostics::GetSingleton().toggleHotkey(), []() {
+        auto* ui = RE::UI::GetSingleton();
+        if (ui && (ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME))) {
+            return;
+        }
         PerfUI::Diagnostics::GetSingleton().toggle();
     });
 
@@ -618,7 +624,10 @@ void D3D11Hook::RenderFrame(IDXGISwapChain* pSwapChain) {
     bool anyTreeVisible = uiVis || hasRootWindows;
     bool hasOverlays = m_uiContext && m_uiContext->hasVisibleOverlays();
     bool hasPendingTasks = m_uiContext && m_uiContext->hasPendingTasks();
-    bool diagnosticsVisible = PerfUI::Diagnostics::GetSingleton().isVisible();
+    auto* skseUi = RE::UI::GetSingleton();
+    bool inMainMenuOrLoading = skseUi && (skseUi->IsMenuOpen(RE::MainMenu::MENU_NAME) || skseUi->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+    PerfUI::Diagnostics::GetSingleton().setSuppressed(inMainMenuOrLoading);
+    bool diagnosticsVisible = !inMainMenuOrLoading && PerfUI::Diagnostics::GetSingleton().isVisible();
     bool shouldShowCursor = IsCursorNeeded();
 
     if (!shouldShowCursor) {
@@ -850,7 +859,10 @@ HRESULT STDMETHODCALLTYPE D3D11Hook::Hooked_Present(
     bool anyTreeVisible = hook.m_uiVisible.load() || hook.HasVisibleRootWindows();
     bool hasOverlays = hook.m_uiContext && hook.m_uiContext->hasVisibleOverlays();
     bool hasPendingTasks = hook.m_uiContext && hook.m_uiContext->hasPendingTasks();
-    bool diagnosticsVisible = PerfUI::Diagnostics::GetSingleton().isVisible();
+    auto* skseUi = RE::UI::GetSingleton();
+    bool inMainMenuOrLoading = skseUi && (skseUi->IsMenuOpen(RE::MainMenu::MENU_NAME) || skseUi->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+    PerfUI::Diagnostics::GetSingleton().setSuppressed(inMainMenuOrLoading);
+    bool diagnosticsVisible = !inMainMenuOrLoading && PerfUI::Diagnostics::GetSingleton().isVisible();
     bool cursorNeeded = hook.IsCursorNeeded();
     if (anyTreeVisible || hasOverlays || hasPendingTasks || cursorNeeded || diagnosticsVisible) {
         hook.RenderFrame(pSwapChain);

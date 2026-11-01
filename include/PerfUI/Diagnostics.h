@@ -15,6 +15,7 @@ namespace PerfUI {
 
 class UIContext;
 class MarkupLoader;
+class UIElement;
 
 struct OverlayTiming {
     std::string name;
@@ -52,6 +53,8 @@ public:
     void setVisible(bool visible);
     bool isVisible() const;
     void toggle();
+    void setSuppressed(bool suppressed) { m_suppressed = suppressed; }
+    bool isSuppressed() const { return m_suppressed; }
 
     // Engine feed: Present-to-Present interval of the render thread.
     void recordFrameInterval(float frameMs);
@@ -102,6 +105,7 @@ private:
 
     mutable std::mutex m_mutex;
     bool m_visible{ false };
+    bool m_suppressed{ false };
     float m_hitchThresholdMs{ 50.0f };
     float m_startupGraceMs{ 10000.0f };
     uint64_t m_hitchCount{ 0 };
@@ -120,6 +124,7 @@ private:
     void loadIni(const std::string& baseDir);
     void ensureMarkup(UIContext* context);
 
+    std::unique_ptr<UIElement> m_isolatedRoot;
     std::unique_ptr<MarkupLoader> m_markupLoader;
     bool m_markupAttempted{ false };
     bool m_enableGlassBlur{ true };
