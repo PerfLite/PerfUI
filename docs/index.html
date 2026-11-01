@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     :root {
       --bg-dark: #070b10;
@@ -513,7 +514,207 @@
     body.en .lang-en-inline { display: inline; }
     body.en .lang-ru-inline { display: none; }
 
+    /* Documentation Explorer & Reader */
+    .doc-explorer {
+      display: grid;
+      grid-template-columns: 290px 1fr;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-top: 32px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .doc-sidebar {
+      background: rgba(7, 11, 16, 0.7);
+      border-right: 1px solid var(--border-color);
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .doc-sidebar-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-gold);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      padding: 0 12px 10px;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 8px;
+    }
+
+    .doc-nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+
+    .doc-nav-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+
+    .doc-nav-btn.active {
+      background: rgba(201, 178, 122, 0.12);
+      border-color: rgba(201, 178, 122, 0.35);
+      color: var(--accent-gold);
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .doc-reader-area {
+      padding: 36px 44px;
+      max-height: 850px;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+
+    .doc-reader-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+      gap: 16px;
+    }
+
+    .doc-source-link {
+      font-size: 12.5px;
+      color: var(--accent-gold);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      background: rgba(201, 178, 122, 0.1);
+      border: 1px solid rgba(201, 178, 122, 0.25);
+      transition: all 0.2s;
+    }
+    .doc-source-link:hover {
+      background: rgba(201, 178, 122, 0.25);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
+    /* Markdown rendered typography */
+    .markdown-body {
+      color: #cad6e2;
+      line-height: 1.75;
+      font-size: 14.5px;
+    }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 {
+      color: #fff;
+      margin-top: 30px;
+      margin-bottom: 14px;
+      font-weight: 600;
+    }
+    .markdown-body h1 {
+      font-family: 'Cinzel', serif;
+      font-size: 26px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+      margin-top: 0;
+    }
+    .markdown-body h2 {
+      font-size: 20px;
+      color: var(--accent-gold);
+      border-bottom: 1px solid rgba(201, 211, 220, 0.08);
+      padding-bottom: 8px;
+    }
+    .markdown-body h3 {
+      font-size: 16.5px;
+      color: #e4edf5;
+    }
+    .markdown-body p, .markdown-body ul, .markdown-body ol {
+      margin-bottom: 16px;
+    }
+    .markdown-body ul, .markdown-body ol {
+      padding-left: 24px;
+    }
+    .markdown-body li {
+      margin-bottom: 6px;
+    }
+    .markdown-body code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #e0e9f1;
+    }
+    .markdown-body pre {
+      background: #090e15;
+      border: 1px solid rgba(201, 211, 220, 0.12);
+      border-radius: var(--radius-sm);
+      padding: 18px 20px;
+      margin: 18px 0;
+      overflow-x: auto;
+    }
+    .markdown-body pre code {
+      background: transparent;
+      padding: 0;
+      border: none;
+      color: #d1dbe5;
+    }
+    .markdown-body blockquote {
+      border-left: 3px solid var(--accent-gold);
+      padding: 10px 18px;
+      margin: 18px 0;
+      background: rgba(201, 178, 122, 0.06);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      color: #b5c4d2;
+      font-style: italic;
+    }
+    .markdown-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-size: 13.5px;
+    }
+    .markdown-body th, .markdown-body td {
+      border: 1px solid var(--border-color);
+      padding: 10px 14px;
+    }
+    .markdown-body th {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--accent-gold);
+      font-weight: 600;
+    }
+    .markdown-body hr {
+      border: none;
+      border-top: 1px solid var(--border-color);
+      margin: 28px 0;
+    }
+    .doc-loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+      font-size: 15px;
+    }
+
     /* Responsive */
+    @media (max-width: 900px) {
+      .doc-explorer { grid-template-columns: 1fr; }
+      .doc-sidebar { border-right: none; border-bottom: 1px solid var(--border-color); }
+      .doc-reader-area { padding: 24px 20px; max-height: 600px; }
+    }
+
     @media (max-width: 768px) {
       .navbar { height: auto; padding: 16px 0; flex-direction: column; gap: 14px; }
       .nav-links { gap: 16px; flex-wrap: wrap; justify-content: center; }
@@ -754,25 +955,35 @@
         <table>
           <thead>
             <tr>
-              <th class="lang-ru">Файл</th>
-              <th class="lang-en">Package</th>
-              <th class="lang-ru">Описание</th>
-              <th class="lang-en">Description</th>
-              <th class="lang-ru">Ссылка</th>
-              <th class="lang-en">Link</th>
+              <th style="width: 26%;">
+                <span class="lang-ru-inline">Файл</span>
+                <span class="lang-en-inline">File</span>
+              </th>
+              <th style="width: 54%;">
+                <span class="lang-ru-inline">Описание</span>
+                <span class="lang-en-inline">Description</span>
+              </th>
+              <th style="width: 20%;">
+                <span class="lang-ru-inline">Ссылка</span>
+                <span class="lang-en-inline">Link</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td><span class="filename-pill">PerfUI-SKSE.zip</span></td>
-              <td class="lang-ru">Плагин SKSE для Skyrim SE / AE (v0.1.0-alpha) · Для игроков и моддеров</td>
-              <td class="lang-en">Skyrim SE / AE SKSE Plugin (v0.1.0-alpha) · For players & modders</td>
+              <td>
+                <span class="lang-ru-inline">Плагин SKSE для Skyrim SE / AE (v0.1.0-alpha) · Для игроков и моддеров</span>
+                <span class="lang-en-inline">Skyrim SE / AE SKSE Plugin (v0.1.0-alpha) · For players & modders</span>
+              </td>
               <td><a href="https://github.com/PerfLite/PerfUI/releases/latest/download/PerfUI-SKSE.zip"><b>Download (.zip)</b></a></td>
             </tr>
             <tr>
               <td><span class="filename-pill">PerfUI-SDK.zip</span></td>
-              <td class="lang-ru">C++20 заголовки, библиотеки (.lib), документация и примеры XML/Lua</td>
-              <td class="lang-en">C++20 headers, libs, documentation, and XML/Lua examples</td>
+              <td>
+                <span class="lang-ru-inline">C++20 заголовки, библиотеки (.lib), документация и примеры XML/Lua</span>
+                <span class="lang-en-inline">C++20 headers, libs, documentation, and XML/Lua examples</span>
+              </td>
               <td><a href="https://github.com/PerfLite/PerfUI/releases/latest/download/PerfUI-SDK.zip"><b>Download (.zip)</b></a></td>
             </tr>
           </tbody>
@@ -780,35 +991,118 @@
       </div>
     </section>
 
-    <!-- Documentation links -->
+    <!-- Documentation Hub -->
     <section id="docs" style="margin-bottom: 80px;">
       <div class="section-header">
-        <h2 class="lang-ru">Документация</h2>
-        <h2 class="lang-en">Documentation</h2>
-        <p class="lang-ru">Подробные руководства по архитектуре, разметке и скриптам на русском и английском языках.</p>
-        <p class="lang-en">Comprehensive developer guides in Russian and English.</p>
+        <h2 class="lang-ru">📚 Полная документация</h2>
+        <h2 class="lang-en">📚 Complete Documentation</h2>
+        <p class="lang-ru">Все руководства по архитектуре, API, разметке и скриптам доступны прямо здесь с мгновенным переключением языка.</p>
+        <p class="lang-en">All developer guides for architecture, API, markup, and scripting are readable directly in your browser.</p>
       </div>
 
+      <!-- Quick Cards -->
       <div class="features-grid">
-        <div class="feature-card">
+        <div class="feature-card" onclick="loadDoc('guide')" style="cursor: pointer;">
           <h3>📖 <span class="lang-ru-inline">Руководство моддера</span><span class="lang-en-inline">Modder Guide</span></h3>
           <p class="lang-ru">Архитектурная модель «Чистого клиента», интеграция SKSE, Overlay API и руководство C++ vs Lua.</p>
           <p class="lang-en">Clean Client architecture model, SKSE messaging lifecycle, Overlay API, and C++ vs Lua workflow.</p>
-          <p style="margin-top: 14px;"><a href="https://github.com/PerfLite/PerfUI/blob/main/docs/MODDER_GUIDE.md">🇷🇺 Русский</a> · <a href="https://github.com/PerfLite/PerfUI/blob/main/docs/MODDER_GUIDE_EN.md">🇬🇧 English</a></p>
+          <p style="margin-top: 14px;"><a href="#doc-reader"><b>↓ <span class="lang-ru-inline">Читать онлайн</span><span class="lang-en-inline">Read Online</span></b></a> · <a href="https://github.com/PerfLite/PerfUI/blob/main/docs/MODDER_GUIDE.md" target="_blank" rel="noopener">GitHub</a></p>
         </div>
 
-        <div class="feature-card">
+        <div class="feature-card" onclick="loadDoc('lua')" style="cursor: pointer;">
           <h3>📜 <span class="lang-ru-inline">Скрипты на Lua 5.4</span><span class="lang-en-inline">Lua 5.4 Scripting</span></h3>
           <p class="lang-ru">Полный справочник функций: хэндлы элементов, таймеры, тосты, безопасность песочницы и локализация.</p>
           <p class="lang-en">Full API reference: widget handles, timer intervals, toasts, sandbox limits, and localization.</p>
-          <p style="margin-top: 14px;"><a href="https://github.com/PerfLite/PerfUI/blob/main/docs/LUA.md">🇷🇺 Русский</a> · <a href="https://github.com/PerfLite/PerfUI/blob/main/docs/LUA_EN.md">🇬🇧 English</a></p>
+          <p style="margin-top: 14px;"><a href="#doc-reader"><b>↓ <span class="lang-ru-inline">Читать онлайн</span><span class="lang-en-inline">Read Online</span></b></a> · <a href="https://github.com/PerfLite/PerfUI/blob/main/docs/LUA.md" target="_blank" rel="noopener">GitHub</a></p>
         </div>
 
-        <div class="feature-card">
+        <div class="feature-card" onclick="loadDoc('markup')" style="cursor: pointer;">
+          <h3>🔄 <span class="lang-ru-inline">XML-разметка и хот-релоад</span><span class="lang-en-inline">XML Markup Guide</span></h3>
+          <p class="lang-ru">Декларативное описание окон и виджетов в XML, Flexbox-лейауты, стилизация и хот-релоад на лету.</p>
+          <p class="lang-en">Declarative UI in XML, Flexbox layout rules, styling attributes, and live in-game hot-reload.</p>
+          <p style="margin-top: 14px;"><a href="#doc-reader"><b>↓ <span class="lang-ru-inline">Читать онлайн</span><span class="lang-en-inline">Read Online</span></b></a> · <a href="https://github.com/PerfLite/PerfUI/blob/main/docs/MARKUP.md" target="_blank" rel="noopener">GitHub</a></p>
+        </div>
+
+        <div class="feature-card" onclick="loadDoc('map')" style="cursor: pointer;">
           <h3>🗺️ <span class="lang-ru-inline">Виджет MapCanvas</span><span class="lang-en-inline">MapCanvas Widget</span></h3>
           <p class="lang-ru">Создание мини-карт, радаров и полноэкранных карт мира с масштабированием, маркерами и компасом.</p>
           <p class="lang-en">Building minimaps, compass radars, and world maps with dynamic markers, zoom, and panning.</p>
-          <p style="margin-top: 14px;"><a href="https://github.com/PerfLite/PerfUI/blob/main/docs/MAPCANVAS.md">🇷🇺 Русский</a> · <a href="https://github.com/PerfLite/PerfUI/blob/main/docs/MAPCANVAS_EN.md">🇬🇧 English</a></p>
+          <p style="margin-top: 14px;"><a href="#doc-reader"><b>↓ <span class="lang-ru-inline">Читать онлайн</span><span class="lang-en-inline">Read Online</span></b></a> · <a href="https://github.com/PerfLite/PerfUI/blob/main/docs/MAPCANVAS.md" target="_blank" rel="noopener">GitHub</a></p>
+        </div>
+
+        <div class="feature-card" onclick="loadDoc('input')" style="cursor: pointer;">
+          <h3>🎮 <span class="lang-ru-inline">Управление и геймпады</span><span class="lang-en-inline">Skyrim Input & Gamepad</span></h3>
+          <p class="lang-ru">Focus Graph навигация, поддержка стиков и D-Pad контроллера, клавиатуры, перехват ввода и хоткеи.</p>
+          <p class="lang-en">Focus graph spatial navigation, gamepad thumbsticks & D-Pad support, keyboard, and hotkeys.</p>
+          <p style="margin-top: 14px;"><a href="#doc-reader"><b>↓ <span class="lang-ru-inline">Читать онлайн</span><span class="lang-en-inline">Read Online</span></b></a> · <a href="https://github.com/PerfLite/PerfUI/blob/main/docs/SKYRIM_INPUT_GUIDE.md" target="_blank" rel="noopener">GitHub</a></p>
+        </div>
+
+        <div class="feature-card" onclick="loadDoc('style')" style="cursor: pointer;">
+          <h3>🎨 <span class="lang-ru-inline">Стили и 30+ виджетов</span><span class="lang-en-inline">Styling & 30+ Widgets</span></h3>
+          <p class="lang-ru">Дизайн-токены, встроенные темы (NordicDark, SkyrimClassic), каскадные стили и все нативные виджеты.</p>
+          <p class="lang-en">Design tokens, built-in themes (NordicDark, SkyrimClassic), CSS-like cascading, and 30+ native widgets.</p>
+          <p style="margin-top: 14px;"><a href="#doc-reader"><b>↓ <span class="lang-ru-inline">Читать онлайн</span><span class="lang-en-inline">Read Online</span></b></a> · <a href="https://github.com/PerfLite/PerfUI/blob/main/docs/STYLING_AND_COMPONENTS.md" target="_blank" rel="noopener">GitHub</a></p>
+        </div>
+      </div>
+
+      <!-- Interactive In-Browser Documentation Reader -->
+      <div class="doc-explorer" id="doc-reader">
+        <aside class="doc-sidebar">
+          <div class="doc-sidebar-title">
+            <span class="lang-ru-inline">Разделы документации</span>
+            <span class="lang-en-inline">Documentation Sections</span>
+          </div>
+          <button class="doc-nav-btn active" data-doc="guide" onclick="loadDoc('guide')">
+            <span>📖</span>
+            <span class="lang-ru-inline">Руководство моддера</span>
+            <span class="lang-en-inline">Modder Guide</span>
+          </button>
+          <button class="doc-nav-btn" data-doc="lua" onclick="loadDoc('lua')">
+            <span>📜</span>
+            <span class="lang-ru-inline">Скрипты на Lua 5.4</span>
+            <span class="lang-en-inline">Lua 5.4 Scripting</span>
+          </button>
+          <button class="doc-nav-btn" data-doc="markup" onclick="loadDoc('markup')">
+            <span>🔄</span>
+            <span class="lang-ru-inline">XML-разметка UI</span>
+            <span class="lang-en-inline">XML Markup Guide</span>
+          </button>
+          <button class="doc-nav-btn" data-doc="map" onclick="loadDoc('map')">
+            <span>🗺️</span>
+            <span class="lang-ru-inline">Радар и MapCanvas</span>
+            <span class="lang-en-inline">MapCanvas Radar</span>
+          </button>
+          <button class="doc-nav-btn" data-doc="input" onclick="loadDoc('input')">
+            <span>🎮</span>
+            <span class="lang-ru-inline">Управление и геймпады</span>
+            <span class="lang-en-inline">Skyrim Input & Gamepad</span>
+          </button>
+          <button class="doc-nav-btn" data-doc="style" onclick="loadDoc('style')">
+            <span>🎨</span>
+            <span class="lang-ru-inline">Стили и виджеты</span>
+            <span class="lang-en-inline">Styling & Components</span>
+          </button>
+        </aside>
+
+        <div class="doc-reader-area">
+          <div class="doc-reader-header">
+            <div>
+              <span style="font-size: 13px; color: var(--text-muted);">
+                <span class="lang-ru-inline">Документ:</span>
+                <span class="lang-en-inline">Document:</span>
+              </span>
+              <strong id="doc-current-filename" style="color: var(--accent-gold); font-family: 'JetBrains Mono', monospace; font-size: 13.5px; margin-left: 6px;">MODDER_GUIDE.md</strong>
+            </div>
+            <a href="https://github.com/PerfLite/PerfUI/blob/main/docs/MODDER_GUIDE.md" target="_blank" rel="noopener" id="doc-gh-link" class="doc-source-link">
+              <span>🔗</span>
+              <span class="lang-ru-inline">Открыть на GitHub</span>
+              <span class="lang-en-inline">View on GitHub</span>
+            </a>
+          </div>
+
+          <div id="doc-content" class="markdown-body">
+            <!-- Rendered Markdown injected here -->
+          </div>
         </div>
       </div>
     </section>
@@ -820,13 +1114,88 @@
       <ul class="footer-links">
         <li><a href="https://github.com/PerfLite/PerfUI" target="_blank" rel="noopener">GitHub</a></li>
         <li><a href="https://github.com/PerfLite/PerfUI/releases">Releases</a></li>
-        <li><a href="https://github.com/PerfLite/PerfUI/blob/main/LICENSE">GPL-3.0 License</a></li>
+        <li><a href="https://github.com/PerfLite/PerfUI/blob/main/LICENSE">MIT License</a></li>
       </ul>
       <p>© 2026 PerfLite. Designed & Developed for the Skyrim modding community.</p>
     </div>
   </footer>
 
   <script>
+    const DOCS_CONFIG = {
+      guide: {
+        ru: 'MODDER_GUIDE.md',
+        en: 'MODDER_GUIDE_EN.md'
+      },
+      lua: {
+        ru: 'LUA.md',
+        en: 'LUA_EN.md'
+      },
+      markup: {
+        ru: 'MARKUP.md',
+        en: 'MARKUP_EN.md'
+      },
+      map: {
+        ru: 'MAPCANVAS.md',
+        en: 'MAPCANVAS_EN.md'
+      },
+      input: {
+        ru: 'SKYRIM_INPUT_GUIDE.md',
+        en: 'SKYRIM_INPUT_GUIDE_EN.md'
+      },
+      style: {
+        ru: 'STYLING_AND_COMPONENTS.md',
+        en: 'STYLING_AND_COMPONENTS_EN.md'
+      }
+    };
+
+    let currentDocKey = 'guide';
+    const docCache = {};
+
+    async function loadDoc(docKey) {
+      if (docKey) currentDocKey = docKey;
+      const isEn = document.body.classList.contains('en');
+      const lang = isEn ? 'en' : 'ru';
+
+      // Update sidebar buttons
+      document.querySelectorAll('.doc-nav-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.doc === currentDocKey);
+      });
+
+      const cfg = DOCS_CONFIG[currentDocKey] || DOCS_CONFIG.guide;
+      const filename = lang === 'en' ? cfg.en : cfg.ru;
+      const contentEl = document.getElementById('doc-content');
+      const filenameEl = document.getElementById('doc-current-filename');
+      const ghLinkEl = document.getElementById('doc-gh-link');
+
+      if (filenameEl) filenameEl.textContent = filename;
+      if (ghLinkEl) ghLinkEl.href = `https://github.com/PerfLite/PerfUI/blob/main/docs/${filename}`;
+      if (!contentEl) return;
+
+      contentEl.innerHTML = `<div class="doc-loading">⏳ ${lang === 'en' ? 'Loading documentation...' : 'Загрузка руководства...'}</div>`;
+
+      try {
+        if (!docCache[filename]) {
+          const resp = await fetch(filename);
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          docCache[filename] = await resp.text();
+        }
+        const markdown = docCache[filename];
+        if (typeof marked !== 'undefined' && marked.parse) {
+          contentEl.innerHTML = marked.parse(markdown);
+        } else {
+          contentEl.innerHTML = `<pre style="white-space: pre-wrap;"><code>${markdown.replace(/</g, '&lt;')}</code></pre>`;
+        }
+      } catch (err) {
+        contentEl.innerHTML = `
+          <div style="padding: 24px; background: rgba(201, 178, 122, 0.08); border: 1px solid rgba(201, 178, 122, 0.25); border-radius: 8px;">
+            <h3 style="color: var(--accent-gold); margin-top:0;">${lang === 'en' ? 'Direct Markdown Viewer' : 'Просмотр документации'}</h3>
+            <p>${lang === 'en' ? 'Click below to read this full guide on GitHub:' : 'Вы можете прочесть полное руководство на GitHub:'}</p>
+            <p style="margin-top: 14px;"><a href="https://github.com/PerfLite/PerfUI/blob/main/docs/${filename}" target="_blank" rel="noopener" class="btn btn-primary" style="display:inline-flex;">📖 ${filename}</a></p>
+          </div>
+        `;
+      }
+    }
+
     function setLang(lang) {
       if (lang === 'en') {
         document.body.classList.add('en');
@@ -839,6 +1208,7 @@
         document.getElementById('btn-en').classList.remove('active');
         localStorage.setItem('perfui_lang', 'ru');
       }
+      loadDoc(currentDocKey);
     }
 
     // Auto-detect or restore saved language
@@ -850,6 +1220,8 @@
         const nav = navigator.language || navigator.userLanguage || '';
         if (!nav.toLowerCase().startsWith('ru')) {
           setLang('en');
+        } else {
+          loadDoc('guide');
         }
       }
     })();
