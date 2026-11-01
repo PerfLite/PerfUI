@@ -13,6 +13,9 @@
 
 namespace PerfUI {
 
+class UIContext;
+class MarkupLoader;
+
 struct OverlayTiming {
     std::string name;
     float lastMs{ 0.0f };
@@ -63,7 +66,11 @@ public:
     void endOverlayFrame();
 
     // Draws the panel when visible. Call once per rendered frame, after overlays.
-    void render(UIRenderBackend& backend, Dimensions screenSize);
+    void render(UIRenderBackend& backend, Dimensions screenSize, UIContext* context = nullptr);
+
+    uint32_t toggleHotkey() const { return m_toggleHotkey; }
+    bool enableGlassBlur() const { return m_enableGlassBlur; }
+    float blurScale() const { return m_blurScale; }
 
     void setHitchThresholdMs(float milliseconds);
     float hitchThresholdMs() const;
@@ -81,7 +88,8 @@ public:
     uint64_t hitchCount() const;
 
 private:
-    Diagnostics() = default;
+    Diagnostics();
+    ~Diagnostics();
 
     struct OverlaySample {
         std::string name;
@@ -108,6 +116,16 @@ private:
     std::chrono::steady_clock::time_point m_firstFrameTime{};
     std::chrono::steady_clock::time_point m_lastHitchLog{};
     std::string m_logFilePath;
+
+    void loadIni(const std::string& baseDir);
+    void ensureMarkup(UIContext* context);
+
+    std::unique_ptr<MarkupLoader> m_markupLoader;
+    bool m_markupAttempted{ false };
+    bool m_enableGlassBlur{ true };
+    float m_blurScale{ 1.0f };
+    uint32_t m_toggleHotkey{ 0x76 };
+    std::string m_templatePath{ "SKSE/Plugins/PerfUI/ui/diagnostics.xml" };
 };
 
 } // namespace PerfUI

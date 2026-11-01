@@ -1,0 +1,58 @@
+<UI>
+    <!--
+        PerfUI Diagnostics Overlay
+        Hot-Reload is active: edit any attribute and save (Ctrl+S) - the overlay updates immediately in-game!
+    -->
+    <Panel name="DiagnosticsPanel"
+           x="16" y="16" width="410"
+           padding="12"
+           radius="10"
+           backdrop-blur="true"
+           blur="1.0"
+           bg="#0e121a73"
+           border="#a0c8f55f"
+           border-width="1"
+           flex-direction="column">
+
+        <!-- Top Header: Title and Hotkey hint -->
+        <Panel flex-direction="row" justify="space-between" width="100%" height="22">
+            <Text name="Title" text="PerfUI diagnostics" font-size="15" bold="true" color="#f0f5ff" />
+            <Text name="KeyHint" text="F7" font-size="13" bold="true" color="#9bb4d2" />
+        </Panel>
+
+        <!-- Metric Rows -->
+        <Text name="FpsLine" text="FPS --.-    frame --.- ms    max --.- ms" font-size="13" bold="true" color="#8cdc96" margin-top="4" />
+        <Text name="UiLine" text="UI -.-- ms    upd -.--    lay -.--    rnd -.--" font-size="13" bold="true" color="#e1ebf8" margin-top="2" />
+        <Text name="DrawLine" text="Draw - calls    ---- verts" font-size="13" bold="true" color="#e1ebf8" margin-top="2" />
+        <Text name="TexLine" text="Tex -    atlas -------    elems ---" font-size="13" bold="true" color="#e1ebf8" margin-top="2" />
+        <Text name="HitchLine" text="Hitches 0    log: PerfUI_perf.log" font-size="13" bold="true" color="#ebd26e" margin-top="2" />
+
+        <Text name="OverlayHeader" text="Overlays:" font-size="13" bold="true" color="#aabae2" margin-top="6" />
+
+        <!-- Overlay execution timings (up to 6 rows) -->
+        <Panel name="OverlayRow0" flex-direction="row" justify="space-between" width="100%" height="18">
+            <Text name="OverlayName0" text="  none" font-size="13" bold="true" color="#d2e1f2" />
+            <Text name="OverlayTime0" text="" font-size="13" bold="true" color="#8cdc96" />
+        </Panel>
+        <Panel name="OverlayRow1" flex-direction="row" justify="space-between" width="100%" height="18">
+            <Text name="OverlayName1" text="" font-size="13" bold="true" color="#d2e1f2" />
+            <Text name="OverlayTime1" text="" font-size="13" bold="true" color="#8cdc96" />
+        </Panel>
+        <Panel name="OverlayRow2" flex-direction="row" justify="space-between" width="100%" height="18">
+            <Text name="OverlayName2" text="" font-size="13" bold="true" color="#d2e1f2" />
+            <Text name="OverlayTime2" text="" font-size="13" bold="true" color="#8cdc96" />
+        </Panel>
+        <Panel name="OverlayRow3" flex-direction="row" justify="space-between" width="100%" height="18">
+            <Text name="OverlayName3" text="" font-size="13" bold="true" color="#d2e1f2" />
+            <Text name="OverlayTime3" text="" font-size="13" bold="true" color="#8cdc96" />
+        </Panel>
+        <Panel name="OverlayRow4" flex-direction="row" justify="space-between" width="100%" height="18">
+            <Text name="OverlayName4" text="" font-size="13" bold="true" color="#d2e1f2" />
+            <Text name="OverlayTime4" text="" font-size="13" bold="true" color="#8cdc96" />
+        </Panel>
+        <Panel name="OverlayRow5" flex-direction="row" justify="space-between" width="100%" height="18">
+            <Text name="OverlayName5" text="" font-size="13" bold="true" color="#d2e1f2" />
+            <Text name="OverlayTime5" text="" font-size="13" bold="true" color="#8cdc96" />
+        </Panel>
+    </Panel>
+</UI>

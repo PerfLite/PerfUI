@@ -1,9 +1,21 @@
 #include "PerfUI/Diagnostics.h"
+#include "PerfUI/Markup/MarkupLoader.h"
+#include "PerfUI/Panel.h"
+#include "PerfUI/Text.h"
+#include "PerfUI/UIContext.h"
 #include "ModuleLog.h"
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 #include <algorithm>
 #include <cstdio>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 
 namespace PerfUI {
@@ -18,6 +30,25 @@ constexpr float kLineHeight = 18.0f;
 constexpr float kTitleHeight = 22.0f;
 
 void ModuleAnchor() {}
+
+static std::string GetModuleDir() {
+#if defined(_WIN32)
+    HMODULE module = nullptr;
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCSTR>(&ModuleAnchor), &module) && module) {
+        char modulePath[MAX_PATH]{};
+        if (GetModuleFileNameA(module, modulePath, MAX_PATH) > 0) {
+            std::string dir(modulePath);
+            const auto slash = dir.find_last_of("\\/");
+            if (slash != std::string::npos) {
+                dir.resize(slash + 1);
+                return dir;
+            }
+        }
+    }
+#endif
+    return "";
+}
 
 std::string CurrentTimestamp() {
     const std::time_t now = std::time(nullptr);
@@ -46,6 +77,9 @@ Diagnostics& Diagnostics::GetSingleton() {
     static Diagnostics instance;
     return instance;
 }
+
+Diagnostics::Diagnostics() = default;
+Diagnostics::~Diagnostics() = default;
 
 void Diagnostics::setVisible(bool visible) {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -176,7 +210,82 @@ void Diagnostics::writeHitchLog(const std::string& path, const std::string& line
     }
 }
 
-void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize) {
+void Diagnostics::loadIni(const std::string& baseDir) {
+#if defined(_WIN32)
+    std::vector<std::string> iniCandidates = {
+        baseDir + "PerfUI.ini",
+        baseDir + "SKSE\\Plugins\\PerfUI.ini",
+        "Data\\SKSE\\Plugins\\PerfUI.ini",
+        "SKSE\\Plugins\\PerfUI.ini",
+        "PerfUI.ini"
+    };
+
+    std::string foundIni;
+    for (const auto& p : iniCandidates) {
+        if (std::filesystem::exists(p)) {
+            foundIni = p;
+            break;
+        }
+    }
+
+    if (!foundIni.empty()) {
+        char buf[256]{};
+        m_enableGlassBlur = GetPrivateProfileIntA("Diagnostics", "bEnableGlassBlur", 1, foundIni.c_str()) != 0;
+
+        GetPrivateProfileStringA("Diagnostics", "sTemplatePath", "SKSE/Plugins/PerfUI/ui/diagnostics.xml", buf, sizeof(buf), foundIni.c_str());
+        m_templatePath = buf;
+
+        char keyBuf[32]{};
+        GetPrivateProfileStringA("Diagnostics", "iToggleHotkey", "0x76", keyBuf, sizeof(keyBuf), foundIni.c_str());
+        uint32_t parsedKey = static_cast<uint32_t>(std::strtoul(keyBuf, nullptr, 0));
+        if (parsedKey > 0) {
+            m_toggleHotkey = parsedKey;
+        }
+    }
+#endif
+}
+
+void Diagnostics::ensureMarkup(UIContext* context) {
+    if (m_markupAttempted || !context) return;
+    m_markupAttempted = true;
+
+    std::string baseDir = GetModuleDir();
+    loadIni(baseDir);
+
+    std::vector<std::filesystem::path> xmlCandidates = {
+        m_templatePath,
+        "Data/" + m_templatePath,
+        baseDir + m_templatePath,
+        baseDir + "ui/diagnostics.xml",
+        baseDir + "PerfUI/ui/diagnostics.xml",
+        "Data/SKSE/Plugins/PerfUI/ui/diagnostics.xml",
+        "SKSE/Plugins/PerfUI/ui/diagnostics.xml"
+    };
+
+    std::filesystem::path foundXml;
+    for (const auto& candidate : xmlCandidates) {
+        if (std::filesystem::exists(candidate)) {
+            foundXml = candidate;
+            break;
+        }
+    }
+
+    if (!foundXml.empty()) {
+        m_markupLoader = std::make_unique<MarkupLoader>(*context);
+        m_markupLoader->enableHotReload(true);
+        m_markupLoader->setPollInterval(std::chrono::milliseconds(300));
+        m_markupLoader->loadFile(foundXml);
+    }
+}
+
+void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize, UIContext* context) {
+    if (context && !m_markupAttempted) {
+        ensureMarkup(context);
+    }
+
+    if (m_markupLoader) {
+        m_markupLoader->poll();
+    }
     (void)screenSize;
 
     UiFrameTiming ui;
@@ -212,6 +321,73 @@ void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize) {
         overlays.resize(kMaxOverlayRows);
     }
 
+    char fpsBuf[128]{};
+    std::snprintf(fpsBuf, sizeof(fpsBuf), "FPS %.1f    frame %.1f ms    max %.1f ms", fps, lastMs, maxMs);
+
+    char uiBuf[128]{};
+    std::snprintf(uiBuf, sizeof(uiBuf), "UI %.2f ms    upd %.2f    lay %.2f    rnd %.2f",
+                  ui.updateMs + ui.layoutMs + ui.renderMs, ui.updateMs, ui.layoutMs, ui.renderMs);
+
+    char drawBuf[128]{};
+    std::snprintf(drawBuf, sizeof(drawBuf), "Draw %u calls    %u verts", draw.drawCalls, draw.vertices);
+
+    char texBuf[128]{};
+    std::snprintf(texBuf, sizeof(texBuf), "Tex %u    atlas %ux%u    elems %u",
+                  draw.textures, draw.fontAtlasWidth, draw.fontAtlasHeight, ui.elementCount);
+
+    char hitchBuf[128]{};
+    std::snprintf(hitchBuf, sizeof(hitchBuf), "Hitches %llu    log: PerfUI_perf.log", static_cast<unsigned long long>(hitches));
+
+    // 1. Primary: XML template with live Hot-Reload
+    UIElement* root = m_markupLoader ? m_markupLoader->loadedRoot() : nullptr;
+    if (root) {
+        if (auto* el = dynamic_cast<Text*>(m_markupLoader->findByName("FpsLine"))) {
+            el->text(fpsBuf);
+            el->color(SeverityColor(lastMs));
+        }
+        if (auto* el = dynamic_cast<Text*>(m_markupLoader->findByName("UiLine"))) {
+            el->text(uiBuf);
+        }
+        if (auto* el = dynamic_cast<Text*>(m_markupLoader->findByName("DrawLine"))) {
+            el->text(drawBuf);
+        }
+        if (auto* el = dynamic_cast<Text*>(m_markupLoader->findByName("TexLine"))) {
+            el->text(texBuf);
+        }
+        if (auto* el = dynamic_cast<Text*>(m_markupLoader->findByName("HitchLine"))) {
+            el->text(hitchBuf);
+        }
+
+        for (size_t i = 0; i < 6; ++i) {
+            std::string rowName = "OverlayRow" + std::to_string(i);
+            std::string nameId = "OverlayName" + std::to_string(i);
+            std::string timeId = "OverlayTime" + std::to_string(i);
+
+            auto* rowEl = m_markupLoader->findByName(rowName);
+            auto* nameEl = dynamic_cast<Text*>(m_markupLoader->findByName(nameId));
+            auto* timeEl = dynamic_cast<Text*>(m_markupLoader->findByName(timeId));
+
+            if (i < overlays.size()) {
+                if (rowEl) rowEl->setVisible(true);
+                if (nameEl) nameEl->text("  " + (overlays[i].name.size() > 22 ? overlays[i].name.substr(0, 22) : overlays[i].name));
+                if (timeEl) {
+                    char valBuf[64]{};
+                    std::snprintf(valBuf, sizeof(valBuf), "%.2f / %.2f ms", overlays[i].lastMs, overlays[i].averageMs);
+                    timeEl->text(valBuf);
+                    timeEl->color(SeverityColor(overlays[i].lastMs));
+                }
+            } else {
+                if (rowEl) rowEl->setVisible(false);
+            }
+        }
+
+        root->measure(screenSize);
+        root->arrange(root->bounds());
+        root->render(backend);
+        return;
+    }
+
+    // 2. Fail-safe C++ fallback
     const size_t overlayRows = overlays.empty() ? 1 : overlays.size();
     const float bodyLines = 5.0f + 1.0f + static_cast<float>(overlayRows);
     const float panelHeight = kPanelPadding * 2.0f + kTitleHeight + kLineHeight * bodyLines;

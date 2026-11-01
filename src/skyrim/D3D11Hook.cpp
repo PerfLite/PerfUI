@@ -533,7 +533,7 @@ void D3D11Hook::EnsureUIContext() {
         SKSE::log::error("PerfUI Overlay '{}' threw exception: {}. Disabled.", name, err);
     });
 
-    m_uiContext->registerHotkey("perfui.diagnostics", VK_F7, []() {
+    m_uiContext->registerHotkey("perfui.diagnostics", PerfUI::Diagnostics::GetSingleton().toggleHotkey(), []() {
         PerfUI::Diagnostics::GetSingleton().toggle();
     });
 

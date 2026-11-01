@@ -161,7 +161,7 @@ void UIContext::render(UIRenderBackend& backend, bool renderTree) {
         m_metrics.layoutTimeUs / 1000.0f,
         m_metrics.renderTimeUs / 1000.0f,
         m_metrics.elementCount });
-    diagnostics.render(backend, m_viewportSize);
+    diagnostics.render(backend, m_viewportSize, this);
 }
 
 void UIContext::renderOverlay(UIRenderBackend& backend) {
