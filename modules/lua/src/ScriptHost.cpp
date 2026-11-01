@@ -489,18 +489,6 @@ int Handle_setText(lua_State* L)
     return 0;
 }
 
-int Handle_setSecondaryText(lua_State* L)
-{
-    UIElement* elem = CheckHandleElement(L, 1, "setSecondaryText");
-    const char* str = luaL_checkstring(L, 2);
-    if (elem) {
-        if (auto* pb = dynamic_cast<ProgressBar*>(elem)) {
-            pb->setSecondaryText(str ? str : "");
-        }
-    }
-    return 0;
-}
-
 int Handle_value(lua_State* L)
 {
     UIElement* elem = CheckHandleElement(L, 1, "value");
@@ -815,8 +803,6 @@ void RegisterElementHandleMeta(lua_State* L)
         lua_setfield(L, -2, "text");
         lua_pushcfunction(L, Handle_setText);
         lua_setfield(L, -2, "setText");
-        lua_pushcfunction(L, Handle_setSecondaryText);
-        lua_setfield(L, -2, "setSecondaryText");
         lua_pushcfunction(L, Handle_value);
         lua_setfield(L, -2, "value");
         lua_pushcfunction(L, Handle_setValue);
