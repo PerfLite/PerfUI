@@ -596,14 +596,35 @@ int Handle_setColor(lua_State* L)
 {
     UIElement* elem = CheckHandleElement(L, 1, "setColor");
     if (!elem) return 0;
-    lua_Number r = luaL_checknumber(L, 2);
-    lua_Number g = luaL_checknumber(L, 3);
-    lua_Number b = luaL_checknumber(L, 4);
-    lua_Number a = lua_isnumber(L, 5) ? lua_tonumber(L, 5) : 255.0;
-    Color col(static_cast<uint8_t>(std::clamp(r, 0.0, 255.0)),
-              static_cast<uint8_t>(std::clamp(g, 0.0, 255.0)),
-              static_cast<uint8_t>(std::clamp(b, 0.0, 255.0)),
-              static_cast<uint8_t>(std::clamp(a, 0.0, 255.0)));
+    Color col;
+    if (lua_isstring(L, 2) && !lua_isnumber(L, 2)) {
+        const char* str = lua_tostring(L, 2);
+        if (str && str[0] == '#') {
+            unsigned int hexVal = 0;
+            if (sscanf_s(str + 1, "%x", &hexVal) == 1) {
+                if (strlen(str + 1) <= 6) {
+                    col = Color(static_cast<uint8_t>((hexVal >> 16) & 0xFF),
+                                static_cast<uint8_t>((hexVal >> 8) & 0xFF),
+                                static_cast<uint8_t>(hexVal & 0xFF),
+                                255);
+                } else {
+                    col = Color(static_cast<uint8_t>((hexVal >> 24) & 0xFF),
+                                static_cast<uint8_t>((hexVal >> 16) & 0xFF),
+                                static_cast<uint8_t>((hexVal >> 8) & 0xFF),
+                                static_cast<uint8_t>(hexVal & 0xFF));
+                }
+            }
+        }
+    } else {
+        lua_Number r = luaL_checknumber(L, 2);
+        lua_Number g = luaL_checknumber(L, 3);
+        lua_Number b = luaL_checknumber(L, 4);
+        lua_Number a = lua_isnumber(L, 5) ? lua_tonumber(L, 5) : 255.0;
+        col = Color(static_cast<uint8_t>(std::clamp(r, 0.0, 255.0)),
+                    static_cast<uint8_t>(std::clamp(g, 0.0, 255.0)),
+                    static_cast<uint8_t>(std::clamp(b, 0.0, 255.0)),
+                    static_cast<uint8_t>(std::clamp(a, 0.0, 255.0)));
+    }
 
     if (auto* txt = dynamic_cast<Text*>(elem)) {
         txt->color(col);
@@ -621,7 +642,26 @@ int Handle_setSize(lua_State* L)
     if (!elem) return 0;
     lua_Number w = luaL_checknumber(L, 2);
     lua_Number h = luaL_checknumber(L, 3);
-    elem->setSize(Dimensions{ static_cast<float>(w), static_cast<float>(h) });
+    float fw = static_cast<float>(w);
+    float fh = static_cast<float>(h);
+    elem->setSize(Dimensions{ fw, fh });
+    elem->layout().width(fw);
+    elem->layout().height(fh);
+    elem->markLayoutDirty();
+    return 0;
+}
+
+int Handle_setFontSize(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setFontSize");
+    if (!elem) return 0;
+    lua_Number size = luaL_checknumber(L, 2);
+    float fs = static_cast<float>(size);
+    if (auto* txt = dynamic_cast<Text*>(elem)) {
+        txt->fontSize(fs);
+    } else if (auto* pb = dynamic_cast<ProgressBar*>(elem)) {
+        pb->fontSize(fs);
+    }
     return 0;
 }
 
@@ -819,6 +859,8 @@ void RegisterElementHandleMeta(lua_State* L)
         lua_setfield(L, -2, "setColor");
         lua_pushcfunction(L, Handle_setSize);
         lua_setfield(L, -2, "setSize");
+        lua_pushcfunction(L, Handle_setFontSize);
+        lua_setfield(L, -2, "setFontSize");
 
         // WorldAnchor
         lua_pushcfunction(L, Handle_targetId);

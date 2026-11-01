@@ -54,9 +54,15 @@ public:
     bool showLabel() const { return m_showLabel; }
     ProgressBar& showLabel(bool show) { m_showLabel = show; return *this; }
 
+    Color fillColor() const { return m_fillColor; }
     ProgressBar& fillColor(Color color) { m_fillColor = color; return *this; }
+
+    Color trackColor() const { return m_trackColor; }
     ProgressBar& trackColor(Color color) { m_trackColor = color; return *this; }
+
     ProgressBar& height(float h) { m_barHeight = h; markLayoutDirty(); return *this; }
+
+    float cornerRadius() const { return m_cornerRadius; }
     ProgressBar& cornerRadius(float r) { m_cornerRadius = r; return *this; }
 
     const std::string& text() const { return m_text; }
