@@ -61,6 +61,15 @@ public:
         const Point& offset
     ) = 0;
 
+    virtual void drawBackdropBlur(
+        const Rect& rect,
+        float cornerRadius = 0.0f,
+        Color tint = Color::Transparent(),
+        float blurAmount = 1.0f
+    ) {
+        (void)rect; (void)cornerRadius; (void)tint; (void)blurAmount;
+    }
+
     // Primitives for Clean Client Overlays
     virtual void drawLine(const Point& a, const Point& b, Color color, float thickness = 1.0f) {
         (void)a; (void)b; (void)color; (void)thickness;

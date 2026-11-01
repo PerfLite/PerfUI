@@ -8,6 +8,7 @@ set_warnings("allextra")
 add_rules("mode.release", "mode.debug")
 add_rules("plugin.vsxmake.autoupdate")
 add_includedirs("third_party/nanosvg")
+add_includedirs("modules/postfx/include")
 
 add_requires("commonlibsse-ng", {optional = true})
 
@@ -15,6 +16,12 @@ option("perfui_lua")
     set_default(true)
     set_showmenu(true)
     set_description("Build the PerfUI_Lua module (Lua 5.4 scripting)")
+option_end()
+
+option("perfui_postfx")
+    set_default(true)
+    set_showmenu(true)
+    set_description("Build the PerfUI_PostFx module (D3D11 Backdrop Blur & Glassmorphism)")
 option_end()
 
 target("PerfUI")
@@ -36,11 +43,18 @@ target("PerfUI")
         end
     end
 
+    if has_config("perfui_postfx") then
+        add_defines("PERFUI_ENABLE_POSTFX")
+        add_includedirs("modules/postfx/include")
+        add_files("modules/postfx/src/*.cpp")
+    end
+
     add_includedirs("include")
     add_includedirs("third_party/imgui")
     add_includedirs("third_party/imgui/backends")
     add_includedirs("third_party/pugixml")
     add_includedirs("third_party/nanosvg")
+add_includedirs("modules/postfx/include")
     add_includedirs("src/markup")
     add_includedirs("src")
 
@@ -71,6 +85,7 @@ target("PerfUI")
         os.mkdir(sdk_lib)
         os.cp(path.join(projectdir, "include", "PerfUI", "*"), sdk_include)
         os.cp(path.join(projectdir, "modules", "lua", "include", "PerfUI", "*"), sdk_include)
+        os.cp(path.join(projectdir, "modules", "postfx", "include", "PerfUI", "*"), sdk_include)
         local target_dir = target:targetdir()
         local implib = path.join(target_dir, "PerfUI.lib")
         if os.isfile(implib) then

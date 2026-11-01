@@ -4,6 +4,7 @@
 #include "../../src/backends/imgui/ImGuiRenderBackend.h"
 #include "PerfUI/JournalWindow.h"
 #include "PerfUI/MainMenuWindow.h"
+#include "PerfUI/PostFx/D3D11BlurPass.h"
 
 struct ImGuiContext;
 
@@ -59,7 +60,7 @@ private:
     void InitializeImGui(IDXGISwapChain* pSwapChain);
     void CreateRenderTarget(IDXGISwapChain* pSwapChain);
     void CleanupRenderTarget();
-    void RenderFrame();
+    void RenderFrame(IDXGISwapChain* pSwapChain);
 
     using PresentFn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain*, UINT, UINT);
     using ResizeBuffersFn = HRESULT(STDMETHODCALLTYPE*)(IDXGISwapChain*, UINT, UINT, UINT, DXGI_FORMAT, UINT);
@@ -81,6 +82,7 @@ private:
 
     std::unique_ptr<PerfUI::UIContext> m_uiContext;
     std::unique_ptr<PerfUI::ImGuiRenderBackend> m_renderBackend;
+    std::unique_ptr<PerfUI::PostFx::D3D11BlurPass> m_blurPass;
     PerfUI::JournalWindow* m_journalWindow{ nullptr };
     PerfUI::MainMenuWindow* m_mainMenuWindow{ nullptr };
 

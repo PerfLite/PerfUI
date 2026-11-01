@@ -32,7 +32,7 @@ static bool isKnownWidgetAttribute(const std::string& tag, const std::string& ke
     if (isCommonLayoutAttribute(key)) return true;
 
     if (tag == "Panel") {
-        return key == "bg" || key == "background" || key == "border" || key == "border-width" || key == "radius" || key == "shadow";
+        return key == "bg" || key == "background" || key == "border" || key == "border-width" || key == "radius" || key == "shadow" || key == "backdrop-blur" || key == "blur" || key == "glass" || key == "clip-children" || key == "clipChildren";
     } else if (tag == "Text") {
         return key == "text" || key == "font" || key == "font-size" || key == "color" || key == "bold" || key == "italic" || key == "wrap";
     } else if (tag == "Button") {

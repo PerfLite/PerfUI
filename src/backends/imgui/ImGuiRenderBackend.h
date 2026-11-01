@@ -13,6 +13,9 @@ struct ImDrawList;
 struct ImFont;
 
 namespace PerfUI {
+namespace PostFx {
+class D3D11BlurPass;
+}
 
 class ImGuiRenderBackend : public UIRenderBackend {
 public:
@@ -60,6 +63,16 @@ public:
         float blurRadius,
         const Point& offset
     ) override;
+
+    void drawBackdropBlur(
+        const Rect& rect,
+        float cornerRadius = 0.0f,
+        Color tint = Color::Transparent(),
+        float blurAmount = 1.0f
+    ) override;
+
+    void setBlurPass(PostFx::D3D11BlurPass* blurPass) { m_blurPass = blurPass; }
+    void setViewportSize(float width, float height) { m_viewportWidth = width; m_viewportHeight = height; }
 
     void drawLine(const Point& a, const Point& b, Color color, float thickness = 1.0f) override;
     void drawPolyline(std::span<const Point> pts, Color color, float thickness = 1.0f, bool closed = false) override;
@@ -143,6 +156,10 @@ private:
     ImFont* m_fontBold{ nullptr };
     ImFont* m_fontTitle{ nullptr };
     ImFont* m_fontHeader{ nullptr };
+
+    PostFx::D3D11BlurPass* m_blurPass{ nullptr };
+    float m_viewportWidth{ 1920.0f };
+    float m_viewportHeight{ 1080.0f };
 };
 
 } // namespace PerfUI

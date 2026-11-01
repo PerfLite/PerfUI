@@ -222,8 +222,8 @@ void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize) {
     // 1. Soft ambient drop shadow underneath the glass plate
     backend.drawShadow(panelRect, 10.0f, Color(0, 0, 0, 160), 16.0f, Point{ 0.0f, 6.0f });
 
-    // 2. Liquid Glass tinted body (dark icy-obsidian frosted glass)
-    backend.drawRoundedRect(panelRect, Color(10, 14, 22, 175), 10.0f);
+    // 2. Hardware Dual Kawase blur with icy-obsidian dark glass tint
+    backend.drawBackdropBlur(panelRect, 10.0f, Color(12, 16, 24, 150));
 
     // 3. Specular gloss reflection and top light refraction lip
     backend.pushClipRect(panelRect);

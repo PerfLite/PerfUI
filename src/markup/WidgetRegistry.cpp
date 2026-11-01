@@ -90,6 +90,14 @@ void WidgetRegistry::registerBuiltinWidgets() {
                 panel->cornerRadius(parseNumberOrToken(v));
             } else if (k == "shadow") {
                 panel->shadow(parseBool(v, true));
+            } else if (k == "backdrop-blur" || k == "blur" || k == "glass") {
+                if (v == "false" || v == "0" || v == "no") {
+                    panel->backdropBlur(false);
+                } else if (v == "true" || v == "1" || v == "yes") {
+                    panel->backdropBlur(true, 1.0f);
+                } else {
+                    panel->backdropBlur(true, parseNumberOrToken(v));
+                }
             } else if (k == "clip-children" || k == "clipChildren") {
                 panel->clipChildren(parseBool(v, true));
             }

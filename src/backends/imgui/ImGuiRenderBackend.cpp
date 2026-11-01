@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include "PerfUI/SvgService.h"
+#include "PerfUI/PostFx/D3D11BlurPass.h"
 
 #pragma warning(push)
 #pragma warning(disable: 4244 4996)
@@ -343,6 +344,55 @@ void ImGuiRenderBackend::drawShadow(
         ImVec2 pMax(rect.x + rect.width + offset.x + expand, rect.y + rect.height + offset.y + expand);
 
         dl->AddRectFilled(pMin, pMax, ToImColor(passColor), radius + expand);
+    }
+}
+
+void ImGuiRenderBackend::drawBackdropBlur(
+    const Rect& rect,
+    float cornerRadius,
+    Color tint,
+    float blurAmount
+) {
+    (void)blurAmount;
+    ImDrawList* dl = getDrawList();
+    if (!dl || rect.width <= 0.0f || rect.height <= 0.0f) return;
+
+    if (m_blurPass && m_blurPass->HasValidBackdrop()) {
+        float vw = (m_viewportWidth > 0.0f) ? m_viewportWidth : 1920.0f;
+        float vh = (m_viewportHeight > 0.0f) ? m_viewportHeight : 1080.0f;
+
+        ImVec2 uv0((std::clamp)(rect.x / vw, 0.0f, 1.0f),
+                   (std::clamp)(rect.y / vh, 0.0f, 1.0f));
+        ImVec2 uv1((std::clamp)((rect.x + rect.width) / vw, 0.0f, 1.0f),
+                   (std::clamp)((rect.y + rect.height) / vh, 0.0f, 1.0f));
+
+        ImTextureID texId = reinterpret_cast<ImTextureID>(m_blurPass->GetBlurredSRV());
+
+        if (cornerRadius > 0.0f) {
+            dl->AddImageRounded(
+                texId,
+                ImVec2(rect.x, rect.y),
+                ImVec2(rect.x + rect.width, rect.y + rect.height),
+                uv0, uv1,
+                IM_COL32(255, 255, 255, 255),
+                cornerRadius
+            );
+        } else {
+            dl->AddImage(
+                texId,
+                ImVec2(rect.x, rect.y),
+                ImVec2(rect.x + rect.width, rect.y + rect.height),
+                uv0, uv1,
+                IM_COL32(255, 255, 255, 255)
+            );
+        }
+
+        if (tint.a > 0) {
+            drawRoundedRect(rect, tint, cornerRadius);
+        }
+    } else {
+        Color fallback = (tint.a > 0) ? tint : Color(12, 16, 24, 210);
+        drawRoundedRect(rect, fallback, cornerRadius);
     }
 }
 

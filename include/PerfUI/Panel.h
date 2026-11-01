@@ -34,6 +34,13 @@ public:
     bool clipChildren() const { return m_clipChildren; }
     Panel& clipChildren(bool clip) { m_clipChildren = clip; return *this; }
 
+    bool backdropBlur() const { return m_backdropBlur; }
+    Panel& backdropBlur(bool enable, float radius = 1.0f) {
+        m_backdropBlur = enable;
+        m_blurRadius = radius;
+        return *this;
+    }
+
     using UIElement::style;
     Panel& style(WidgetStyle s) { m_style = std::move(s); return *this; }
 
@@ -51,6 +58,8 @@ private:
     Point m_shadowOffset{ 0.0f, 6.0f };
 
     bool m_clipChildren{ false };
+    bool m_backdropBlur{ false };
+    float m_blurRadius{ 1.0f };
 };
 
 } // namespace PerfUI

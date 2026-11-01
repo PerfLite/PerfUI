@@ -44,7 +44,12 @@ void Panel::render(UIRenderBackend& backend) {
 
     Color effBg = applyAlpha(bg);
     Color effBorder = applyAlpha(border);
-    if (effBg.a > 0 || (effBorder.a > 0 && borderW > 0.0f)) {
+    if (m_backdropBlur) {
+        backend.drawBackdropBlur(m_bounds, radius, effBg, m_blurRadius);
+        if (effBorder.a > 0 && borderW > 0.0f) {
+            backend.drawRectOutline(m_bounds, effBorder, borderW, radius);
+        }
+    } else if (effBg.a > 0 || (effBorder.a > 0 && borderW > 0.0f)) {
         backend.drawRoundedRect(
             m_bounds,
             effBg,

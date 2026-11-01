@@ -574,6 +574,10 @@ void D3D11Hook::InitializeImGui(IDXGISwapChain* pSwapChain) {
     m_renderBackend->setD3D11Device(m_device, m_context);
     m_renderBackend->initFonts();
 
+    m_blurPass = std::make_unique<PerfUI::PostFx::D3D11BlurPass>();
+    m_blurPass->Init(m_device, m_context);
+    m_renderBackend->setBlurPass(m_blurPass.get());
+
     ImGui_ImplWin32_Init(m_hWnd);
     ImGui_ImplDX11_Init(m_device, m_context);
 
@@ -599,13 +603,16 @@ void D3D11Hook::CreateRenderTarget(IDXGISwapChain* pSwapChain) {
 }
 
 void D3D11Hook::CleanupRenderTarget() {
+    if (m_blurPass) {
+        m_blurPass->Shutdown();
+    }
     if (m_renderTargetView) {
         m_renderTargetView->Release();
         m_renderTargetView = nullptr;
     }
 }
 
-void D3D11Hook::RenderFrame() {
+void D3D11Hook::RenderFrame(IDXGISwapChain* pSwapChain) {
     bool uiVis = m_uiVisible.load();
     bool hasRootWindows = HasVisibleRootWindows();
     bool anyTreeVisible = uiVis || hasRootWindows;
@@ -661,6 +668,13 @@ void D3D11Hook::RenderFrame() {
     float width = static_cast<float>(clientRect.right - clientRect.left);
     float height = static_cast<float>(clientRect.bottom - clientRect.top);
     m_uiContext->setViewportSize({ width, height });
+    m_renderBackend->setViewportSize(width, height);
+
+    if (m_blurPass && (diagnosticsVisible || anyTreeVisible || hasOverlays)) {
+        m_blurPass->Process(pSwapChain);
+    } else if (m_blurPass) {
+        m_blurPass->InvalidateBackdrop();
+    }
 
     // Use Windows hardware cursor - never draw duplicate ImGui software cursor
     ImGui::GetIO().MouseDrawCursor = false;
@@ -839,7 +853,7 @@ HRESULT STDMETHODCALLTYPE D3D11Hook::Hooked_Present(
     bool diagnosticsVisible = PerfUI::Diagnostics::GetSingleton().isVisible();
     bool cursorNeeded = hook.IsCursorNeeded();
     if (anyTreeVisible || hasOverlays || hasPendingTasks || cursorNeeded || diagnosticsVisible) {
-        hook.RenderFrame();
+        hook.RenderFrame(pSwapChain);
     }
 
     return hook.m_originalPresent(pSwapChain, SyncInterval, Flags);
