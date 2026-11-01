@@ -651,6 +651,30 @@ int Handle_setSize(lua_State* L)
     return 0;
 }
 
+int Handle_setPosition(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setPosition");
+    if (!elem) return 0;
+    float fx = static_cast<float>(luaL_checknumber(L, 2));
+    float fy = static_cast<float>(luaL_checknumber(L, 3));
+    elem->setPosition(Point{ fx, fy });
+    return 0;
+}
+
+int Handle_position(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "position");
+    if (!elem) {
+        lua_pushnumber(L, 0);
+        lua_pushnumber(L, 0);
+        return 2;
+    }
+    const auto pos = elem->position();
+    lua_pushnumber(L, static_cast<lua_Number>(pos.x));
+    lua_pushnumber(L, static_cast<lua_Number>(pos.y));
+    return 2;
+}
+
 int Handle_setWidth(lua_State* L)
 {
     UIElement* elem = CheckHandleElement(L, 1, "setWidth");
@@ -881,6 +905,10 @@ void RegisterElementHandleMeta(lua_State* L)
         lua_setfield(L, -2, "setColor");
         lua_pushcfunction(L, Handle_setSize);
         lua_setfield(L, -2, "setSize");
+        lua_pushcfunction(L, Handle_setPosition);
+        lua_setfield(L, -2, "setPosition");
+        lua_pushcfunction(L, Handle_position);
+        lua_setfield(L, -2, "position");
         lua_pushcfunction(L, Handle_setWidth);
         lua_setfield(L, -2, "setWidth");
         lua_pushcfunction(L, Handle_setHeight);
