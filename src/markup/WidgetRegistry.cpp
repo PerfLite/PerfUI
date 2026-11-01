@@ -247,6 +247,20 @@ void WidgetRegistry::registerBuiltinWidgets() {
                 pb->height(parseNumberOrToken(v, 14.0f));
             } else if (k == "radius") {
                 pb->cornerRadius(parseNumberOrToken(v, 5.0f));
+            } else if (k == "text") {
+                pb->text(v);
+            } else if (k == "secondaryText" || k == "secondary-text") {
+                pb->secondaryText(v);
+            } else if (k == "glossy") {
+                pb->glossy(parseBool(v, true));
+            } else if (k == "dropShadow" || k == "drop-shadow") {
+                pb->dropShadow(parseBool(v, true));
+            } else if (k == "borderColor" || k == "border-color") {
+                pb->borderColor(parseColorOrToken(v));
+            } else if (k == "borderWidth" || k == "border-width") {
+                pb->borderWidth(parseNumberOrToken(v, 1.0f));
+            } else if (k == "fontSize" || k == "font-size") {
+                pb->fontSize(parseNumberOrToken(v, 11.0f));
             }
         }
 

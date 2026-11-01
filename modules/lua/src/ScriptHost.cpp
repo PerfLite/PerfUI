@@ -451,6 +451,10 @@ int Handle_text(lua_State* L)
         lua_pushstring(L, b->text().c_str());
         return 1;
     }
+    if (auto* pb = dynamic_cast<ProgressBar*>(elem)) {
+        lua_pushstring(L, pb->text().c_str());
+        return 1;
+    }
     if (auto* ti = dynamic_cast<TextInput*>(elem)) {
         lua_pushstring(L, ti->text().c_str());
         return 1;
@@ -470,6 +474,8 @@ int Handle_setText(lua_State* L)
     if (elem) {
         if (auto* t = dynamic_cast<Text*>(elem)) {
             t->text(str);
+        } else if (auto* pb = dynamic_cast<ProgressBar*>(elem)) {
+            pb->setText(str);
         } else if (auto* b = dynamic_cast<Button*>(elem)) {
             b->text(str);
         } else if (auto* ti = dynamic_cast<TextInput*>(elem)) {
@@ -478,6 +484,18 @@ int Handle_setText(lua_State* L)
             cb->label(str);
         } else if (auto* sl = dynamic_cast<Slider*>(elem)) {
             sl->label(str);
+        }
+    }
+    return 0;
+}
+
+int Handle_setSecondaryText(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setSecondaryText");
+    const char* str = luaL_checkstring(L, 2);
+    if (elem) {
+        if (auto* pb = dynamic_cast<ProgressBar*>(elem)) {
+            pb->setSecondaryText(str ? str : "");
         }
     }
     return 0;
@@ -797,6 +815,8 @@ void RegisterElementHandleMeta(lua_State* L)
         lua_setfield(L, -2, "text");
         lua_pushcfunction(L, Handle_setText);
         lua_setfield(L, -2, "setText");
+        lua_pushcfunction(L, Handle_setSecondaryText);
+        lua_setfield(L, -2, "setSecondaryText");
         lua_pushcfunction(L, Handle_value);
         lua_setfield(L, -2, "value");
         lua_pushcfunction(L, Handle_setValue);

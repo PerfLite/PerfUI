@@ -42,7 +42,7 @@ static bool isKnownWidgetAttribute(const std::string& tag, const std::string& ke
     } else if (tag == "Checkbox") {
         return key == "label" || key == "text" || key == "checked" || key == "boxSize" || key == "box-size" || key == "fontSize" || key == "font-size" || key == "checkColor" || key == "check-color" || key == "labelColor" || key == "label-color" || key == "onToggle" || key == "onChange";
     } else if (tag == "ProgressBar") {
-        return key == "value" || key == "progress" || key == "min" || key == "max" || key == "showLabel" || key == "show-label" || key == "fillColor" || key == "fill-color" || key == "trackColor" || key == "track-color" || key == "height" || key == "radius";
+        return key == "value" || key == "progress" || key == "min" || key == "max" || key == "showLabel" || key == "show-label" || key == "fillColor" || key == "fill-color" || key == "trackColor" || key == "track-color" || key == "height" || key == "radius" || key == "text" || key == "secondaryText" || key == "secondary-text" || key == "glossy" || key == "dropShadow" || key == "drop-shadow" || key == "borderColor" || key == "border-color" || key == "borderWidth" || key == "border-width" || key == "fontSize" || key == "font-size";
     } else if (tag == "Slider") {
         return key == "value" || key == "min" || key == "max" || key == "step" || key == "label" || key == "fillColor" || key == "fill-color" || key == "trackColor" || key == "track-color" || key == "onValueChanged" || key == "onChange";
     } else if (tag == "Image") {

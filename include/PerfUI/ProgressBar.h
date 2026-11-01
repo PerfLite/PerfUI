@@ -59,6 +59,32 @@ public:
     ProgressBar& height(float h) { m_barHeight = h; markLayoutDirty(); return *this; }
     ProgressBar& cornerRadius(float r) { m_cornerRadius = r; return *this; }
 
+    const std::string& text() const { return m_text; }
+    ProgressBar& text(std::string t) { m_text = std::move(t); return *this; }
+    ProgressBar& setText(std::string t) { return text(std::move(t)); }
+
+    const std::string& secondaryText() const { return m_secondaryText; }
+    ProgressBar& secondaryText(std::string t) { m_secondaryText = std::move(t); return *this; }
+    ProgressBar& setSecondaryText(std::string t) { return secondaryText(std::move(t)); }
+
+    bool isGlossy() const { return m_glossy; }
+    ProgressBar& glossy(bool g) { m_glossy = g; return *this; }
+
+    bool hasDropShadow() const { return m_dropShadow; }
+    ProgressBar& dropShadow(bool s) { m_dropShadow = s; return *this; }
+
+    Color borderColor() const { return m_borderColor; }
+    ProgressBar& borderColor(Color c) { m_borderColor = c; return *this; }
+
+    float borderWidth() const { return m_borderWidth; }
+    ProgressBar& borderWidth(float w) { m_borderWidth = w; return *this; }
+
+    ProgressBar& fontSize(float s) {
+        m_textStyle.fontSize = s;
+        m_secondaryTextStyle.fontSize = (std::max)(8.0f, s - 1.5f);
+        return *this;
+    }
+
     void update(float deltaTime) override;
     void measure(Dimensions availableSize) override;
     void render(UIRenderBackend& backend) override;
@@ -71,10 +97,18 @@ private:
     float m_barHeight{ 14.0f };
     float m_cornerRadius{ 5.0f };
 
+    std::string m_text;
+    std::string m_secondaryText;
+    bool m_glossy{ true };
+    bool m_dropShadow{ true };
+    Color m_borderColor{ 45, 52, 65, 200 };
+    float m_borderWidth{ 1.0f };
+
     Color m_trackColor{ 20, 24, 32, 220 };
     Color m_trackBorder{ Color::BorderSubtle() };
     Color m_fillColor{ Color::NordicGold() };
-    TextStyle m_textStyle{ Color::White(), 10.0f, true, false };
+    TextStyle m_textStyle{ Color::White(), 11.0f, true, false };
+    TextStyle m_secondaryTextStyle{ Color(180, 235, 255, 245), 9.5f, true, false };
 };
 
 } // namespace PerfUI
