@@ -651,6 +651,28 @@ int Handle_setSize(lua_State* L)
     return 0;
 }
 
+int Handle_setWidth(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setWidth");
+    if (!elem) return 0;
+    float fw = static_cast<float>(luaL_checknumber(L, 2));
+    elem->layout().width(fw);
+    elem->setSize(Dimensions{ fw, elem->size().height });
+    elem->markLayoutDirty();
+    return 0;
+}
+
+int Handle_setHeight(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "setHeight");
+    if (!elem) return 0;
+    float fh = static_cast<float>(luaL_checknumber(L, 2));
+    elem->layout().height(fh);
+    elem->setSize(Dimensions{ elem->size().width, fh });
+    elem->markLayoutDirty();
+    return 0;
+}
+
 int Handle_setFontSize(lua_State* L)
 {
     UIElement* elem = CheckHandleElement(L, 1, "setFontSize");
@@ -859,6 +881,10 @@ void RegisterElementHandleMeta(lua_State* L)
         lua_setfield(L, -2, "setColor");
         lua_pushcfunction(L, Handle_setSize);
         lua_setfield(L, -2, "setSize");
+        lua_pushcfunction(L, Handle_setWidth);
+        lua_setfield(L, -2, "setWidth");
+        lua_pushcfunction(L, Handle_setHeight);
+        lua_setfield(L, -2, "setHeight");
         lua_pushcfunction(L, Handle_setFontSize);
         lua_setfield(L, -2, "setFontSize");
 

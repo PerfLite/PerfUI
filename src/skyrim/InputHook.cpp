@@ -203,10 +203,7 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
                 return 0;
             }
 
-            if (wParam == VK_F10) {
-                D3D11Hook::GetSingleton().ToggleMainMenu();
-                return 0;
-            }
+// F10 MainMenu disabled per user request
 
             // F11 / toggleHotkey disabled as requested by user
             (void)wParam;

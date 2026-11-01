@@ -448,7 +448,7 @@ void JournalWindow::buildUI() {
     footer->backgroundColor(Color::Transparent()).borderWidth(0.0f);
     footer->layout().direction(LayoutDirection::Horizontal).justify(JustifyContent::SpaceBetween).alignment(Alignment::Center);
 
-    auto* hintText = footer->add<Text>("[F11] Journal   [F10] Menu   [F8] Modder HUD   [ESC] Close");
+    auto* hintText = footer->add<Text>("[F8] HUD Editor   [ESC] Close");
     hintText->color(Color(110, 120, 135, 255)).fontSize(11.5f);
 
     auto* sliderContainer = footer->add<Panel>("SliderContainer");

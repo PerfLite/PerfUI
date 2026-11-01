@@ -544,15 +544,8 @@ void D3D11Hook::EnsureUIContext() {
         SkyrimQuestService::GetSingleton().SetQuestActive(formId, active);
     });
 
-    // Add retained-mode Main Menu Window (Phase 13)
-    m_mainMenuWindow = m_uiContext->root()->add<PerfUI::MainMenuWindow>();
-    m_mainMenuWindow->setVisible(false);
-    m_mainMenuWindow->onContinueGame([this]() {
-        SetUIVisible(false);
-    });
-    m_mainMenuWindow->onQuitToDesktop([]() {
-        ::PostQuitMessage(0);
-    });
+    // Main Menu Window disabled per user request
+    m_mainMenuWindow = nullptr;
 }
 
 void D3D11Hook::InitializeImGui(IDXGISwapChain* pSwapChain) {

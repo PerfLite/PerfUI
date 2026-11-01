@@ -216,8 +216,31 @@ void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize) {
     const float bodyLines = 5.0f + 1.0f + static_cast<float>(overlayRows);
     const float panelHeight = kPanelPadding * 2.0f + kTitleHeight + kLineHeight * bodyLines;
 
-    backend.drawRoundedRect(Rect{ kPanelX, kPanelY, kPanelWidth, panelHeight },
-                            Color(8, 10, 14, 210), 8.0f, Color(96, 120, 150, 190), 1.0f);
+    const Rect panelRect{ kPanelX, kPanelY, kPanelWidth, panelHeight };
+
+    // --- Liquid Glass Background Effect ---
+    // 1. Soft ambient drop shadow underneath the glass plate
+    backend.drawShadow(panelRect, 10.0f, Color(0, 0, 0, 160), 16.0f, Point{ 0.0f, 6.0f });
+
+    // 2. Liquid Glass tinted body (dark icy-obsidian frosted glass)
+    backend.drawRoundedRect(panelRect, Color(10, 14, 22, 175), 10.0f);
+
+    // 3. Specular gloss reflection and top light refraction lip
+    backend.pushClipRect(panelRect);
+    // Upper specular highlight wash
+    backend.drawGradientRect(Rect{ kPanelX, kPanelY, kPanelWidth, panelHeight * 0.48f },
+                             Color(255, 255, 255, 36), Color(255, 255, 255, 18),
+                             Color(160, 215, 255, 4), Color(160, 215, 255, 6));
+    // Top-lip sharp highlight line
+    backend.drawLine(Point{ kPanelX + 10.0f, kPanelY + 1.0f },
+                     Point{ kPanelX + kPanelWidth - 10.0f, kPanelY + 1.0f },
+                     Color(255, 255, 255, 120), 1.0f);
+    backend.popClipRect();
+
+    // 4. Refractive dual glass border
+    backend.drawRectOutline(panelRect, Color(130, 175, 220, 110), 1.0f, 10.0f);
+    backend.drawRectOutline(Rect{ kPanelX + 1.0f, kPanelY + 1.0f, kPanelWidth - 2.0f, panelHeight - 2.0f },
+                            Color(255, 255, 255, 28), 1.0f, 9.0f);
 
     float cursorY = kPanelY + kPanelPadding;
     const float textX = kPanelX + kPanelPadding;
@@ -225,22 +248,25 @@ void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize) {
     TextStyle titleStyle;
     titleStyle.fontSize = 15.0f;
     titleStyle.bold = true;
-    titleStyle.color = Color(226, 233, 242, 255);
+    titleStyle.color = Color(240, 245, 255, 255);
     backend.drawText("PerfUI diagnostics", { textX, cursorY }, titleStyle);
 
     TextStyle hintStyle;
     hintStyle.fontSize = 13.0f;
-    hintStyle.color = Color(140, 156, 176, 255);
+    hintStyle.bold = true;
+    hintStyle.color = Color(155, 180, 210, 255);
     backend.drawText("F7", { kPanelX + kPanelWidth - kPanelPadding - 18.0f, cursorY }, hintStyle);
     cursorY += kTitleHeight;
 
     TextStyle bodyStyle;
     bodyStyle.fontSize = 13.0f;
-    bodyStyle.color = Color(214, 224, 236, 255);
+    bodyStyle.bold = true;
+    bodyStyle.color = Color(225, 235, 248, 255);
 
     auto drawLine = [&](const char* text, Color color, float fontSize = 13.0f) {
         TextStyle style;
         style.fontSize = fontSize;
+        style.bold = true;
         style.color = color;
         backend.drawText(text, { textX, cursorY }, style);
         cursorY += kLineHeight;
@@ -282,12 +308,14 @@ void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize) {
 
             TextStyle valueStyle;
             valueStyle.fontSize = 13.0f;
+            valueStyle.bold = true;
             valueStyle.color = SeverityColor(sample.lastMs);
             const Dimensions valueSize = backend.measureText(buffer, valueStyle);
 
             TextStyle nameStyle;
             nameStyle.fontSize = 13.0f;
-            nameStyle.color = Color(200, 212, 226, 255);
+            nameStyle.bold = true;
+            nameStyle.color = Color(210, 225, 242, 255);
             backend.drawText("  " + name, { textX, cursorY }, nameStyle);
             backend.drawText(buffer, { kPanelX + kPanelWidth - kPanelPadding - valueSize.width, cursorY }, valueStyle);
             cursorY += kLineHeight;
