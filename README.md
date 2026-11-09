@@ -42,8 +42,10 @@
 High-performance, retained-mode C++20 UI framework for *The Elder Scrolls V: Skyrim Special Edition / Anniversary Edition* and standalone DirectX 11 applications.
 
 <p align="center">
-  <img src="screenshots/2.png" alt="PerfUI Smart Compass & Quest Objective Overlay" width="49%" />
-  <img src="screenshots/1.png" alt="PerfUI Status Bars & Character Stats Overlay" width="49%" />
+  <img src="screenshots/1.jpg" alt="PerfUI Constellation Skill Tree Showcase" width="49%" />
+  <img src="screenshots/2.jpg" alt="PerfUI Interactive Perk Node & Tooltip" width="49%" />
+  <img src="screenshots/3.jpg" alt="PerfUI Magic Skill Constellation Branches" width="49%" />
+  <img src="screenshots/4.jpg" alt="PerfUI Modern Grid Inventory & Equipment Paperdoll" width="49%" />
 </p>
 
 ### Features
@@ -137,8 +139,10 @@ Licensed under the **MIT License** — see [LICENSE](LICENSE).
 Высокопроизводительный retained-mode C++20 UI-фреймворк для *The Elder Scrolls V: Skyrim Special Edition / Anniversary Edition* и автономных графических приложений на DirectX 11.
 
 <p align="center">
-  <img src="screenshots/2.png" alt="PerfUI Smart Compass & Quest Objective Overlay" width="49%" />
-  <img src="screenshots/1.png" alt="PerfUI Status Bars & Character Stats Overlay" width="49%" />
+  <img src="screenshots/1.jpg" alt="PerfUI Колесо созвездий и древо навыков" width="49%" />
+  <img src="screenshots/2.jpg" alt="PerfUI Интерактивная нода перка и тултип" width="49%" />
+  <img src="screenshots/3.jpg" alt="PerfUI Ветви созвездий магии" width="49%" />
+  <img src="screenshots/4.jpg" alt="PerfUI Сеточный инвентарь и слот-экипировка" width="49%" />
 </p>
 
 ### Возможности
