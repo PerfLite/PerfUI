@@ -25,10 +25,15 @@ public:
     UIElement* loadString(std::string_view xml, UIElement* parent = nullptr);
     UIElement* findByName(std::string_view name) const;
     void bindCallback(std::string name, std::function<void()> cb);
+    // One-way value binding for <Text bind="key"/>. Values survive XML hot reload.
+    void setBinding(std::string key, std::string value);
     void setCallbackResolver(ICallbackResolver* resolver) { m_resolver = resolver; }
     ICallbackResolver* callbackResolver() const { return m_resolver; }
     const std::string& scriptAttribute() const { return m_scriptAttribute; }
     void onScriptReload(std::function<void(const std::string&)> cb) { m_onScriptReload = std::move(cb); }
+    // The old root remains valid in onBeforeReload; the new root is attached in onAfterReload.
+    void onBeforeReload(std::function<void(UIElement*)> cb);
+    void onAfterReload(std::function<void(UIElement*)> cb);
     LoadResult lastResult() const { return m_lastResult; }
 
     void enableHotReload(bool on);

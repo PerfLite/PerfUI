@@ -5,16 +5,19 @@
 #include "UIRenderBackend.h"
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace PerfUI {
 
 class PERFUI_API Text : public UIElement {
 public:
     explicit Text(std::string text = "", std::string name = "Text");
-    ~Text() override = default;
+    ~Text() override;
 
     const std::string& text() const { return m_text; }
     Text& text(std::string_view str);
+    std::string bindingKey() const;
+    Text& bindingKey(std::string key);
 
     const TextStyle& style() const { return m_style; }
     TextStyle& style() { markLayoutDirty(); return m_style; }

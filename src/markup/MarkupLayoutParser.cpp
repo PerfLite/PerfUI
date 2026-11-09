@@ -212,7 +212,8 @@ bool isCommonLayoutAttribute(const std::string& key) {
         { "tooltip", true },
         { "class", true },
         { "bind", true },
-        { "position", true }
+        { "position", true },
+        { "left", true }, { "right", true }, { "top", true }, { "bottom", true }, { "center-x", true }
     };
     return s_keys.find(key) != s_keys.end();
 }
@@ -227,6 +228,11 @@ bool applyCommonLayoutAttribute(UIElement* element, const std::string& key, cons
         else if (lower == "relative" || lower == "static") element->setAbsolute(false);
         return true;
     }
+    if (key == "left") { props.left(parseNumberOrToken(val)); return true; }
+    if (key == "right") { props.right(parseNumberOrToken(val)); return true; }
+    if (key == "top") { props.top(parseNumberOrToken(val)); return true; }
+    if (key == "bottom") { props.bottom(parseNumberOrToken(val)); return true; }
+    if (key == "center-x") { props.centerX(parseBool(val, true)); return true; }
     if (key == "direction" || key == "flex-direction") {
         std::string lower = toLower(trim(val));
         if (lower == "row" || lower == "horizontal") props.direction(LayoutDirection::Horizontal);

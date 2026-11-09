@@ -1,11 +1,58 @@
 #include "PerfUI/Panel.h"
 #include "PerfUI/Theme.h"
+#include "PerfUI/UIContext.h"
+#include <mutex>
+#include <unordered_map>
+
+namespace {
+struct PanelImageState {
+    PerfUI::TextureId texture{ 0 };
+    PerfUI::Point uv0{ 0.0f, 0.0f };
+    PerfUI::Point uv1{ 1.0f, 1.0f };
+    PerfUI::Insets sourceSlice{};
+    PerfUI::Insets destinationSlice{};
+};
+std::mutex g_panelImageMutex;
+std::unordered_map<const PerfUI::Panel*, PanelImageState> g_panelImages;
+
+PanelImageState panelImage(const PerfUI::Panel* panel) {
+    std::lock_guard lock(g_panelImageMutex);
+    auto it = g_panelImages.find(panel);
+    return it == g_panelImages.end() ? PanelImageState{} : it->second;
+}
+}
 
 namespace PerfUI {
 
 Panel::Panel(std::string name)
     : UIElement(std::move(name))
 {
+}
+
+Panel::~Panel() {
+    std::lock_guard lock(g_panelImageMutex);
+    g_panelImages.erase(this);
+}
+
+TextureId Panel::backgroundImage() const { return panelImage(this).texture; }
+Panel& Panel::backgroundImage(TextureId texture) {
+    std::lock_guard lock(g_panelImageMutex);
+    g_panelImages[this].texture = texture;
+    return *this;
+}
+Panel& Panel::backgroundImageUV(Point uv0, Point uv1) {
+    std::lock_guard lock(g_panelImageMutex);
+    auto& image = g_panelImages[this];
+    image.uv0 = uv0;
+    image.uv1 = uv1;
+    return *this;
+}
+Panel& Panel::backgroundImageSlice(Insets sourcePixels, Insets destinationPixels) {
+    std::lock_guard lock(g_panelImageMutex);
+    auto& image = g_panelImages[this];
+    image.sourceSlice = sourcePixels;
+    image.destinationSlice = destinationPixels;
+    return *this;
 }
 
 void Panel::render(UIRenderBackend& backend) {
@@ -57,6 +104,49 @@ void Panel::render(UIRenderBackend& backend) {
             effBorder,
             borderW
         );
+    }
+
+    const auto image = panelImage(this);
+    if (image.texture != 0) {
+        const Color imageTint{ 255, 255, 255, static_cast<uint8_t>(255.0f * effAlpha) };
+        const auto textureSize = context() ? context()->getTextureSize(image.texture) : Dimensions{};
+        const bool sliced = textureSize.width > 0.0f && textureSize.height > 0.0f &&
+                            image.sourceSlice.horizontal() > 0.0f && image.sourceSlice.vertical() > 0.0f;
+        if (!sliced) {
+            backend.drawImageUV(image.texture, m_bounds, image.uv0, image.uv1, imageTint);
+        } else {
+            const float sourceW = textureSize.width;
+            const float sourceH = textureSize.height;
+            const float leftSrc = (std::clamp)(image.sourceSlice.left, 0.0f, sourceW * 0.5f);
+            const float rightSrc = (std::clamp)(image.sourceSlice.right, 0.0f, sourceW * 0.5f);
+            const float topSrc = (std::clamp)(image.sourceSlice.top, 0.0f, sourceH * 0.5f);
+            const float bottomSrc = (std::clamp)(image.sourceSlice.bottom, 0.0f, sourceH * 0.5f);
+            const float uSpan = image.uv1.x - image.uv0.x;
+            const float vSpan = image.uv1.y - image.uv0.y;
+            const float u[4]{ image.uv0.x, image.uv0.x + uSpan * leftSrc / sourceW,
+                              image.uv1.x - uSpan * rightSrc / sourceW, image.uv1.x };
+            const float v[4]{ image.uv0.y, image.uv0.y + vSpan * topSrc / sourceH,
+                              image.uv1.y - vSpan * bottomSrc / sourceH, image.uv1.y };
+            const float horizontalScale = (std::min)(1.0f, m_bounds.width /
+                (std::max)(1.0f, image.destinationSlice.horizontal()));
+            const float verticalScale = (std::min)(1.0f, m_bounds.height /
+                (std::max)(1.0f, image.destinationSlice.vertical()));
+            const float x[4]{ m_bounds.x, m_bounds.x + image.destinationSlice.left * horizontalScale,
+                              m_bounds.x + m_bounds.width - image.destinationSlice.right * horizontalScale,
+                              m_bounds.x + m_bounds.width };
+            const float y[4]{ m_bounds.y, m_bounds.y + image.destinationSlice.top * verticalScale,
+                              m_bounds.y + m_bounds.height - image.destinationSlice.bottom * verticalScale,
+                              m_bounds.y + m_bounds.height };
+            for (int row = 0; row < 3; ++row) {
+                for (int col = 0; col < 3; ++col) {
+                    const Rect part{ x[col], y[row], x[col + 1] - x[col], y[row + 1] - y[row] };
+                    if (part.width > 0.0f && part.height > 0.0f) {
+                        backend.drawImageUV(image.texture, part,
+                                            { u[col], v[row] }, { u[col + 1], v[row + 1] }, imageTint);
+                    }
+                }
+            }
+        }
     }
 
     if (m_clipChildren) {

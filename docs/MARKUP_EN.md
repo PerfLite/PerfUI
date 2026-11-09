@@ -16,7 +16,7 @@ Modders and developers can define rich UI hierarchies in clean `.xml` files, bin
   <Panel name="MainSettings" direction="column" width="420" padding="20" gap="12">
     <Text text="Audio & Gameplay Settings" font="title" color="$borderFocus"/>
 
-    <Slider name="MasterVolume" label="Master Volume" min="0" max="100" value="75" bind="settings.audio.volume"/>
+    <Slider name="MasterVolume" label="Master Volume" min="0" max="100" value="75"/>
     <Checkbox name="ShowProfiler" label="Show Retained Profiler" checked="true"/>
 
     <Panel direction="row" gap="10" justify="end">
@@ -62,6 +62,7 @@ void OnFrameUpdate(float dt) {
     context.update(dt);
 }
 ```
+If your mod stores element pointers, use `loader.onBeforeReload(...)` to save state and `loader.onAfterReload(...)` to look up new elements and reconnect callbacks. Old pointers are invalid after a reload.
 
 ---
 
@@ -90,7 +91,10 @@ All widget tags support the flexbox and box-model layout properties declared in 
 | `focusable` | `true`, `false`, `1`, `0` | Gamepad / keyboard navigation focus (`setFocusable(...)`) |
 | `tooltip` | string | Hover tooltip message (`tooltip(...)`) |
 | `class` | `primary danger` (space-separated) | CSS-like class tags for styling and querying (`classes(...)`) |
-| `bind` | `settings.volume` | Data-binding identifier path (v1 key) |
+| `bind` | `player.stats` | One-way Text binding updated through `MarkupLoader::setBinding` (`<Text>` only) |
+| `position` | `absolute` | Removes the element from flex layout |
+| `left`, `right`, `top`, `bottom` | pixels | Absolute offsets from the parent edges |
+| `center-x` | `true`, `false` | Centers an absolute element horizontally |
 
 ---
 
@@ -137,12 +141,14 @@ Retained container with background color, borders, corner rounding, and drop sha
   <!-- Child widgets -->
 </Panel>
 ```
+`bg-image="frame.png"` loads an image beside the XML file. `bg-uv="0 0 1 1"` selects a source region. Use `bg-slice="150 140 150 140"` for source border pixels and `bg-corner="32 30 32 30"` for rendered corner sizes in a nine-slice frame.
 
 ### `<Text>`
 Formatted vector typography with Cyrillic glyph support and text wrapping:
 ```xml
 <Text text="Dragonborn Journal" font="$fontTitle" color="$nordicGold" bold="true" italic="false" wrap="true"/>
 ```
+For live text, use `<Text bind="player.stats" text="Loading..."/>` and call `loader.setBinding("player.stats", value)`. Values survive XML hot reload.
 
 ### `<Button>`
 Interactive clickable and focusable button with hover transitions:

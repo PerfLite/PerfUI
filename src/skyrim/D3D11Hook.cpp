@@ -12,13 +12,17 @@
 namespace PerfUI::Skyrim {
 
 bool D3D11Hook::IsCursorNeeded() const {
+    auto* ui = RE::UI::GetSingleton();
+    if (ui && ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME)) {
+        return false;
+    }
+
     if (InputHook::GetSingleton().IsCaptureInput()) return true;
     if (HasVisibleRootWindows()) return true;
 
     auto* mc = RE::MenuCursor::GetSingleton();
     if (mc && mc->showCursorCount > 0) return true;
 
-    auto* ui = RE::UI::GetSingleton();
     if (!ui) return false;
 
     for (const auto& menu : ui->menuStack) {
@@ -521,6 +525,7 @@ void D3D11Hook::SetUIVisible(bool visible) {
 bool D3D11Hook::HasVisibleRootWindows() const {
     if (m_journalWindow && m_journalWindow->isVisible()) return true;
     if (m_mainMenuWindow && m_mainMenuWindow->isVisible()) return true;
+    if (m_uiContext && m_uiContext->root() && m_uiContext->root()->hasVisibleChildren()) return true;
     return false;
 }
 
@@ -630,7 +635,8 @@ void D3D11Hook::RenderFrame(IDXGISwapChain* pSwapChain) {
     bool inMainMenuOrLoading = skseUi && (skseUi->IsMenuOpen(RE::MainMenu::MENU_NAME) || skseUi->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
     PerfUI::Diagnostics::GetSingleton().setSuppressed(inMainMenuOrLoading);
     bool diagnosticsVisible = !inMainMenuOrLoading && PerfUI::Diagnostics::GetSingleton().isVisible();
-    bool shouldShowCursor = IsCursorNeeded();
+    bool inLoading = skseUi && skseUi->IsMenuOpen(RE::LoadingMenu::MENU_NAME);
+    bool shouldShowCursor = !inLoading && IsCursorNeeded();
 
     if (!shouldShowCursor) {
         auto* mc = RE::MenuCursor::GetSingleton();

@@ -273,6 +273,7 @@ int main() {
     <ScrollView name="MyScroll" offset="120.0">
       <Button name="BtnFocusTarget" text="Target V1"/>
     </ScrollView>
+    <Text name="LiveValue" bind="player.xp" text="waiting"/>
   </Panel>
 </UI>
 )";
@@ -280,7 +281,20 @@ int main() {
 
         UIElement* loadedV1 = loader.loadFile(xmlFile);
         TEST_ASSERT(loadedV1 != nullptr, "Loaded V1 from temp file");
+        loader.setBinding("player.xp", "5/100");
         loader.enableHotReload(true);
+        int beforeReloads = 0;
+        int afterReloads = 0;
+        loader.onBeforeReload([&](UIElement* oldRoot) {
+            ++beforeReloads;
+            TEST_ASSERT(oldRoot == loadedV1, "Before-reload callback receives live old root");
+            TEST_ASSERT(loader.findByName("BtnFocusTarget") != nullptr, "Old elements remain available before reload");
+        });
+        loader.onAfterReload([&](UIElement* newRoot) {
+            ++afterReloads;
+            TEST_ASSERT(newRoot == loader.loadedRoot() && newRoot != loadedV1, "After-reload callback receives new root");
+            TEST_ASSERT(context.focusedElement() == loader.findByName("BtnFocusTarget"), "Focus is restored before after-reload callback");
+        });
 
         auto* btnTarget = loader.findByName("BtnFocusTarget");
         TEST_ASSERT(btnTarget != nullptr, "Found focus target in V1");
@@ -303,17 +317,21 @@ int main() {
                 << "    <ScrollView name=\"MyScroll\" offset=\"0.0\">\n"
                 << "      <Button name=\"BtnFocusTarget\" text=\"Target V2 (Reloaded)\"/>\n"
                 << "    </ScrollView>\n"
+                << "    <Text name=\"LiveValue\" bind=\"player.xp\" text=\"waiting\"/>\n"
                 << "  </Panel>\n"
                 << "</UI>\n";
         }
 
         // Poll to trigger hot-reload
         loader.poll();
+        TEST_ASSERT(beforeReloads == 1 && afterReloads == 1, "Reload callbacks fire once in order");
 
         auto* newBtn = dynamic_cast<PerfUI::Button*>(loader.findByName("BtnFocusTarget"));
         TEST_ASSERT(newBtn != nullptr, "Found focus target in reloaded V2");
         TEST_ASSERT(newBtn->text() == "Target V2 (Reloaded)", "Button text updated via hot reload");
         TEST_ASSERT(context.focusedElement() == newBtn, "Focus preserved on BtnFocusTarget across hot-reload!");
+        auto* liveValue = dynamic_cast<PerfUI::Text*>(loader.findByName("LiveValue"));
+        TEST_ASSERT(liveValue && liveValue->text() == "5/100", "Bound value survives XML hot reload");
 
         auto* newSv = dynamic_cast<PerfUI::ScrollView*>(loader.findByName("MyScroll"));
         TEST_ASSERT(newSv != nullptr, "Found MyScroll in reloaded V2");
@@ -322,6 +340,57 @@ int main() {
         // Cleanup temp file
         std::error_code ec;
         std::filesystem::remove_all(tempDir, ec);
+    }
+
+    // Absolute anchors position HUD elements without per-frame C++ coordinates.
+    {
+        PerfUI::UIContext context;
+        context.setViewportSize({ 800.0f, 600.0f });
+        PerfUI::MarkupLoader loader(context);
+        loader.loadString(R"(<UI><Panel name="AnchorRoot" width="800" height="600"><Panel name="Anchored" position="absolute" width="200" height="50" center-x="true" bottom="24"/></Panel></UI>)");
+        context.update(0.0f);
+        auto* anchored = loader.findByName("Anchored");
+        TEST_ASSERT(anchored != nullptr, "Anchored panel loaded");
+        if (anchored) {
+            TEST_ASSERT(approxEqual(anchored->bounds().x, 300.0f), "center-x positions absolute panel");
+            TEST_ASSERT(approxEqual(anchored->bounds().y, 526.0f), "bottom offset positions absolute panel");
+        }
+    }
+
+    {
+        PerfUI::UIContext context;
+        PerfUI::MockRenderBackend backend;
+        context.setRenderBackend(&backend);
+        context.setViewportSize({ 800.0f, 600.0f });
+        PerfUI::MarkupLoader loader(context);
+        const auto xmlFile = std::filesystem::temp_directory_path() / "perfui_panel_image_test.xml";
+        {
+            std::ofstream out(xmlFile);
+            out << "<UI><Panel name=\"ImagePanel\" width=\"200\" height=\"80\" bg-image=\"frame.png\" bg-slice=\"10 10 10 10\" bg-corner=\"8 8 8 8\"/></UI>";
+        }
+        loader.loadFile(xmlFile);
+        auto* panel = dynamic_cast<PerfUI::Panel*>(loader.findByName("ImagePanel"));
+        TEST_ASSERT(panel && panel->backgroundImage() != 0, "Panel background image loaded from XML");
+        TEST_ASSERT(backend.loadedTextureCount() == 1 &&
+                    backend.mockTextures().begin()->second.filePath == (xmlFile.parent_path() / "frame.png").string(),
+                    "Relative panel image path resolves beside XML");
+        context.render(backend);
+        int imageParts = 0;
+        for (const auto& command : backend.commands()) {
+            if (command.type == PerfUI::MockRenderBackend::DrawCommand::Type::ImageUV) ++imageParts;
+        }
+        TEST_ASSERT(imageParts == 9, "Nine-slice panel renders nine image regions");
+        std::filesystem::remove(xmlFile);
+    }
+    {
+        PerfUI::UIContext context;
+        PerfUI::MarkupLoader loader(context);
+        loader.setBinding("player.xp", "0/100");
+        loader.loadString(R"(<UI><Text name="XpLabel" bind="player.xp" text="waiting"/></UI>)");
+        auto* label = dynamic_cast<PerfUI::Text*>(loader.findByName("XpLabel"));
+        TEST_ASSERT(label && label->text() == "0/100", "Initial bound value replaces placeholder");
+        loader.setBinding("player.xp", "50/100");
+        TEST_ASSERT(label && label->text() == "50/100", "Bound Text updates without rebuilding XML");
     }
 
     // -------------------------------------------------------------

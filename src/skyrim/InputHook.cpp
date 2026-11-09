@@ -143,9 +143,6 @@ void InputHook::SetCaptureInput(bool capture) {
                 if (mc && mc->showCursorCount <= 0) {
                     mc->SetCursorVisibility(true);
                 }
-                if (ui && queue && !ui->IsMenuOpen(RE::CursorMenu::MENU_NAME)) {
-                    queue->AddMessage(RE::CursorMenu::MENU_NAME, RE::UI_MESSAGE_TYPE::kShow, nullptr);
-                }
             } else {
                 if (!D3D11Hook::GetSingleton().IsCursorNeeded()) {
                     if (mc && mc->showCursorCount > 0) {
@@ -206,8 +203,10 @@ LRESULT CALLBACK InputHook::Hooked_WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
         const bool autoRepeat = (lParam & (1 << 30)) != 0;
 
         if (!capturingKeybind && !autoRepeat) {
-            // First check user registered hotkeys via UIContext
-            if (uiCtx && uiCtx->triggerHotkey(static_cast<uint32_t>(wParam))) {
+            auto* ui = RE::UI::GetSingleton();
+            const bool consoleOpen = ui && ui->IsMenuOpen(RE::Console::MENU_NAME);
+            // First check user registered hotkeys via UIContext (never while typing in console)
+            if (!consoleOpen && uiCtx && uiCtx->triggerHotkey(static_cast<uint32_t>(wParam))) {
                 return 0;
             }
 
@@ -446,7 +445,7 @@ RE::BSEventNotifyControl InputHook::ProcessEvent(
         }
     }
 
-    if (m_captureKeyboard.load()) {
+    if (m_captureInput.load() || m_captureKeyboard.load()) {
         // Modal: clear user events across the linked list so even if any downstream sink
         // accidentally receives the event, no gameplay action triggers in the world.
         for (auto* event = *a_event; event; event = event->next) {

@@ -8,7 +8,7 @@ namespace PerfUI {
 class PERFUI_API Panel : public UIElement {
 public:
     explicit Panel(std::string name = "Panel");
-    ~Panel() override = default;
+    ~Panel() override;
 
     Color backgroundColor() const { return m_backgroundColor.value_or(Color::Transparent()); }
     Panel& backgroundColor(Color color) { m_backgroundColor = color; return *this; }
@@ -40,6 +40,11 @@ public:
         m_blurRadius = radius;
         return *this;
     }
+
+    TextureId backgroundImage() const;
+    Panel& backgroundImage(TextureId texture);
+    Panel& backgroundImageUV(Point uv0, Point uv1);
+    Panel& backgroundImageSlice(Insets sourcePixels, Insets destinationPixels);
 
     using UIElement::style;
     Panel& style(WidgetStyle s) { m_style = std::move(s); return *this; }

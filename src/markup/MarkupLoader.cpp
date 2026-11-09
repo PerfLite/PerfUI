@@ -14,11 +14,22 @@
 
 #include <pugixml.hpp>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 
 namespace PerfUI {
 
 using namespace MarkupInternal;
+
+namespace {
+struct LoaderExtensions {
+    std::unordered_map<std::string, std::string> bindings;
+    std::function<void(UIElement*)> beforeReload;
+    std::function<void(UIElement*)> afterReload;
+};
+std::mutex g_loaderExtensionsMutex;
+std::unordered_map<const MarkupLoader*, LoaderExtensions> g_loaderExtensions;
+}
 
 static int calculateLineNumber(std::string_view text, size_t byteOffset) {
     int line = 1;
@@ -28,11 +39,19 @@ static int calculateLineNumber(std::string_view text, size_t byteOffset) {
     return line;
 }
 
+static void updateBoundText(UIElement* element, std::string_view key, std::string_view value) {
+    if (!element) return;
+    if (auto* label = dynamic_cast<Text*>(element); label && label->bindingKey() == key) {
+        label->text(value);
+    }
+    for (const auto& child : element->children()) updateBoundText(child.get(), key, value);
+}
+
 static bool isKnownWidgetAttribute(const std::string& tag, const std::string& key) {
     if (isCommonLayoutAttribute(key)) return true;
 
     if (tag == "Panel") {
-        return key == "bg" || key == "background" || key == "border" || key == "border-width" || key == "radius" || key == "shadow" || key == "backdrop-blur" || key == "blur" || key == "glass" || key == "clip-children" || key == "clipChildren";
+        return key == "bg" || key == "background" || key == "border" || key == "border-width" || key == "radius" || key == "shadow" || key == "backdrop-blur" || key == "blur" || key == "glass" || key == "clip-children" || key == "clipChildren" || key == "bg-image" || key == "bg-uv" || key == "bg-slice" || key == "bg-corner";
     } else if (tag == "Text") {
         return key == "text" || key == "font" || key == "font-size" || key == "color" || key == "bold" || key == "italic" || key == "wrap";
     } else if (tag == "Button") {
@@ -99,10 +118,32 @@ MarkupLoader::MarkupLoader(UIContext& ctx)
     WidgetRegistry::instance().registerBuiltinWidgets();
 }
 
-MarkupLoader::~MarkupLoader() = default;
+MarkupLoader::~MarkupLoader() {
+    std::lock_guard lock(g_loaderExtensionsMutex);
+    g_loaderExtensions.erase(this);
+}
+
+void MarkupLoader::onBeforeReload(std::function<void(UIElement*)> cb) {
+    std::lock_guard lock(g_loaderExtensionsMutex);
+    g_loaderExtensions[this].beforeReload = std::move(cb);
+}
+
+void MarkupLoader::onAfterReload(std::function<void(UIElement*)> cb) {
+    std::lock_guard lock(g_loaderExtensionsMutex);
+    g_loaderExtensions[this].afterReload = std::move(cb);
+}
 
 void MarkupLoader::bindCallback(std::string name, std::function<void()> cb) {
     m_callbacks[std::move(name)] = std::move(cb);
+}
+
+void MarkupLoader::setBinding(std::string key, std::string value) {
+    if (key.empty()) return;
+    {
+        std::lock_guard lock(g_loaderExtensionsMutex);
+        g_loaderExtensions[this].bindings[key] = value;
+    }
+    updateBoundText(m_root, key, value);
 }
 
 void MarkupLoader::enableHotReload(bool on) {
@@ -167,6 +208,49 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
             m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] Widget '" + tag + "' ignoring unknown attribute '" + k + "'.");
         }
         applyCommonLayoutAttribute(element, k, v);
+    }
+
+    if (tag == "Text") {
+        if (auto it = attrs.find("bind"); it != attrs.end()) {
+            if (auto* label = dynamic_cast<Text*>(element)) {
+                label->bindingKey(it->second);
+                std::lock_guard lock(g_loaderExtensionsMutex);
+                if (auto value = g_loaderExtensions[this].bindings.find(it->second);
+                    value != g_loaderExtensions[this].bindings.end()) {
+                    label->text(value->second);
+                }
+            }
+        }
+    }
+
+    if (tag == "Panel") {
+        if (auto* panel = dynamic_cast<Panel*>(element)) {
+            if (auto it = attrs.find("bg-image"); it != attrs.end()) {
+                std::filesystem::path asset(it->second);
+                const std::string first = asset.empty() ? "" : asset.begin()->string();
+                if (asset.is_relative() && !m_sourceFilePath.empty() && first != "Data" && first != "data") {
+                    asset = m_sourceFilePath.parent_path() / asset;
+                }
+                panel->backgroundImage(m_context.loadTexture(asset.string()));
+            }
+            if (auto it = attrs.find("bg-uv"); it != attrs.end()) {
+                std::istringstream values(it->second);
+                float u0, v0, u1, v1;
+                if (values >> u0 >> v0 >> u1 >> v1) panel->backgroundImageUV({ u0, v0 }, { u1, v1 });
+            }
+            if (auto it = attrs.find("bg-slice"); it != attrs.end()) {
+                std::istringstream values(it->second);
+                Insets source;
+                if (values >> source.left >> source.top >> source.right >> source.bottom) {
+                    Insets destination = source;
+                    if (auto corner = attrs.find("bg-corner"); corner != attrs.end()) {
+                        std::istringstream corners(corner->second);
+                        corners >> destination.left >> destination.top >> destination.right >> destination.bottom;
+                    }
+                    panel->backgroundImageSlice(source, destination);
+                }
+            }
+        }
     }
 
     // Bind Button onClick callback
@@ -304,10 +388,8 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
         }
     }
 
-    // Check bind attribute stub
-    auto itBind = attrs.find("bind");
-    if (itBind != attrs.end()) {
-        m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] Data binding '" + itBind->second + "' not implemented (v1 stub).");
+    if (auto itBind = attrs.find("bind"); itBind != attrs.end() && tag != "Text") {
+        m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] Data binding is supported for Text only.");
     }
 }
 
@@ -429,6 +511,19 @@ void MarkupLoader::poll() {
         return;
     }
 
+    std::function<void(UIElement*)> beforeReload;
+    std::function<void(UIElement*)> afterReload;
+    {
+        std::lock_guard lock(g_loaderExtensionsMutex);
+        if (auto it = g_loaderExtensions.find(this); it != g_loaderExtensions.end()) {
+            beforeReload = it->second.beforeReload;
+            afterReload = it->second.afterReload;
+        }
+    }
+    if (beforeReload) {
+        beforeReload(m_root);
+    }
+
     if (m_root && effectiveParent) {
         effectiveParent->removeChild(m_root);
     }
@@ -467,6 +562,10 @@ void MarkupLoader::poll() {
                 m_context.setFocus(el);
             }
         }
+    }
+
+    if (afterReload) {
+        afterReload(m_root);
     }
 }
 

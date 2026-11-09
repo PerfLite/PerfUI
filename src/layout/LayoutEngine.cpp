@@ -168,8 +168,30 @@ void LayoutEngine::ArrangeContent(UIElement* element, const Rect& contentRect) {
 
     for (const auto& child : element->children()) {
         if (child && child->isVisible() && child->isAbsolute()) {
-            child->measure(child->size());
-            child->arrange(child->bounds());
+            const auto& anchors = child->layout();
+            if (anchors.hasAbsoluteAnchors()) {
+                child->measure({ contentRect.width, contentRect.height });
+                const auto desired = child->desiredSize();
+                float width = desired.width;
+                float height = desired.height;
+                if (anchors.left() && anchors.right()) {
+                    width = (std::max)(0.0f, contentRect.width - *anchors.left() - *anchors.right());
+                }
+                if (anchors.top() && anchors.bottom()) {
+                    height = (std::max)(0.0f, contentRect.height - *anchors.top() - *anchors.bottom());
+                }
+                float x = child->bounds().x;
+                float y = child->bounds().y;
+                if (anchors.left()) x = contentRect.x + *anchors.left();
+                else if (anchors.right()) x = contentRect.x + contentRect.width - *anchors.right() - width;
+                else if (anchors.centerX()) x = contentRect.x + (contentRect.width - width) * 0.5f;
+                if (anchors.top()) y = contentRect.y + *anchors.top();
+                else if (anchors.bottom()) y = contentRect.y + contentRect.height - *anchors.bottom() - height;
+                child->arrange({ x, y, width, height });
+            } else {
+                child->measure(child->size());
+                child->arrange(child->bounds());
+            }
         }
     }
 }

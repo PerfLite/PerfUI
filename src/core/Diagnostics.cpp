@@ -309,7 +309,7 @@ void Diagnostics::render(UIRenderBackend& backend, Dimensions screenSize, UICont
             float sum = 0.0f;
             for (size_t i = 0; i < m_intervalCount; ++i) {
                 sum += m_intervals[i];
-                maxMs = std::max(maxMs, m_intervals[i]);
+                maxMs = (std::max)(maxMs, m_intervals[i]);
             }
             const float average = sum / static_cast<float>(m_intervalCount);
             fps = average > 0.0f ? 1000.0f / average : 0.0f;
@@ -560,7 +560,7 @@ float Diagnostics::maxFrameMs() const {
     std::lock_guard<std::mutex> lock(m_mutex);
     float maxMs = 0.0f;
     for (size_t i = 0; i < m_intervalCount; ++i) {
-        maxMs = std::max(maxMs, m_intervals[i]);
+        maxMs = (std::max)(maxMs, m_intervals[i]);
     }
     return maxMs;
 }

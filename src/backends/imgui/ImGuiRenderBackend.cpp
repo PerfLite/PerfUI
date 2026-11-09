@@ -353,11 +353,13 @@ void ImGuiRenderBackend::drawBackdropBlur(
     Color tint,
     float blurAmount
 ) {
-    (void)blurAmount;
     ImDrawList* dl = getDrawList();
     if (!dl || rect.width <= 0.0f || rect.height <= 0.0f) return;
 
     if (m_blurPass && m_blurPass->HasValidBackdrop()) {
+        // The postfx module supplies one blurred backdrop per frame. Blend it per panel
+        // so markup blur values still control the visible strength of the effect.
+        const float strength = (std::clamp)(blurAmount / 3.0f, 0.0f, 1.0f);
         float vw = (m_viewportWidth > 0.0f) ? m_viewportWidth : 1920.0f;
         float vh = (m_viewportHeight > 0.0f) ? m_viewportHeight : 1080.0f;
 
@@ -374,7 +376,7 @@ void ImGuiRenderBackend::drawBackdropBlur(
                 ImVec2(rect.x, rect.y),
                 ImVec2(rect.x + rect.width, rect.y + rect.height),
                 uv0, uv1,
-                IM_COL32(255, 255, 255, 255),
+                IM_COL32(255, 255, 255, static_cast<int>(255.0f * strength)),
                 cornerRadius
             );
         } else {
@@ -383,7 +385,7 @@ void ImGuiRenderBackend::drawBackdropBlur(
                 ImVec2(rect.x, rect.y),
                 ImVec2(rect.x + rect.width, rect.y + rect.height),
                 uv0, uv1,
-                IM_COL32(255, 255, 255, 255)
+                IM_COL32(255, 255, 255, static_cast<int>(255.0f * strength))
             );
         }
 
@@ -612,6 +614,12 @@ TextureId ImGuiRenderBackend::loadTexture(std::string_view filePath) {
     }
 
     std::string pathStr(filePath);
+    {
+        std::lock_guard<std::mutex> lock(m_textureMutex);
+        for (const auto& [id, record] : m_textures) {
+            if (!record.filePath.empty() && record.filePath == pathStr) return id;
+        }
+    }
     int width = 0;
     int height = 0;
     int channels = 0;

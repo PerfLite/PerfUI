@@ -1,6 +1,13 @@
 #include "PerfUI/Text.h"
 #include "PerfUI/UIContext.h"
 #include <algorithm>
+#include <mutex>
+#include <unordered_map>
+
+namespace {
+std::mutex g_textBindingMutex;
+std::unordered_map<const PerfUI::Text*, std::string> g_textBindings;
+}
 
 namespace PerfUI {
 
@@ -8,6 +15,23 @@ Text::Text(std::string text, std::string name)
     : UIElement(std::move(name))
     , m_text(std::move(text))
 {
+}
+
+Text::~Text() {
+    std::lock_guard lock(g_textBindingMutex);
+    g_textBindings.erase(this);
+}
+
+std::string Text::bindingKey() const {
+    std::lock_guard lock(g_textBindingMutex);
+    auto it = g_textBindings.find(this);
+    return it == g_textBindings.end() ? std::string{} : it->second;
+}
+
+Text& Text::bindingKey(std::string key) {
+    std::lock_guard lock(g_textBindingMutex);
+    g_textBindings[this] = std::move(key);
+    return *this;
 }
 
 Text& Text::text(std::string_view str) {

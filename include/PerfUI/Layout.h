@@ -2,6 +2,7 @@
 
 #include "Types.h"
 #include <algorithm>
+#include <optional>
 
 namespace PerfUI {
 
@@ -59,6 +60,19 @@ public:
     DimensionConstraint height() const { return m_height; }
     LayoutProps& height(DimensionConstraint h) { m_height = h; return *this; }
     LayoutProps& height(float px) { m_height = DimensionConstraint::Fixed(px); return *this; }
+
+    PERFUI_API std::optional<float> left() const;
+    PERFUI_API LayoutProps& left(float px);
+    PERFUI_API std::optional<float> right() const;
+    PERFUI_API LayoutProps& right(float px);
+    PERFUI_API std::optional<float> top() const;
+    PERFUI_API LayoutProps& top(float px);
+    PERFUI_API std::optional<float> bottom() const;
+    PERFUI_API LayoutProps& bottom(float px);
+    PERFUI_API bool centerX() const;
+    PERFUI_API LayoutProps& centerX(bool enabled);
+    PERFUI_API bool hasAbsoluteAnchors() const;
+    PERFUI_API void clearAbsoluteAnchors();
 
     float flexGrow() const { return m_flexGrow; }
     LayoutProps& flex(float weight = 1.0f) {

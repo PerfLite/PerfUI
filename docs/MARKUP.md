@@ -16,7 +16,7 @@ Modders and developers can define rich UI hierarchies in clean `.xml` files, bin
   <Panel name="MainSettings" direction="column" width="420" padding="20" gap="12">
     <Text text="Audio & Gameplay Settings" font="title" color="$borderFocus"/>
 
-    <Slider name="MasterVolume" label="Master Volume" min="0" max="100" value="75" bind="settings.audio.volume"/>
+    <Slider name="MasterVolume" label="Master Volume" min="0" max="100" value="75"/>
     <Checkbox name="ShowProfiler" label="Show Retained Profiler" checked="true"/>
 
     <Panel direction="row" gap="10" justify="end">
@@ -62,6 +62,7 @@ void OnFrameUpdate(float dt) {
     context.update(dt);
 }
 ```
+Если мод хранит указатели на элементы, зарегистрируйте `loader.onBeforeReload(...)` для сохранения их состояния и `loader.onAfterReload(...)` для повторного поиска элементов и привязки обработчиков. Старые указатели после перезагрузки недействительны.
 
 ---
 
@@ -90,7 +91,10 @@ All widget tags support the flexbox and box-model layout properties declared in 
 | `focusable` | `true`, `false`, `1`, `0` | Controller / keyboard navigation focus (`setFocusable(...)`) |
 | `tooltip` | string | Floating hover tooltip text (`tooltip(...)`) |
 | `class` | `primary danger` (space-separated) | CSS-like class tags for stylesheet targeting |
-| `bind` | `settings.volume` | Data-binding key path (v1 stub) |
+| `bind` | `player.stats` | Односторонняя привязка текста через `MarkupLoader::setBinding` (только `<Text>`) |
+| `position` | `absolute` | Исключает элемент из flex-потока |
+| `left`, `right`, `top`, `bottom` | пиксели | Отступы абсолютного элемента от соответствующего края родителя |
+| `center-x` | `true`, `false` | Центрирует абсолютный элемент по горизонтали |
 
 ---
 
@@ -137,12 +141,14 @@ Flexible container for nesting child elements with optional background, border, 
   <!-- Children -->
 </Panel>
 ```
+`bg-image="frame.png"` загружает фон рядом с XML. `bg-uv="0 0 1 1"` выбирает часть изображения. Для рамки с неизменными углами используйте `bg-slice="150 140 150 140"` (границы исходника в пикселях) и `bg-corner="32 30 32 30"` (размеры углов на экране).
 
 ### `<Text>`
 Formatted UTF-8 typography with Cyrillic support and style attributes.
 ```xml
 <Text text="Dragonborn Journal" font="$fontTitle" color="$nordicGold" bold="true" italic="false" wrap="true"/>
 ```
+Для обновляемого текста: `<Text bind="player.stats" text="Загрузка..."/>`, затем `loader.setBinding("player.stats", value)`. Значение сохраняется после hot reload XML.
 
 ### `<Button>`
 Interactive clickable and focusable button.

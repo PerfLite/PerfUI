@@ -19,6 +19,7 @@ UIElement::UIElement(std::string name)
 }
 
 UIElement::~UIElement() {
+    m_layout.clearAbsoluteAnchors();
     if (m_aliveToken) {
         *m_aliveToken = false;
     }

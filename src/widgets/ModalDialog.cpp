@@ -27,7 +27,7 @@ ModalDialog::ModalDialog(
 
     // Center card
     m_card = add<Panel>("DialogCard");
-    m_card->backgroundColor(Color(18, 23, 31, 250));
+    m_card->backgroundColor(Color(14, 18, 26, 180));
     m_card->borderColor(Color::NordicGold());
     m_card->borderWidth(1.5f);
     m_card->cornerRadius(10.0f);
@@ -130,8 +130,14 @@ void ModalDialog::render(UIRenderBackend& backend) {
     float a = m_scrimAlpha.value();
     if (a <= 0.01f && !m_isOpen) return;
 
-    // Draw full-screen scrim
-    backend.drawRect(m_bounds, Color(0, 0, 0, static_cast<uint8_t>(175.0f * a)));
+    // Full-screen backdrop blur and cinematic scrim
+    backend.drawBackdropBlur(m_bounds, 0.0f, Color(0, 0, 0, static_cast<uint8_t>(135.0f * a)), 16.0f);
+
+    // Card frosted glass blur
+    if (m_card && m_card->isVisible()) {
+        auto cb = m_card->bounds();
+        backend.drawBackdropBlur(cb, m_card->cornerRadius(), Color(12, 16, 24, static_cast<uint8_t>(150.0f * a)), 20.0f);
+    }
 
     // Render card
     Panel::render(backend);
