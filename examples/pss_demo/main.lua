@@ -23,6 +23,7 @@ function onSwitchTheme()
     if status then
         status:setText("Theme: " .. th.name .. " (" .. th.accent .. ") | Styles dynamically updated")
     end
+    ui.toast("Theme Switched", th.name .. " (" .. th.accent .. ")", "success", 2.0)
 end
 
 function onToggleBlur(checked)

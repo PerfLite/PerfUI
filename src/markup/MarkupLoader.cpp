@@ -315,9 +315,11 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
             if (btn) {
                 if (itCb != m_callbacks.end()) {
                     btn->onClick(itCb->second);
-                } else if (m_resolver && m_resolver->has(cbName)) {
+                } else if (m_resolver) {
                     btn->onClick([resolver = m_resolver, cbName]() {
-                        resolver->call(cbName);
+                        if (resolver->has(cbName)) {
+                            resolver->call(cbName);
+                        }
                     });
                 } else {
                     m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] Button '" + element->name() + "' has unbound callback '" + cbName + "'.");
@@ -336,9 +338,11 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
             if (cb) {
                 if (itCb != m_callbacks.end()) {
                     cb->onToggle([fn = itCb->second](bool) { fn(); });
-                } else if (m_resolver && m_resolver->has(cbName)) {
+                } else if (m_resolver) {
                     cb->onToggle([resolver = m_resolver, cbName](bool checked) {
-                        resolver->callNumber(cbName, checked ? 1.0 : 0.0);
+                        if (resolver->has(cbName)) {
+                            resolver->callNumber(cbName, checked ? 1.0 : 0.0);
+                        }
                     });
                 } else {
                     m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] Checkbox '" + element->name() + "' has unbound callback '" + cbName + "'.");
@@ -355,9 +359,11 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
             if (slider) {
                 if (itCb != m_callbacks.end()) {
                     slider->onValueChanged([fn = itCb->second](float) { fn(); });
-                } else if (m_resolver && m_resolver->has(cbName)) {
+                } else if (m_resolver) {
                     slider->onValueChanged([resolver = m_resolver, cbName](float val) {
-                        resolver->callNumber(cbName, static_cast<double>(val));
+                        if (resolver->has(cbName)) {
+                            resolver->callNumber(cbName, static_cast<double>(val));
+                        }
                     });
                 } else {
                     m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] Slider '" + element->name() + "' has unbound callback '" + cbName + "'.");
@@ -374,9 +380,11 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
             if (combo) {
                 if (itCb != m_callbacks.end()) {
                     combo->onSelectionChanged([fn = itCb->second](size_t, const std::string&) { fn(); });
-                } else if (m_resolver && m_resolver->has(cbName)) {
+                } else if (m_resolver) {
                     combo->onSelectionChanged([resolver = m_resolver, cbName](size_t idx, const std::string&) {
-                        resolver->callNumber(cbName, static_cast<double>(idx));
+                        if (resolver->has(cbName)) {
+                            resolver->callNumber(cbName, static_cast<double>(idx));
+                        }
                     });
                 } else {
                     m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] ComboBox '" + element->name() + "' has unbound callback '" + cbName + "'.");
@@ -393,9 +401,11 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
             if (tab) {
                 if (itCb != m_callbacks.end()) {
                     tab->onTabChanged([fn = itCb->second](size_t) { fn(); });
-                } else if (m_resolver && m_resolver->has(cbName)) {
+                } else if (m_resolver) {
                     tab->onTabChanged([resolver = m_resolver, cbName](size_t idx) {
-                        resolver->callNumber(cbName, static_cast<double>(idx));
+                        if (resolver->has(cbName)) {
+                            resolver->callNumber(cbName, static_cast<double>(idx));
+                        }
                     });
                 } else {
                     m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] TabBar '" + element->name() + "' has unbound callback '" + cbName + "'.");
@@ -412,9 +422,11 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
             if (input) {
                 if (itCb != m_callbacks.end()) {
                     input->onTextChanged([fn = itCb->second](const std::string&) { fn(); });
-                } else if (m_resolver && m_resolver->has(cbName)) {
+                } else if (m_resolver) {
                     input->onTextChanged([resolver = m_resolver, cbName](const std::string& val) {
-                        resolver->callString(cbName, val);
+                        if (resolver->has(cbName)) {
+                            resolver->callString(cbName, val);
+                        }
                     });
                 } else {
                     m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] TextInput '" + element->name() + "' has unbound callback '" + cbName + "'.");
@@ -430,9 +442,11 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
             if (input) {
                 if (itCb != m_callbacks.end()) {
                     input->onEnter([fn = itCb->second](const std::string&) { fn(); });
-                } else if (m_resolver && m_resolver->has(cbName)) {
+                } else if (m_resolver) {
                     input->onEnter([resolver = m_resolver, cbName](const std::string& val) {
-                        resolver->callString(cbName, val);
+                        if (resolver->has(cbName)) {
+                            resolver->callString(cbName, val);
+                        }
                     });
                 } else {
                     m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] TextInput '" + element->name() + "' has unbound callback '" + cbName + "'.");
@@ -528,6 +542,9 @@ UIElement* MarkupLoader::parseAndBuildTree(std::string_view xml, UIElement* pare
             }
             if (auto scriptAttr = node.attribute("script")) {
                 m_scriptAttribute = scriptAttr.as_string();
+                if (!m_scriptAttribute.empty() && m_onScriptReload) {
+                    m_onScriptReload(m_scriptAttribute);
+                }
             }
             UIElement* firstCreated = nullptr;
             for (pugi::xml_node child : node.children()) {

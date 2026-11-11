@@ -271,6 +271,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     g_pssLoader->enableHotReload(true);
 
     if (!g_pssMenuPath.empty() && std::filesystem::exists(g_pssMenuPath)) {
+#if defined(PERFUI_ENABLE_LUA)
+        auto preScript = g_pssMenuPath.parent_path() / "main.lua";
+        if (std::filesystem::exists(preScript)) {
+            g_pssScriptHost->loadFile(preScript);
+        }
+#endif
         g_pssDemoRoot = g_pssLoader->loadFile(g_pssMenuPath, g_uiContext->root());
         if (g_pssDemoRoot) {
             g_pssDemoRoot->setAbsolute(true);
