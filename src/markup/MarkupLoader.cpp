@@ -11,6 +11,8 @@
 #include "PerfUI/TabBar.h"
 #include "PerfUI/ComboBox.h"
 #include "PerfUI/TextInput.h"
+#include "PerfUI/SvgImage.h"
+#include "PerfUI/Theme.h"
 
 #include <pugixml.hpp>
 #include <fstream>
@@ -65,13 +67,15 @@ static bool isKnownWidgetAttribute(const std::string& tag, const std::string& ke
     } else if (tag == "Slider") {
         return key == "value" || key == "min" || key == "max" || key == "step" || key == "label" || key == "fillColor" || key == "fill-color" || key == "trackColor" || key == "track-color" || key == "onValueChanged" || key == "onChange";
     } else if (tag == "Image") {
-        return key == "texture" || key == "tint";
+        return key == "texture" || key == "src" || key == "tint" || key == "uv" || key == "flip-y" || key == "flipY";
     } else if (tag == "TabBar") {
         return key == "tabs" || key == "selectedTab" || key == "onTabChanged" || key == "onChange";
     } else if (tag == "ComboBox") {
         return key == "options" || key == "selectedIndex" || key == "onSelectionChanged" || key == "onChange";
     } else if (tag == "TextInput") {
         return key == "placeholder" || key == "text" || key == "fontSize" || key == "font-size" || key == "onTextChanged" || key == "onChange" || key == "onSubmit" || key == "onEnter";
+    } else if (tag == "Divider") {
+        return key == "orientation" || key == "thickness" || key == "color" || key == "length";
     }
 
     return false;
@@ -203,6 +207,15 @@ UIElement* MarkupLoader::loadString(std::string_view xml, UIElement* parent) {
 void MarkupLoader::setupElementProperties(UIElement* element, const std::string& tag, const AttrMap& attrs, int lineNumber) {
     if (!element) return;
 
+    // Handle id and name: id takes precedence
+    auto itId = attrs.find("id");
+    auto itName = attrs.find("name");
+    if (itId != attrs.end()) {
+        element->name(itId->second);
+    } else if (itName != attrs.end()) {
+        element->name(itName->second);
+    }
+
     for (const auto& [k, v] : attrs) {
         if (!isKnownWidgetAttribute(tag, k)) {
             m_lastResult.warnings.push_back("[Line " + std::to_string(lineNumber) + "] Widget '" + tag + "' ignoring unknown attribute '" + k + "'.");
@@ -249,6 +262,36 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
                     }
                     panel->backgroundImageSlice(source, destination);
                 }
+            }
+        }
+    }
+
+    if (tag == "SvgImage" || tag == "Svg") {
+        if (auto* svg = dynamic_cast<SvgImage*>(element)) {
+            std::filesystem::path asset(svg->src());
+            if (!asset.empty() && asset.is_relative() && !m_sourceFilePath.empty()) {
+                const std::string first = asset.begin()->string();
+                if (first != "Data" && first != "data") {
+                    auto resolved = m_sourceFilePath.parent_path() / asset;
+                    if (std::filesystem::exists(resolved)) {
+                        svg->src(resolved.string());
+                    } else if (std::filesystem::exists("Data" / asset)) {
+                        svg->src(("Data" / asset).string());
+                    }
+                }
+            }
+        }
+    }
+
+    if (tag == "Image") {
+        if (auto* img = dynamic_cast<Image*>(element)) {
+            if (auto it = attrs.find("src"); it != attrs.end()) {
+                std::filesystem::path asset(it->second);
+                const std::string first = asset.empty() ? "" : asset.begin()->string();
+                if (asset.is_relative() && !m_sourceFilePath.empty() && first != "Data" && first != "data") {
+                    asset = m_sourceFilePath.parent_path() / asset;
+                }
+                img->texture(m_context.loadTexture(asset.string()));
             }
         }
     }
@@ -411,11 +454,31 @@ UIElement* MarkupLoader::parseAndBuildTree(std::string_view xml, UIElement* pare
         return nullptr;
     }
 
+    if (std::string_view(rootNode.name()) == "Theme") {
+        std::string themeName;
+        if (Theme::LoadFromXml(xml, &themeName, true)) {
+            m_lastResult.success = true;
+            return nullptr;
+        } else {
+            m_lastResult.success = false;
+            m_lastResult.errors.push_back("Failed to parse <Theme> XML element");
+            return nullptr;
+        }
+    }
+
     std::function<UIElement*(pugi::xml_node, UIElement*)> buildElement =
         [&](pugi::xml_node node, UIElement* currentParent) -> UIElement* {
 
         std::string tag = node.name();
         int line = calculateLineNumber(xml, node.offset_debug());
+
+        if (tag == "Theme") {
+            std::ostringstream ss;
+            node.print(ss, "", pugi::format_raw);
+            std::string themeXml = ss.str();
+            Theme::LoadFromXml(themeXml, nullptr, true);
+            return nullptr;
+        }
 
         if (tag == "UI") {
             if (auto scriptAttr = node.attribute("script")) {

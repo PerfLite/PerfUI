@@ -117,6 +117,16 @@ public:
     void setOpacity(float opacity);
     UIElement& opacity(float opacity) { setOpacity(opacity); return *this; }
 
+    enum class AnimProp {
+        Position,
+        Scale,
+        Size,
+        Alpha,
+        Color
+    };
+    void notifyAnimStarted(AnimProp prop);
+    void notifySpringStarted(AnimProp prop);
+
     // Animation & Physics Springs
     ElementAnimator& animate();
     ElementSpring& spring();
@@ -125,6 +135,39 @@ public:
 
     std::shared_ptr<bool> aliveToken() const { return m_aliveToken; }
     WeakElementRef weakRef();
+
+    // Visual Transform Layer (Phase 2 - independent of flex layout, zero layout dirtying)
+    Point renderOffset() const;
+    void setRenderOffset(const Point& offset);
+    void setRenderOffset(const Point& offset, const Point& offsetPercent);
+    Point renderOffsetPercent() const;
+    void setRenderOffsetPercent(const Point& percent);
+    UIElement& renderOffset(Point offset);
+
+    Point renderScale() const;
+    void setRenderScale(const Point& scale);
+    void setRenderScale(float uniformScale);
+    UIElement& renderScale(Point scale);
+    UIElement& renderScale(float uniformScale);
+
+    Point pivot() const;
+    void setPivot(const Point& pivot);
+    UIElement& pivot(Point pivot);
+
+    float renderOpacityMultiplier() const;
+    void setRenderOpacityMultiplier(float mult);
+    UIElement& renderOpacityMultiplier(float mult);
+
+    bool hasVisualTransform() const;
+    Point visualPosition() const;
+    Point accumulatedRenderOffset() const;
+    Point accumulatedRenderScale() const;
+    Rect visualBounds() const;
+
+    // Blending Mode (Zero struct size overhead)
+    BlendMode blendMode() const;
+    void setBlendMode(BlendMode mode);
+    UIElement& blendMode(BlendMode mode);
 
     // Bounds & Geometry
     const Rect& bounds() const { return m_bounds; }

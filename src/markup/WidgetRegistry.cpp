@@ -30,6 +30,7 @@
 #include "PerfUI/Sidebar.h"
 #include "PerfUI/SvgImage.h"
 #include "PerfUI/WorldAnchor.h"
+#include "PerfUI/SettingsView.h"
 #include "PerfUI/UIContext.h"
 
 #include <sstream>
@@ -68,14 +69,20 @@ void WidgetRegistry::clear() {
     m_builtinsRegistered = false;
 }
 
+static std::string resolveWidgetName(const AttrMap& attrs, const std::string& defaultName) {
+    auto itId = attrs.find("id");
+    if (itId != attrs.end() && !itId->second.empty()) return itId->second;
+    auto itName = attrs.find("name");
+    if (itName != attrs.end() && !itName->second.empty()) return itName->second;
+    return defaultName;
+}
+
 void WidgetRegistry::registerBuiltinWidgets() {
     if (m_builtinsRegistered) return;
 
     // 1. Panel
     registerWidget("Panel", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
-        std::string name = "Panel";
-        auto itName = attrs.find("name");
-        if (itName != attrs.end()) name = itName->second;
+        std::string name = resolveWidgetName(attrs, "Panel");
 
         auto panel = std::make_unique<Panel>(name);
 
@@ -90,8 +97,16 @@ void WidgetRegistry::registerBuiltinWidgets() {
                 panel->cornerRadius(parseNumberOrToken(v));
             } else if (k == "shadow") {
                 panel->shadow(parseBool(v, true));
+            } else if (k == "liquid-glass" || k == "liquid_glass") {
+                panel->liquidGlass(parseBool(v, true));
+                if (panel->liquidGlass()) {
+                    panel->backdropBlur(true, 1.5f);
+                }
             } else if (k == "backdrop-blur" || k == "blur" || k == "glass") {
-                if (v == "false" || v == "0" || v == "no") {
+                if (v == "liquid" || v == "liquid-glass" || v == "liquid_glass") {
+                    panel->liquidGlass(true);
+                    panel->backdropBlur(true, 1.5f);
+                } else if (v == "false" || v == "0" || v == "no") {
                     panel->backdropBlur(false);
                 } else if (v == "true" || v == "1" || v == "yes") {
                     panel->backdropBlur(true, 1.0f);
@@ -311,10 +326,8 @@ void WidgetRegistry::registerBuiltinWidgets() {
 
     // 8. Image
     registerWidget("Image", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
-        std::string name = "Image";
+        std::string name = resolveWidgetName(attrs, "Image");
         uint64_t tex = 0;
-        auto itName = attrs.find("name");
-        if (itName != attrs.end()) name = itName->second;
         auto itTex = attrs.find("texture");
         if (itTex != attrs.end()) tex = static_cast<uint64_t>(std::strtoull(itTex->second.c_str(), nullptr, 10));
 
@@ -528,6 +541,12 @@ void WidgetRegistry::registerBuiltinWidgets() {
                 div->thickness(parseNumberOrToken(v, 1.0f));
             } else if (k == "color") {
                 div->color(parseColorOrToken(v));
+            } else if (k == "length") {
+                if (orientation == LayoutDirection::Vertical) {
+                    div->layout().height(parseDimension(v));
+                } else {
+                    div->layout().width(parseDimension(v));
+                }
             }
         }
 
@@ -997,6 +1016,233 @@ void WidgetRegistry::registerBuiltinWidgets() {
             return parent->addChild(std::move(anchor));
         }
         return anchor.release();
+    });
+
+    // 33. SettingsView
+    registerWidget("SettingsView", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "SettingsView";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+
+        auto sv = std::make_unique<SettingsView>(std::move(name));
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "gap") {
+                sv->layout().gap(parseNumberOrToken(v, 12.0f));
+            } else if (k == "padding") {
+                sv->layout().padding(parseNumberOrToken(v, 16.0f));
+            }
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(sv));
+        }
+        return sv.release();
+    });
+
+    // 34. SettingsSection
+    registerWidget("SettingsSection", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "SettingsSection";
+        std::string title = "Section";
+        auto itName = attrs.find("name");
+        if (itName != attrs.end()) name = itName->second;
+        auto itTitle = attrs.find("title");
+        if (itTitle != attrs.end()) title = itTitle->second;
+
+        auto sec = std::make_unique<SettingsSection>(title);
+        if (itName != attrs.end()) sec->name(itName->second);
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "gap") {
+                sec->layout().gap(parseNumberOrToken(v, 6.0f));
+            }
+        }
+
+        if (parent) {
+            return parent->addChild(std::move(sec));
+        }
+        return sec.release();
+    });
+
+    // 35. SettingToggle / Toggle (Settings Section row)
+    auto registerToggle = [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "SettingToggle";
+        std::string label = "Toggle";
+        bool initialValue = false;
+        std::string tooltip = "";
+        for (const auto& [k, v] : attrs) {
+            if (k == "name") name = v;
+            else if (k == "label" || k == "text") label = v;
+            else if (k == "value" || k == "checked") initialValue = parseBool(v, false);
+            else if (k == "tooltip") tooltip = v;
+        }
+
+        if (auto* sec = dynamic_cast<SettingsSection*>(parent)) {
+            auto* cb = sec->addToggle(label, initialValue, tooltip, nullptr);
+            if (cb) cb->name(name);
+            return cb;
+        }
+        auto cb = std::make_unique<Checkbox>(label);
+        cb->name(name);
+        cb->checked(initialValue);
+        if (!tooltip.empty()) cb->tooltip(tooltip);
+        if (parent) return parent->addChild(std::move(cb));
+        return cb.release();
+    };
+    registerWidget("SettingToggle", registerToggle);
+    registerWidget("Toggle", registerToggle);
+
+    // 36. SettingSlider (Settings Section row)
+    registerWidget("SettingSlider", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "SettingSlider";
+        std::string label = "Slider";
+        float minVal = 0.0f;
+        float maxVal = 1.0f;
+        float initialValue = 0.5f;
+        std::string tooltip = "";
+        std::string format = "%.2f";
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "name") name = v;
+            else if (k == "label") label = v;
+            else if (k == "min") minVal = parseNumberOrToken(v, 0.0f);
+            else if (k == "max") maxVal = parseNumberOrToken(v, 1.0f);
+            else if (k == "value") initialValue = parseNumberOrToken(v, 0.5f);
+            else if (k == "format") format = v;
+            else if (k == "tooltip") tooltip = v;
+        }
+
+        if (auto* sec = dynamic_cast<SettingsSection*>(parent)) {
+            auto* sl = sec->addSlider(label, minVal, maxVal, initialValue, tooltip, nullptr, format);
+            if (sl) sl->name(name);
+            return sl;
+        }
+        auto sl = std::make_unique<Slider>(initialValue, minVal, maxVal);
+        sl->name(name);
+        if (!tooltip.empty()) sl->tooltip(tooltip);
+        if (parent) return parent->addChild(std::move(sl));
+        return sl.release();
+    });
+
+    // 37. SettingChoice (Settings Section row)
+    registerWidget("SettingChoice", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "SettingChoice";
+        std::string label = "Choice";
+        std::vector<std::string> options;
+        size_t initialIndex = 0;
+        std::string tooltip = "";
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "name") name = v;
+            else if (k == "label") label = v;
+            else if (k == "options") {
+                std::string s = v;
+                std::stringstream ss(s);
+                std::string opt;
+                while (std::getline(ss, opt, ',')) {
+                    size_t first = opt.find_first_not_of(" \t\r\n");
+                    size_t last = opt.find_last_not_of(" \t\r\n");
+                    if (first != std::string::npos) {
+                        options.push_back(opt.substr(first, last - first + 1));
+                    }
+                }
+            } else if (k == "selected" || k == "value") {
+                initialIndex = static_cast<size_t>(parseNumberOrToken(v, 0.0f));
+            } else if (k == "tooltip") tooltip = v;
+        }
+
+        if (auto* sec = dynamic_cast<SettingsSection*>(parent)) {
+            auto* combo = sec->addChoice(label, options, initialIndex, tooltip, nullptr);
+            if (combo) combo->name(name);
+            return combo;
+        }
+        auto combo = std::make_unique<ComboBox>(options, initialIndex);
+        combo->name(name);
+        if (!tooltip.empty()) combo->tooltip(tooltip);
+        if (parent) return parent->addChild(std::move(combo));
+        return combo.release();
+    });
+
+    // 38. SettingTextInput (Settings Section row)
+    registerWidget("SettingTextInput", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "SettingTextInput";
+        std::string label = "Text";
+        std::string placeholder = "";
+        std::string initialValue = "";
+        std::string tooltip = "";
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "name") name = v;
+            else if (k == "label") label = v;
+            else if (k == "placeholder") placeholder = v;
+            else if (k == "value") initialValue = v;
+            else if (k == "tooltip") tooltip = v;
+        }
+
+        if (auto* sec = dynamic_cast<SettingsSection*>(parent)) {
+            auto* input = sec->addTextInput(label, placeholder, initialValue, tooltip, nullptr);
+            if (input) input->name(name);
+            return input;
+        }
+        auto input = std::make_unique<TextInput>(placeholder);
+        input->name(name);
+        input->text(initialValue);
+        if (!tooltip.empty()) input->tooltip(tooltip);
+        if (parent) return parent->addChild(std::move(input));
+        return input.release();
+    });
+
+    // 39. SettingButton (Settings Section row)
+    registerWidget("SettingButton", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "SettingButton";
+        std::string label = "Action";
+        std::string buttonText = "Click";
+        std::string tooltip = "";
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "name") name = v;
+            else if (k == "label") label = v;
+            else if (k == "button" || k == "text") buttonText = v;
+            else if (k == "tooltip") tooltip = v;
+        }
+
+        if (auto* sec = dynamic_cast<SettingsSection*>(parent)) {
+            auto* btn = sec->addButton(label, buttonText, tooltip, nullptr);
+            if (btn) btn->name(name);
+            return btn;
+        }
+        auto btn = std::make_unique<Button>(buttonText);
+        btn->name(name);
+        if (!tooltip.empty()) btn->tooltip(tooltip);
+        if (parent) return parent->addChild(std::move(btn));
+        return btn.release();
+    });
+
+    // 40. SettingKeybind (Settings Section row)
+    registerWidget("SettingKeybind", [](UIElement* parent, const AttrMap& attrs) -> UIElement* {
+        std::string name = "SettingKeybind";
+        std::string label = "Keybind";
+        uint32_t key = 0x77; // default VK_F8
+        std::string tooltip = "";
+
+        for (const auto& [k, v] : attrs) {
+            if (k == "name") name = v;
+            else if (k == "label") label = v;
+            else if (k == "key") {
+                key = static_cast<uint32_t>(parseNumberOrToken(v, 0x77));
+            } else if (k == "tooltip") tooltip = v;
+        }
+
+        if (auto* sec = dynamic_cast<SettingsSection*>(parent)) {
+            auto* btn = sec->addKeybind(label, key, tooltip, nullptr);
+            if (btn) btn->name(name);
+            return btn;
+        }
+        auto btn = std::make_unique<Button>("[ Key ]");
+        btn->name(name);
+        if (!tooltip.empty()) btn->tooltip(tooltip);
+        if (parent) return parent->addChild(std::move(btn));
+        return btn.release();
     });
 
     m_builtinsRegistered = true;

@@ -1,5 +1,6 @@
 #include "MarkupLayoutParser.h"
 #include "PerfUI/Localization.h"
+#include "PerfUI/Theme.h"
 #include <sstream>
 #include <algorithm>
 #include <cctype>
@@ -32,23 +33,25 @@ float parseNumberOrToken(std::string_view val, float defaultValue) {
     std::string s = trim(val);
     if (s.empty()) return defaultValue;
 
-    // Theme Metrics Tokens
-    if (s == "$spacingXS") return 4.0f;
-    if (s == "$spacingSM") return 8.0f;
-    if (s == "$spacingMD") return 16.0f;
-    if (s == "$spacingLG") return 24.0f;
-    if (s == "$spacingXL") return 32.0f;
+    const auto& curTheme = Theme::Current();
 
-    if (s == "$radiusSmall") return 4.0f;
-    if (s == "$radiusMedium") return 8.0f;
-    if (s == "$radiusLarge") return 12.0f;
+    // Theme Metrics Tokens
+    if (s == "$spacingXS") return curTheme.metrics.spacingXS;
+    if (s == "$spacingSM") return curTheme.metrics.spacingSM;
+    if (s == "$spacingMD") return curTheme.metrics.spacingMD;
+    if (s == "$spacingLG") return curTheme.metrics.spacingLG;
+    if (s == "$spacingXL") return curTheme.metrics.spacingXL;
+
+    if (s == "$radiusSmall") return curTheme.metrics.radiusSmall;
+    if (s == "$radiusMedium") return curTheme.metrics.radiusMedium;
+    if (s == "$radiusLarge") return curTheme.metrics.radiusLarge;
 
     // Theme Typography Tokens
-    if (s == "$fontSmall" || s == "small") return 12.0f;
-    if (s == "$fontBody" || s == "body") return 14.0f;
-    if (s == "$fontMedium" || s == "medium") return 16.0f;
-    if (s == "$fontTitle" || s == "title") return 20.0f;
-    if (s == "$fontHeader" || s == "header") return 26.0f;
+    if (s == "$fontSmall" || s == "small") return curTheme.typography.fontSmall;
+    if (s == "$fontBody" || s == "body") return curTheme.typography.fontBody;
+    if (s == "$fontMedium" || s == "medium") return curTheme.typography.fontMedium;
+    if (s == "$fontTitle" || s == "title") return curTheme.typography.fontTitle;
+    if (s == "$fontHeader" || s == "header") return curTheme.typography.fontHeader;
 
     char* endPtr = nullptr;
     float res = std::strtof(s.c_str(), &endPtr);
@@ -99,22 +102,65 @@ Color parseColorOrToken(std::string_view val, Color defaultColor) {
         }
     }
 
+    std::string lower = toLower(s);
+
+    // CSS rgb(...) and rgba(...) syntax support
+    if (lower.rfind("rgb", 0) == 0) {
+        auto openParen = s.find('(');
+        auto closeParen = s.rfind(')');
+        if (openParen != std::string::npos && closeParen != std::string::npos && closeParen > openParen) {
+            std::string_view inner(s.data() + openParen + 1, closeParen - openParen - 1);
+            float vals[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+            size_t count = 0;
+            const char* ptr = inner.data();
+            const char* end = ptr + inner.size();
+            while (ptr < end && count < 4) {
+                while (ptr < end && (*ptr == ' ' || *ptr == ',' || *ptr == '\t' || *ptr == '/')) ++ptr;
+                if (ptr >= end) break;
+                char* next = nullptr;
+                float v = std::strtof(ptr, &next);
+                if (next == ptr) break;
+                vals[count++] = v;
+                ptr = next;
+            }
+            if (count >= 3) {
+                uint8_t r = static_cast<uint8_t>(std::clamp(vals[0], 0.0f, 255.0f));
+                uint8_t g = static_cast<uint8_t>(std::clamp(vals[1], 0.0f, 255.0f));
+                uint8_t b = static_cast<uint8_t>(std::clamp(vals[2], 0.0f, 255.0f));
+                uint8_t a = 255;
+                if (count >= 4) {
+                    if (vals[3] <= 1.0f && vals[3] >= 0.0f) {
+                        a = static_cast<uint8_t>(vals[3] * 255.0f + 0.5f);
+                    } else {
+                        a = static_cast<uint8_t>(std::clamp(vals[3], 0.0f, 255.0f));
+                    }
+                }
+                return Color(r, g, b, a);
+            }
+        }
+    }
+
     // Theme Color Tokens
-    if (s == "$surfaceBase") return Color(13, 17, 23, 235);
-    if (s == "$surfaceElevated") return Color(22, 27, 34, 220);
-    if (s == "$surfaceActive") return Color(33, 38, 45, 245);
-    if (s == "$borderSubtle") return Color::BorderSubtle();
-    if (s == "$borderStrong") return Color::BorderStrong();
-    if (s == "$borderFocus") return Color::BorderFocus();
-    if (s == "$accent" || s == "$nordicGold") return Color::NordicGold();
-    if (s == "$textPrimary") return Color::TextPrimary();
-    if (s == "$textSecondary") return Color::TextSecondary();
-    if (s == "$textMuted") return Color(90, 100, 115, 255);
+    const auto& curTheme = Theme::Current();
+    if (s == "$surfaceBase") return curTheme.colors.surfaceBase;
+    if (s == "$surfaceElevated") return curTheme.colors.surfaceElevated;
+    if (s == "$surfaceActive") return curTheme.colors.surfaceActive;
+    if (s == "$borderSubtle") return curTheme.colors.borderSubtle;
+    if (s == "$borderStrong") return curTheme.colors.borderStrong;
+    if (s == "$borderFocus") return curTheme.colors.borderFocus;
+    if (s == "$accent" || s == "$nordicGold") return curTheme.colors.textAccent;
+    if (s == "$textPrimary") return curTheme.colors.textPrimary;
+    if (s == "$textSecondary") return curTheme.colors.textSecondary;
+    if (s == "$textAccent") return curTheme.colors.textAccent;
+    if (s == "$textSuccess") return curTheme.colors.textSuccess;
+    if (s == "$textDisabled") return curTheme.colors.textDisabled;
+    if (s == "$textMuted") return curTheme.colors.textSecondary;
+    if (s == "$focusGlow") return curTheme.colors.focusGlow;
+    if (s == "$selectionFill") return curTheme.colors.selectionFill;
     if (s == "$white") return Color::White();
     if (s == "$black") return Color::Black();
     if (s == "$transparent") return Color::Transparent();
 
-    std::string lower = toLower(s);
     if (lower == "white") return Color::White();
     if (lower == "black") return Color::Black();
     if (lower == "transparent") return Color::Transparent();
@@ -183,9 +229,107 @@ std::string resolveLocalizedText(std::string_view val) {
     return LocalizationService::instance().expandText(val);
 }
 
+bool parseTransformOffset(std::string_view val, Point& pxOffset, Point& pctOffset, bool& hasPct) {
+    std::string s = trim(val);
+    if (s.empty()) return false;
+    std::replace(s.begin(), s.end(), ',', ' ');
+    std::stringstream ss(s);
+    std::vector<std::string> tokens;
+    std::string t;
+    while (ss >> t) tokens.push_back(t);
+    if (tokens.empty()) return false;
+
+    pxOffset = { 0.0f, 0.0f };
+    pctOffset = { 0.0f, 0.0f };
+    hasPct = false;
+
+    auto parseOne = [](std::string tok, float& px, float& pct, bool& isPct) {
+        if (tok.empty()) return;
+        if (tok.back() == '%') {
+            pct = parseNumberOrToken(tok.substr(0, tok.size() - 1), 0.0f);
+            isPct = true;
+        } else {
+            if (tok.size() >= 2 && tok.substr(tok.size() - 2) == "px") {
+                tok = tok.substr(0, tok.size() - 2);
+            }
+            px = parseNumberOrToken(tok, 0.0f);
+        }
+    };
+
+    bool isPctX = false;
+    parseOne(tokens[0], pxOffset.x, pctOffset.x, isPctX);
+    if (isPctX) hasPct = true;
+
+    if (tokens.size() >= 2) {
+        bool isPctY = false;
+        parseOne(tokens[1], pxOffset.y, pctOffset.y, isPctY);
+        if (isPctY) hasPct = true;
+    }
+
+    return true;
+}
+
+bool parseTransformScale(std::string_view val, Point& scale) {
+    std::string s = trim(val);
+    if (s.empty()) return false;
+    std::replace(s.begin(), s.end(), ',', ' ');
+    std::stringstream ss(s);
+    std::vector<std::string> tokens;
+    std::string t;
+    while (ss >> t) tokens.push_back(t);
+    if (tokens.empty()) return false;
+
+    auto parseOne = [](std::string tok) -> float {
+        if (tok.empty()) return 1.0f;
+        if (tok.back() == '%') {
+            return parseNumberOrToken(tok.substr(0, tok.size() - 1), 100.0f) / 100.0f;
+        }
+        return parseNumberOrToken(tok, 1.0f);
+    };
+
+    float sx = parseOne(tokens[0]);
+    float sy = (tokens.size() >= 2) ? parseOne(tokens[1]) : sx;
+    scale = Point{ sx, sy };
+    return true;
+}
+
+bool parseTransformPivot(std::string_view val, Point& pivot) {
+    std::string s = trim(val);
+    if (s.empty()) return false;
+    std::replace(s.begin(), s.end(), ',', ' ');
+    std::stringstream ss(s);
+    std::vector<std::string> tokens;
+    std::string t;
+    while (ss >> t) tokens.push_back(t);
+    if (tokens.empty()) return false;
+
+    auto parseOne = [](std::string tok) -> float {
+        std::string lower = toLower(tok);
+        if (lower == "center") return 0.5f;
+        if (lower == "left" || lower == "top") return 0.0f;
+        if (lower == "right" || lower == "bottom") return 1.0f;
+        if (tok.back() == '%') {
+            return parseNumberOrToken(tok.substr(0, tok.size() - 1), 50.0f) / 100.0f;
+        }
+        return parseNumberOrToken(tok, 0.5f);
+    };
+
+    float px = parseOne(tokens[0]);
+    float py = (tokens.size() >= 2) ? parseOne(tokens[1]) : px;
+    pivot = Point{ px, py };
+    return true;
+}
 bool isCommonLayoutAttribute(const std::string& key) {
     static const std::unordered_map<std::string, bool> s_keys = {
         { "name", true },
+        { "id", true },
+        { "opacity", true },
+        { "transform-offset", true },
+        { "transformOffset", true },
+        { "transform-scale", true },
+        { "transformScale", true },
+        { "transform-pivot", true },
+        { "transformPivot", true },
         { "direction", true },
         { "flex-direction", true },
         { "align", true },
@@ -211,6 +355,8 @@ bool isCommonLayoutAttribute(const std::string& key) {
         { "focusable", true },
         { "tooltip", true },
         { "class", true },
+        { "blend-mode", true },
+        { "blendMode", true },
         { "bind", true },
         { "position", true },
         { "left", true }, { "right", true }, { "top", true }, { "bottom", true }, { "center-x", true }
@@ -221,6 +367,17 @@ bool isCommonLayoutAttribute(const std::string& key) {
 bool applyCommonLayoutAttribute(UIElement* element, const std::string& key, const std::string& val) {
     if (!element) return false;
     auto& props = element->layout();
+
+    if (key == "id") {
+        element->name(val);
+        return true;
+    }
+    if (key == "name") {
+        if (element->name().empty()) {
+            element->name(val);
+        }
+        return true;
+    }
 
     if (key == "position") {
         std::string lower = toLower(trim(val));
@@ -343,6 +500,44 @@ bool applyCommonLayoutAttribute(UIElement* element, const std::string& key, cons
         while (ss >> c) {
             element->addClass(c);
         }
+        return true;
+    }
+    if (key == "blend-mode" || key == "blendMode") {
+        if (val == "additive" || val == "add") element->blendMode(BlendMode::Additive);
+        else if (val == "multiply" || val == "mult") element->blendMode(BlendMode::Multiply);
+        else if (val == "screen") element->blendMode(BlendMode::Screen);
+        else element->blendMode(BlendMode::Normal);
+        return true;
+    }
+    if (key == "opacity") {
+        element->setOpacity(parseNumberOrToken(val, 1.0f));
+        return true;
+    }
+    if (key == "transform-offset" || key == "transformOffset") {
+        Point px{ 0.0f, 0.0f };
+        Point pct{ 0.0f, 0.0f };
+        bool hasPct = false;
+        if (parseTransformOffset(val, px, pct, hasPct)) {
+            element->setRenderOffset(px, pct);
+        }
+        return true;
+    }
+    if (key == "transform-scale" || key == "transformScale") {
+        Point scale{ 1.0f, 1.0f };
+        if (parseTransformScale(val, scale)) {
+            element->setRenderScale(scale);
+        }
+        return true;
+    }
+    if (key == "transform-pivot" || key == "transformPivot") {
+        Point piv{ 0.5f, 0.5f };
+        if (parseTransformPivot(val, piv)) {
+            element->setPivot(piv);
+        }
+        return true;
+    }
+    if (key == "id") {
+        element->name(val);
         return true;
     }
     if (key == "name" || key == "bind") {

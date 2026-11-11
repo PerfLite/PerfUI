@@ -1,0 +1,31 @@
+<UI>
+    <!-- Dark Background Root Container -->
+    <Panel id="RootCanvas" width="800" height="600" bg="#0B0D14" direction="column" justify="center" align="center">
+        
+        <Text id="Title" text="PerfUI Stage 0: Composite Effects Demo" font-size="22" color="#C8A45A" margin-bottom="20" />
+        
+        <!-- Overlapping Stage Area -->
+        <Panel id="Stage" width="680" height="420" bg="#121622" radius="16" border="#243048" border-width="2"
+               direction="row" justify="center" align="center">
+            
+            <!-- Panel 1: Base Nebula Layer with 0.85 Opacity & Visual Scale -->
+            <Panel id="BasePanel" width="280" height="320"
+                   bg="#1E284A" radius="14" border="#3D5A9C" border-width="2"
+                   opacity="0.85" transform-scale="1.05" transform-pivot="center"
+                   transform-offset="-20px 0"
+                   bg-image="textures/nebula.png">
+                <Text text="Base Panel (Opacity 0.85)" font-size="16" color="#A0C0FF" margin="16" />
+            </Panel>
+
+            <!-- Panel 2: Additive Rune Layer overlapping with BlendMode::Additive -->
+            <Panel id="GlowPanel" width="280" height="320"
+                   bg="#7A3018" radius="14" border="#FF8040" border-width="2"
+                   opacity="0.8" blend-mode="additive"
+                   transform-offset="-60px 20px" transform-scale="1.1" transform-pivot="center"
+                   bg-image="textures/rune_glow.png">
+                <Text text="Additive Glow Panel" font-size="16" color="#FFD080" margin="16" />
+            </Panel>
+
+        </Panel>
+    </Panel>
+</UI>

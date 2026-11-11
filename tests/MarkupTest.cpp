@@ -10,6 +10,7 @@
 #include "PerfUI/LayoutEngine.h"
 #include "PerfUI/MapCanvas.h"
 #include "PerfUI/WorldAnchor.h"
+#include "PerfUI/SettingsView.h"
 #include "PerfUI/Localization.h"
 #include "../src/backends/mock/MockRenderBackend.h"
 
@@ -607,6 +608,179 @@ int main() {
         loc.loadDictionaryContent("ru", skseDict);
         TEST_ASSERT(loc.translate("QUEST_NAME") == "Драконоборец", "SKSE tab dictionary parsed QUEST_NAME");
         TEST_ASSERT(loc.translate("$GOLD_AMOUNT") == "1000 золота", "SKSE tab dictionary parsed GOLD_AMOUNT");
+
+        // Test loadTranslationsFromFolder with multi-mod JSON merge
+        std::filesystem::path tempTransDir = std::filesystem::temp_directory_path() / "PerfUI_Test_Trans";
+        std::filesystem::create_directories(tempTransDir);
+        {
+            std::ofstream f1(tempTransDir / "ru.json");
+            f1 << R"({ "MOD_ITEM": "Двемерский шлем" })";
+        }
+        {
+            std::ofstream f2(tempTransDir / "ExtraMod_ru.json");
+            f2 << R"({ "EXTRA_GOLD": "500 монет" })";
+        }
+        loc.loadTranslationsFromFolder(tempTransDir);
+        TEST_ASSERT(loc.translate("MOD_ITEM") == "Двемерский шлем", "Folder loaded ru.json MOD_ITEM");
+        TEST_ASSERT(loc.translate("EXTRA_GOLD") == "500 монет", "Folder merged ExtraMod_ru.json EXTRA_GOLD");
+        std::error_code ec;
+        std::filesystem::remove_all(tempTransDir, ec);
+    }
+
+    // -------------------------------------------------------------
+    // Test 13: SettingsView & SettingsSection Markup Parsing
+    // -------------------------------------------------------------
+    {
+        std::cout << "\nTest 13: SettingsView & SettingsSection Markup Parsing...\n";
+        PerfUI::UIContext context;
+        context.setViewportSize({ 1920.0f, 1080.0f });
+        PerfUI::MarkupLoader loader(context);
+        const std::string xml = R"(
+            <Panel name="Root" width="800" height="600">
+                <SettingsView name="MySettings" flex="1">
+                    <SettingsSection name="GfxSection" title="GRAPHICS & VISUALS">
+                        <SettingToggle name="BlurToggle" label="Motion Blur" value="true" tooltip="Enable blur" />
+                        <SettingSlider name="OpacitySlider" label="Window Opacity" min="0.2" max="1.0" value="0.85" format="%.2f" />
+                        <SettingChoice name="ThemeChoice" label="Active Theme" options="Nordic Gold, Imperial Ruby, Winterhold Frost" selected="1" />
+                        <SettingButton name="ResetBtn" label="Reset Options" button="Reset All" />
+                    </SettingsSection>
+                </SettingsView>
+            </Panel>
+        )";
+
+        PerfUI::UIElement* root = loader.loadString(xml);
+        TEST_ASSERT(root != nullptr, "SettingsView XML root loaded");
+
+        auto* sv = dynamic_cast<PerfUI::SettingsView*>(loader.findByName("MySettings"));
+        TEST_ASSERT(sv != nullptr, "SettingsView element created");
+
+        auto* sec = dynamic_cast<PerfUI::SettingsSection*>(loader.findByName("GfxSection"));
+        TEST_ASSERT(sec != nullptr, "SettingsSection element created");
+        TEST_ASSERT(sec && sec->title() == "GRAPHICS & VISUALS", "SettingsSection title matches");
+
+        auto* toggle = dynamic_cast<PerfUI::Checkbox*>(loader.findByName("BlurToggle"));
+        TEST_ASSERT(toggle != nullptr && toggle->isChecked() == true, "SettingToggle created and checked");
+
+        auto* slider = dynamic_cast<PerfUI::Slider*>(loader.findByName("OpacitySlider"));
+        TEST_ASSERT(slider != nullptr && std::abs(slider->value() - 0.85f) < 0.01f, "SettingSlider value initialized to 0.85");
+
+        auto* choice = dynamic_cast<PerfUI::ComboBox*>(loader.findByName("ThemeChoice"));
+        TEST_ASSERT(choice != nullptr && choice->selectedIndex() == 1, "SettingChoice options parsed and index selected");
+
+        auto* btn = dynamic_cast<PerfUI::Button*>(loader.findByName("ResetBtn"));
+        TEST_ASSERT(btn != nullptr && btn->text() == "Reset All", "SettingButton created with button text");
+    }
+
+    // -------------------------------------------------------------
+    // Test 14: XML Themes Loading, Inheritance & Token Resolution
+    // -------------------------------------------------------------
+    std::cout << "\nTest 14: XML Themes Loading, Inheritance & Token Resolution...\n";
+    {
+        PerfUI::UIContext context;
+        PerfUI::MarkupLoader loader(context);
+
+        const std::string themeXml = R"(
+            <Theme name="Dwemer Brass" extends="Nordic Gold" apply="true">
+                <Colors surfaceBase="#14100c" borderFocus="#ebaa32" textAccent="#ffc34b" />
+                <Metrics radiusSmall="3" radiusMedium="6" radiusLarge="9" spacingSM="10" />
+                <Typography fontTitle="22" fontBody="15" />
+            </Theme>
+        )";
+
+        loader.loadString(themeXml);
+        TEST_ASSERT(PerfUI::Theme::HasTheme("Dwemer Brass"), "Dwemer Brass registered in Theme registry");
+        TEST_ASSERT(PerfUI::Theme::Current().colors.borderFocus == PerfUI::Color(0xeb, 0xaa, 0x32, 255), "Active theme borderFocus matches XML hex #ebaa32");
+        TEST_ASSERT(PerfUI::Theme::Current().colors.textAccent == PerfUI::Color(0xff, 0xc3, 0x4b, 255), "Active theme textAccent matches XML hex #ffc34b");
+        TEST_ASSERT(PerfUI::Theme::Current().metrics.spacingSM == 10.0f, "Active theme spacingSM matches XML 10.0");
+        TEST_ASSERT(PerfUI::Theme::Current().metrics.radiusSmall == 3.0f, "Active theme radiusSmall matches XML 3.0");
+        TEST_ASSERT(PerfUI::Theme::Current().typography.fontTitle == 22.0f, "Active theme fontTitle matches XML 22.0");
+
+        // Now test that layout parser resolves tokens dynamically to the active XML theme
+        const std::string layoutXml = R"(
+            <Panel name="ThemeTokenTest" gap="$spacingSM" padding="0">
+                <Text name="DwemerTitle" color="$borderFocus" font="$fontTitle" text="Dwemer Ruins" />
+            </Panel>
+        )";
+
+        auto* root = loader.loadString(layoutXml);
+        TEST_ASSERT(root != nullptr, "Layout using dynamic theme tokens loaded");
+        auto* panel = dynamic_cast<PerfUI::Panel*>(root);
+        TEST_ASSERT(panel != nullptr && panel->layout().gap() == 10.0f, "Panel gap='$spacingSM' dynamically resolved to 10.0f");
+
+        auto* text = dynamic_cast<PerfUI::Text*>(loader.findByName("DwemerTitle"));
+        TEST_ASSERT(text != nullptr && text->style().color == PerfUI::Color(0xeb, 0xaa, 0x32, 255), "Text color='$borderFocus' dynamically resolved to #ebaa32");
+        TEST_ASSERT(text != nullptr && text->style().fontSize == 22.0f, "Text font='$fontTitle' dynamically resolved to 22.0f");
+    }
+
+    // -------------------------------------------------------------
+    // Test 15: Stage 0 Markup Fast Fixes (opacity, transforms, id, image src)
+    // -------------------------------------------------------------
+    {
+        std::cout << "\nTest 15: Stage 0 Markup Fast Fixes (opacity, transforms, id, image src)...\n";
+
+        PerfUI::UIContext ctx;
+        PerfUI::MarkupLoader loader(ctx);
+
+        const std::string testXml = R"(
+            <Panel id="RootPanel" opacity="0.8" width="200" height="100"
+                   transform-offset="20px 50%" transform-scale="1.5 2.0" transform-pivot="center">
+                <Panel id="ChildPanel" name="FallbackName" opacity="0.5" width="100" height="50"
+                       transform-offset="10 -5" transform-scale="120%" transform-pivot="top left"
+                       blend-mode="additive">
+                    <Image id="BannerImg" src="textures/test_banner.png" tint="#FF8800" />
+                </Panel>
+                <Panel id="ClampedPanel" opacity="2.5" />
+            </Panel>
+        )";
+
+        auto* root = loader.loadString(testXml);
+        TEST_ASSERT(root != nullptr, "Stage 0 test markup loaded successfully");
+        TEST_ASSERT(loader.lastResult().success, "Markup loaded without errors");
+        TEST_ASSERT(loader.lastResult().warnings.empty(), "No warnings for Stage 0 attributes (opacity, transform-*, id, src)");
+
+        // 1. id as name alias
+        auto* rootPanel = loader.findByName("RootPanel");
+        TEST_ASSERT(rootPanel != nullptr, "id='RootPanel' found via findByName");
+        TEST_ASSERT(rootPanel->name() == "RootPanel", "element->name() is 'RootPanel'");
+
+        // 2. id takes priority over name
+        auto* childPanel = loader.findByName("ChildPanel");
+        TEST_ASSERT(childPanel != nullptr, "id='ChildPanel' found despite name='FallbackName'");
+        TEST_ASSERT(loader.findByName("FallbackName") == nullptr, "FallbackName was overridden by id");
+
+        // 3. Opacity and effectiveOpacity multiplication
+        TEST_ASSERT(std::abs(rootPanel->opacity() - 0.8f) < 0.001f, "RootPanel opacity is 0.8");
+        TEST_ASSERT(std::abs(childPanel->opacity() - 0.5f) < 0.001f, "ChildPanel opacity is 0.5");
+        TEST_ASSERT(std::abs(childPanel->effectiveOpacity() - (0.8f * 0.5f)) < 0.001f, "ChildPanel effectiveOpacity is 0.4 (0.8 * 0.5)");
+
+        auto* clamped = loader.findByName("ClampedPanel");
+        TEST_ASSERT(clamped != nullptr && clamped->opacity() == 1.0f, "Opacity > 1.0 clamped to 1.0");
+
+        // 4. Transform scale & pivot
+        TEST_ASSERT(rootPanel->renderScale().x == 1.5f && rootPanel->renderScale().y == 2.0f, "RootPanel scale parsed 1.5 2.0");
+        TEST_ASSERT(rootPanel->pivot().x == 0.5f && rootPanel->pivot().y == 0.5f, "RootPanel pivot parsed center (0.5 0.5)");
+
+        TEST_ASSERT(std::abs(childPanel->renderScale().x - 1.2f) < 0.001f, "ChildPanel scale parsed 120% as 1.2");
+        TEST_ASSERT(childPanel->pivot().x == 0.0f && childPanel->pivot().y == 0.0f, "ChildPanel pivot parsed top left (0.0 0.0)");
+
+        // 5. Transform offset with % evaluation
+        // Root has width=200, height=100. transform-offset="20px 50%" -> x=20, y=50 (50% of 100)
+        rootPanel->setBounds(PerfUI::Rect{ 0, 0, 200, 100 });
+        Point rootOffset = rootPanel->renderOffset();
+        TEST_ASSERT(rootOffset.x == 20.0f, "RootPanel offset X is 20px");
+        TEST_ASSERT(rootOffset.y == 50.0f, "RootPanel offset Y is 50px (50% of 100)");
+
+        // Child offset "10 -5"
+        Point childOffset = childPanel->renderOffset();
+        TEST_ASSERT(childOffset.x == 10.0f && childOffset.y == -5.0f, "ChildPanel offset is {10, -5}");
+
+        // 6. BlendMode on child
+        TEST_ASSERT(childPanel->blendMode() == PerfUI::BlendMode::Additive, "ChildPanel blendMode is Additive");
+
+        // 7. Image src and tint
+        auto* img = dynamic_cast<PerfUI::Image*>(loader.findByName("BannerImg"));
+        TEST_ASSERT(img != nullptr, "Image found with id='BannerImg'");
+        TEST_ASSERT(img->tint() == PerfUI::Color(0xFF, 0x88, 0x00, 0xFF), "Image tint #FF8800 applied");
     }
 
     // -------------------------------------------------------------
