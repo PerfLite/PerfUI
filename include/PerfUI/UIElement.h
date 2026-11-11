@@ -135,7 +135,11 @@ public:
     void setInlineAttrs(std::unordered_map<std::string, std::string> attrs) { m_inlineAttrs = std::move(attrs); }
     void addInlineAttr(std::string k, std::string v) { m_inlineAttrs[std::move(k)] = std::move(v); }
 
+    bool isHovered() const { return m_hovered; }
+    bool isPressed() const { return m_pressed; }
+
     bool isStyleDirty() const { return m_styleDirty; }
+    bool hasChildStyleDirty() const { return m_childStyleDirty; }
     void markStyleDirty();
     void invalidateStyleSubtree();
     void updateStyleCascade();
@@ -290,6 +294,7 @@ protected:
     ComputedStyle m_computedStyle{};
     std::unordered_map<std::string, std::string> m_inlineAttrs;
     bool m_styleDirty{ false };
+    bool m_childStyleDirty{ false };
 };
 
 } // namespace PerfUI

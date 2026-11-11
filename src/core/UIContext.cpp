@@ -48,6 +48,13 @@ void UIContext::update(float deltaTime) {
         }
     }
 
+    if (m_root && (m_root->isStyleDirty() || m_root->hasChildStyleDirty())) {
+        m_root->updateStyleCascade();
+    }
+    if (m_activeModal && (m_activeModal->isStyleDirty() || m_activeModal->hasChildStyleDirty())) {
+        m_activeModal->updateStyleCascade();
+    }
+
     if (m_layoutDirty) {
         performLayout();
     }
@@ -250,13 +257,30 @@ void UIContext::onMouseMove(const Point& screenPos) {
     UIElement* hovered = searchRoot->hitTest(screenPos);
 
     if (hovered != m_hoveredElement) {
-        if (m_hoveredElement) {
-            m_hoveredElement->onPointerLeave();
+        std::vector<UIElement*> oldChain;
+        for (UIElement* el = m_hoveredElement; el != nullptr; el = el->parent()) {
+            oldChain.push_back(el);
         }
+
+        std::vector<UIElement*> newChain;
+        for (UIElement* el = hovered; el != nullptr; el = el->parent()) {
+            newChain.push_back(el);
+        }
+
+        for (UIElement* el : oldChain) {
+            if (std::find(newChain.begin(), newChain.end(), el) == newChain.end()) {
+                el->onPointerLeave();
+            }
+        }
+
+        for (auto it = newChain.rbegin(); it != newChain.rend(); ++it) {
+            UIElement* el = *it;
+            if (std::find(oldChain.begin(), oldChain.end(), el) == oldChain.end()) {
+                el->onPointerEnter();
+            }
+        }
+
         m_hoveredElement = hovered;
-        if (m_hoveredElement) {
-            m_hoveredElement->onPointerEnter();
-        }
     }
 }
 

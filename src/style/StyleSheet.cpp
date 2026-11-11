@@ -294,7 +294,31 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
         else c.blendMode = BlendMode::Normal;
     } else if (lower == "background" || lower == "background-color" || lower == "bg" || lower == "bg-color") {
         c.backgroundColor = parseColorOrToken(val);
-    } else if (lower == "border-color" || lower == "border") {
+    } else if (lower == "border") {
+        std::istringstream iss(val);
+        std::string token1, token2, token3;
+        iss >> token1;
+        if (!token1.empty()) {
+            char* end = nullptr;
+            float num = std::strtof(token1.c_str(), &end);
+            if (end != token1.c_str() && (*end == '\0' || *end == 'p' || *end == 'P')) {
+                c.borderWidth = num;
+                iss >> token2;
+                if (!token2.empty()) {
+                    if (token2 == "solid" || token2 == "none") {
+                        iss >> token3;
+                        if (!token3.empty()) {
+                            c.borderColor = parseColorOrToken(token3);
+                        }
+                    } else {
+                        c.borderColor = parseColorOrToken(token2);
+                    }
+                }
+            } else {
+                c.borderColor = parseColorOrToken(token1);
+            }
+        }
+    } else if (lower == "border-color") {
         c.borderColor = parseColorOrToken(val);
     } else if (lower == "border-width") {
         c.borderWidth = parseNumberOrToken(val);

@@ -86,7 +86,10 @@ void UIElement::setVisible(bool visible) {
 }
 
 void UIElement::setEnabled(bool enabled) {
-    m_enabled = enabled;
+    if (m_enabled != enabled) {
+        m_enabled = enabled;
+        markStyleDirty();
+    }
 }
 
 bool UIElement::isFocused() const {
@@ -456,22 +459,34 @@ UIElement* UIElement::hitTest(const Point& point) {
 
 bool UIElement::onPointerDown(const Point& localPoint) {
     (void)localPoint;
-    m_pressed = true;
+    if (!m_pressed) {
+        m_pressed = true;
+        markStyleDirty();
+    }
     return false;
 }
 
 bool UIElement::onPointerUp(const Point& localPoint) {
     (void)localPoint;
-    m_pressed = false;
+    if (m_pressed) {
+        m_pressed = false;
+        markStyleDirty();
+    }
     return false;
 }
 
 void UIElement::onPointerEnter() {
-    m_hovered = true;
+    if (!m_hovered) {
+        m_hovered = true;
+        markStyleDirty();
+    }
 }
 
 void UIElement::onPointerLeave() {
-    m_hovered = false;
+    if (m_hovered) {
+        m_hovered = false;
+        markStyleDirty();
+    }
 }
 
 bool UIElement::onMouseWheel(float delta, const Point& localPoint) {
@@ -482,6 +497,7 @@ bool UIElement::onMouseWheel(float delta, const Point& localPoint) {
 
 void UIElement::onFocusChanged(bool focused) {
     (void)focused;
+    markStyleDirty();
 }
 
 bool UIElement::onAction(NavDirection dir) {
@@ -533,17 +549,23 @@ uint8_t UIElement::activePseudoClasses() const {
 
 void UIElement::markStyleDirty() {
     m_styleDirty = true;
+    for (UIElement* p = m_parent; p != nullptr; p = p->m_parent) {
+        if (p->m_childStyleDirty) break;
+        p->m_childStyleDirty = true;
+    }
 }
 
 void UIElement::invalidateStyleSubtree() {
     m_styleDirty = true;
+    m_childStyleDirty = !m_children.empty();
     for (auto& child : m_children) {
         if (child) child->invalidateStyleSubtree();
     }
 }
 
 void UIElement::updateStyleCascade() {
-    if (m_context) {
+    bool selfDirty = m_styleDirty;
+    if (m_context && selfDirty) {
         const auto& sheet = m_context->styleSheet();
         const ComputedStyle* parentStyle = m_parent ? &m_parent->computedStyle() : nullptr;
         ComputedStyle newStyle = sheet.computeStyle(this, parentStyle);
@@ -554,21 +576,35 @@ void UIElement::updateStyleCascade() {
 
         m_computedStyle = newStyle;
         applyComputedStyle(m_computedStyle);
+        m_styleDirty = false;
     }
-    m_styleDirty = false;
 
-    for (auto& child : m_children) {
-        if (child) child->updateStyleCascade();
+    if (m_childStyleDirty || selfDirty) {
+        m_childStyleDirty = false;
+        for (auto& child : m_children) {
+            if (child) {
+                if (selfDirty) {
+                    child->markStyleDirty();
+                }
+                if (child->isStyleDirty() || child->hasChildStyleDirty()) {
+                    child->updateStyleCascade();
+                }
+            }
+        }
     }
 }
 
 void UIElement::applyComputedStyle(const ComputedStyle& c) {
+    bool animAlpha = m_animator && m_animator->trackAlpha().active;
+    bool animScale = m_animator && m_animator->trackScale().active;
+    bool animPos = m_animator && m_animator->trackPosition().active;
+
     if (c.visible.has_value()) setVisible(*c.visible);
-    if (c.opacity.has_value()) setOpacity(*c.opacity);
+    if (c.opacity.has_value() && !animAlpha) setOpacity(*c.opacity);
     if (c.blendMode.has_value()) setBlendMode(*c.blendMode);
-    if (c.transformScale.has_value()) setRenderScale(*c.transformScale);
+    if (c.transformScale.has_value() && !animScale) setRenderScale(*c.transformScale);
     if (c.transformPivot.has_value()) setPivot(*c.transformPivot);
-    if (c.transformOffsetPx.has_value() || c.transformOffsetPct.has_value()) {
+    if ((c.transformOffsetPx.has_value() || c.transformOffsetPct.has_value()) && !animPos) {
         setRenderOffset(c.transformOffsetPx.value_or(Point{0, 0}), c.transformOffsetPct.value_or(Point{0, 0}));
     }
 

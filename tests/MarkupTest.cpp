@@ -928,6 +928,178 @@ int main() {
     }
 
     // -------------------------------------------------------------
+    // Test 17: Stage 2 PSS Pseudo-Classes & State Invalidation
+    // -------------------------------------------------------------
+    std::cout << "\nTest 17: Stage 2 PSS Pseudo-Classes & State Invalidation...\n";
+    {
+        PerfUI::UIContext context;
+        PerfUI::MarkupLoader loader(context);
+
+        const std::string stage2Xml = R"(
+            <UI>
+                <Styles>
+                    Button {
+                        background: #111111;
+                        color: #ffffff;
+                    }
+                    Button:hover {
+                        background: #444444;
+                        color: #ffd700;
+                    }
+                    Button:active {
+                        background: #ff0000;
+                    }
+                    Button:disabled {
+                        opacity: 0.4;
+                        background: #222222;
+                    }
+
+                    Checkbox {
+                        color: #ffffff;
+                    }
+                    Checkbox:checked {
+                        color: #00ffff;
+                    }
+
+                    Panel.card:hover {
+                        background: #2a2a2a;
+                    }
+
+                    .item:first-child {
+                        border: 2 #ff00ff;
+                    }
+                    .item:last-child {
+                        border: 2 #ffff00;
+                    }
+                    .item:focus {
+                        border: 2 #00ff00;
+                    }
+
+                    .expander {
+                        width: 400;
+                    }
+                </Styles>
+
+                <Panel id="Container" class="card">
+                    <Button id="InteractiveBtn" class="item" text="Click" />
+                    <Button id="DisabledBtn" text="Disabled" enabled="false" />
+                    <Checkbox id="MyCheck" text="Option" checked="false" />
+                    <Button id="LastBtn" class="item" text="Last" />
+                </Panel>
+            </UI>
+        )";
+
+        auto* root = loader.loadString(stage2Xml);
+        TEST_ASSERT(root != nullptr, "Stage 2 XML loaded successfully");
+
+        auto* btn = dynamic_cast<PerfUI::Button*>(loader.findByName("InteractiveBtn"));
+        auto* disabledBtn = dynamic_cast<PerfUI::Button*>(loader.findByName("DisabledBtn"));
+        auto* check = dynamic_cast<PerfUI::Checkbox*>(loader.findByName("MyCheck"));
+        auto* lastBtn = dynamic_cast<PerfUI::Button*>(loader.findByName("LastBtn"));
+        auto* container = dynamic_cast<PerfUI::Panel*>(loader.findByName("Container"));
+
+        TEST_ASSERT(btn != nullptr, "InteractiveBtn found");
+        TEST_ASSERT(disabledBtn != nullptr, "DisabledBtn found");
+        TEST_ASSERT(check != nullptr, "MyCheck found");
+        TEST_ASSERT(lastBtn != nullptr, "LastBtn found");
+        TEST_ASSERT(container != nullptr, "Container found");
+
+        // 1. Initial normal state
+        TEST_ASSERT(btn->computedStyle().backgroundColor == PerfUI::Color::FromHex("#111111"), "InteractiveBtn initial background #111111");
+        TEST_ASSERT(btn->computedStyle().color == PerfUI::Color::White(), "InteractiveBtn initial color White");
+        TEST_ASSERT(btn->computedStyle().borderColor == PerfUI::Color::FromHex("#ff00ff"), "InteractiveBtn first-child border #ff00ff");
+        TEST_ASSERT(lastBtn->computedStyle().borderColor == PerfUI::Color::FromHex("#ffff00"), "LastBtn last-child border #ffff00");
+
+        // 2. Hover state
+        btn->clearLayoutDirty();
+        btn->onPointerEnter();
+        TEST_ASSERT(btn->isStyleDirty(), "onPointerEnter marks element style dirty");
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(btn->computedStyle().backgroundColor == PerfUI::Color::FromHex("#444444"), "InteractiveBtn :hover background #444444");
+        TEST_ASSERT(btn->computedStyle().color == PerfUI::Color::FromHex("#ffd700"), "InteractiveBtn :hover color #ffd700");
+        TEST_ASSERT(!btn->isLayoutDirty(), "Visual-only hover change did NOT dirty layout!");
+
+        // 3. Active (press) state
+        btn->onPointerDown(PerfUI::Point{ 10.0f, 10.0f });
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(btn->computedStyle().backgroundColor == PerfUI::Color::FromHex("#ff0000"), "InteractiveBtn :active background #ff0000");
+
+        // 4. Release active state
+        btn->onPointerUp(PerfUI::Point{ 10.0f, 10.0f });
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(btn->computedStyle().backgroundColor == PerfUI::Color::FromHex("#444444"), "Releasing press reverts to :hover background #444444");
+
+        // 5. Leave hover
+        btn->onPointerLeave();
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(btn->computedStyle().backgroundColor == PerfUI::Color::FromHex("#111111"), "onPointerLeave reverts to normal background #111111");
+
+        // 6. Focus state
+        btn->setFocusable(true);
+        context.setFocus(btn);
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(btn->computedStyle().borderColor == PerfUI::Color::FromHex("#00ff00"), "InteractiveBtn :focus border #00ff00");
+        context.clearFocus();
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(btn->computedStyle().borderColor == PerfUI::Color::FromHex("#ff00ff"), "Clearing focus reverts border to first-child #ff00ff");
+
+        // 7. Disabled state
+        TEST_ASSERT(disabledBtn->computedStyle().opacity.value_or(1.0f) == 0.4f, "DisabledBtn :disabled opacity 0.4");
+        TEST_ASSERT(disabledBtn->computedStyle().backgroundColor == PerfUI::Color::FromHex("#222222"), "DisabledBtn :disabled background #222222");
+
+        // 8. Checked state on Checkbox
+        TEST_ASSERT(check->computedStyle().color == PerfUI::Color::White(), "MyCheck unchecked color White");
+        check->checked(true);
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(check->computedStyle().color == PerfUI::Color::FromHex("#00ffff"), "MyCheck :checked color #00ffff");
+
+        // 9. Panel :hover
+        container->onPointerEnter();
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(container->computedStyle().backgroundColor == PerfUI::Color::FromHex("#2a2a2a"), "Container :hover background #2a2a2a");
+        container->onPointerLeave();
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(!container->computedStyle().backgroundColor.has_value() || container->computedStyle().backgroundColor.value() != PerfUI::Color::FromHex("#2a2a2a"), "Container unhover cleared #2a2a2a");
+
+        // 10. Layout dirtying on layout property change
+        btn->clearLayoutDirty();
+        btn->addClass("expander");
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(btn->computedStyle().width.value_or(0.0f) == 400.0f, "Adding class 'expander' sets width 400");
+        TEST_ASSERT(btn->isLayoutDirty(), "Layout property change correctly marked layout dirty");
+
+        // 11. Large-scale Benchmarks: 5000 elements
+        auto bench5k = std::make_unique<PerfUI::UIElement>("Bench5K");
+        bench5k->setContext(&context);
+        for (int i = 0; i < 2500; ++i) {
+            auto p = std::make_unique<PerfUI::Panel>("Card" + std::to_string(i));
+            p->addClass("card");
+            auto b = std::make_unique<PerfUI::Button>("Btn" + std::to_string(i));
+            p->addChild(std::move(b));
+            bench5k->addChild(std::move(p));
+        }
+
+        // Cold start benchmark
+        auto tStart = std::chrono::high_resolution_clock::now();
+        bench5k->invalidateStyleSubtree();
+        bench5k->updateStyleCascade();
+        auto tEnd = std::chrono::high_resolution_clock::now();
+        double coldMs = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
+        std::cout << "  [Benchmark 5000 elements] Cold start cascade time: " << coldMs << " ms\n";
+        TEST_ASSERT(coldMs < 100.0, "5000 elements cold cascade under 100ms");
+
+        // Single class change on single element (dirty subtree)
+        auto* targetCard = dynamic_cast<PerfUI::Panel*>(bench5k->children()[1234].get());
+        auto tSingleStart = std::chrono::high_resolution_clock::now();
+        targetCard->addClass("expander");
+        bench5k->updateStyleCascade();
+        auto tSingleEnd = std::chrono::high_resolution_clock::now();
+        double singleMs = std::chrono::duration<double, std::milli>(tSingleEnd - tSingleStart).count();
+        std::cout << "  [Benchmark 5000 elements] Single element class change cascade time: " << singleMs << " ms\n";
+        TEST_ASSERT(singleMs < 1.0, "Single element class change cascade under 1ms");
+    }
+
+    // -------------------------------------------------------------
     // Test Summary
     // -------------------------------------------------------------
     std::cout << "\n=========================================================\n";

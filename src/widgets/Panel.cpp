@@ -83,27 +83,76 @@ void Panel::render(UIRenderBackend& backend) {
         ? *m_cornerRadius 
         : resolvedBox.cornerRadius.value_or(0.0f);
 
-    if (m_hasShadow && m_shadowColor.a > 0) {
-        backend.drawShadow(m_bounds, radius, applyAlpha(m_shadowColor), m_shadowBlur, m_shadowOffset);
-    } else if (resolvedBox.shadow.has_value() && !m_backgroundColor.has_value()) {
-        backend.drawShadow(m_bounds, radius, applyAlpha(resolvedBox.shadow->color), resolvedBox.shadow->blur, resolvedBox.shadow->offset);
-    }
-
     Color effBg = applyAlpha(bg);
     Color effBorder = applyAlpha(border);
-    if (m_backdropBlur) {
-        backend.drawBackdropBlur(m_bounds, radius, effBg, m_blurRadius);
-        if (effBorder.a > 0 && borderW > 0.0f) {
-            backend.drawRectOutline(m_bounds, effBorder, borderW, radius);
+    bool isLiquidGlass = m_liquidGlass || resolvedBox.liquidGlass.value_or(false);
+
+    if (isLiquidGlass) {
+        // --- Full Multi-Layer Liquid Glass Render Stack ---
+        // 1. Soft ambient drop shadow underneath the glass plate
+        float shadowRadius = radius > 0.0f ? radius : 10.0f;
+        backend.drawShadow(m_bounds, shadowRadius, applyAlpha(Color(0, 0, 0, 160)), 16.0f, Point{ 0.0f, 6.0f });
+
+        // 2. Hardware Dual Kawase backdrop blur with obsidian glass tint (or rounded rect fallback)
+        Color glassTint = (effBg.a > 0) ? effBg : applyAlpha(Color(10, 14, 22, 160));
+        if (m_backdropBlur) {
+            backend.drawBackdropBlur(m_bounds, radius, glassTint, m_blurRadius > 0.0f ? m_blurRadius : 1.5f);
+        } else {
+            backend.drawRoundedRect(m_bounds, glassTint, radius);
         }
-    } else if (effBg.a > 0 || (effBorder.a > 0 && borderW > 0.0f)) {
-        backend.drawRoundedRect(
-            m_bounds,
-            effBg,
-            radius,
-            effBorder,
-            borderW
+
+        // 3. Specular gloss reflection and top light refraction lip
+        backend.pushClipRect(m_bounds);
+        float glossHeight = (std::min)(m_bounds.height * 0.48f, 220.0f);
+        backend.drawGradientRect(
+            Rect{ m_bounds.x, m_bounds.y, m_bounds.width, glossHeight },
+            applyAlpha(Color(255, 255, 255, 36)),
+            applyAlpha(Color(255, 255, 255, 18)),
+            applyAlpha(Color(160, 215, 255, 4)),
+            applyAlpha(Color(160, 215, 255, 6))
         );
+
+        // Top-lip sharp highlight line
+        float lipMargin = (std::min)(radius + 2.0f, 16.0f);
+        backend.drawLine(
+            Point{ m_bounds.x + lipMargin, m_bounds.y + 1.0f },
+            Point{ m_bounds.x + m_bounds.width - lipMargin, m_bounds.y + 1.0f },
+            applyAlpha(Color(255, 255, 255, 120)),
+            1.0f
+        );
+        backend.popClipRect();
+
+        // 4. Refractive dual glass border (outer border + inner refraction rim)
+        Color outerBorder = (effBorder.a > 0 && borderW > 0.0f) ? effBorder : applyAlpha(Color(130, 175, 220, 110));
+        float outerW = borderW > 0.0f ? borderW : 1.0f;
+        backend.drawRectOutline(m_bounds, outerBorder, outerW, radius);
+
+        if (m_bounds.width > 4.0f && m_bounds.height > 4.0f) {
+            Rect innerRect{ m_bounds.x + 1.0f, m_bounds.y + 1.0f, m_bounds.width - 2.0f, m_bounds.height - 2.0f };
+            float innerRadius = (std::max)(0.0f, radius - 1.0f);
+            backend.drawRectOutline(innerRect, applyAlpha(Color(255, 255, 255, 28)), 1.0f, innerRadius);
+        }
+    } else {
+        if (m_hasShadow && m_shadowColor.a > 0) {
+            backend.drawShadow(m_bounds, radius, applyAlpha(m_shadowColor), m_shadowBlur, m_shadowOffset);
+        } else if (resolvedBox.shadow.has_value() && !m_backgroundColor.has_value()) {
+            backend.drawShadow(m_bounds, radius, applyAlpha(resolvedBox.shadow->color), resolvedBox.shadow->blur, resolvedBox.shadow->offset);
+        }
+
+        if (m_backdropBlur) {
+            backend.drawBackdropBlur(m_bounds, radius, effBg, m_blurRadius);
+            if (effBorder.a > 0 && borderW > 0.0f) {
+                backend.drawRectOutline(m_bounds, effBorder, borderW, radius);
+            }
+        } else if (effBg.a > 0 || (effBorder.a > 0 && borderW > 0.0f)) {
+            backend.drawRoundedRect(
+                m_bounds,
+                effBg,
+                radius,
+                effBorder,
+                borderW
+            );
+        }
     }
 
     const auto image = panelImage(this);
@@ -157,6 +206,15 @@ void Panel::render(UIRenderBackend& backend) {
 
     if (m_clipChildren) {
         backend.popClipRect();
+    }
+}
+
+void Panel::onStyleApplied(const ComputedStyle& style) {
+    if (style.backgroundImage.has_value()) {
+        backgroundImage(*style.backgroundImage);
+    }
+    if (style.bgUv0.has_value() && style.bgUv1.has_value()) {
+        backgroundImageUV(*style.bgUv0, *style.bgUv1);
     }
 }
 

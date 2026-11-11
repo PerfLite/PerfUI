@@ -16,6 +16,7 @@ RadioButton::RadioButton(int value, std::string label, std::string name)
 void RadioButton::setSelected(bool sel) {
     if (m_selected != sel) {
         m_selected = sel;
+        markStyleDirty();
         if (sel) {
             // If parent is RadioGroup, notify
             if (auto* grp = dynamic_cast<RadioGroup*>(m_parent)) {

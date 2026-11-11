@@ -1,0 +1,129 @@
+/* PerfUI Style Sheets (PSS) - Showcase Stylesheet */
+
+:root {
+    --bg-main: rgba(14, 18, 26, 0.94);
+    --card-bg: rgba(24, 30, 44, 0.88);
+    --card-border: rgba(200, 164, 90, 0.25);
+    --card-border-hover: #c8a45a;
+    --accent: #c8a45a;
+    --accent-hover: #e0be75;
+    --accent-active: #9c7b38;
+    --text-primary: #f5f6fa;
+    --text-secondary: #8c93a0;
+    --btn-bg: rgba(36, 44, 62, 0.9);
+    --btn-border: rgba(200, 164, 90, 0.35);
+    --btn-hover-bg: rgba(52, 64, 92, 0.95);
+    --btn-active-bg: #c8a45a;
+    --radius-main: 8;
+    --radius-sm: 4;
+    --pad-main: 16;
+}
+
+/* Root Screen Layout */
+Panel.overlay {
+    background: var(--bg-main);
+    padding: 24;
+    gap: 16;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Content Cards */
+Panel.card {
+    background: var(--card-bg);
+    border: 1 var(--card-border);
+    radius: var(--radius-main);
+    padding: var(--pad-main);
+    gap: 12;
+    shadow: true;
+}
+
+Panel.card:hover {
+    border: 1 var(--card-border-hover);
+}
+
+/* Typography */
+Text.heading {
+    color: var(--accent);
+    font-size: 24;
+    bold: true;
+}
+
+Text.subtitle {
+    color: var(--text-secondary);
+    font-size: 14;
+}
+
+Text.label {
+    color: var(--text-primary);
+    font-size: 15;
+}
+
+/* Button Component States */
+Button {
+    background: var(--btn-bg);
+    border: 1 var(--btn-border);
+    radius: var(--radius-sm);
+    color: var(--text-primary);
+    height: 36;
+    padding: 0 16;
+}
+
+Button:hover {
+    background: var(--btn-hover-bg);
+    border: 1 var(--accent-hover);
+    color: var(--accent-hover);
+}
+
+Button:active {
+    background: var(--btn-active-bg);
+    border: 1 var(--accent-active);
+    color: #10141e;
+}
+
+Button:focus {
+    border: 2 var(--accent);
+}
+
+Button:disabled {
+    opacity: 0.35;
+    background: rgba(20, 24, 32, 0.6);
+}
+
+/* Action Buttons */
+Button.primary {
+    background: var(--accent);
+    border: 1 var(--accent-hover);
+    color: #0f1219;
+    bold: true;
+}
+
+Button.primary:hover {
+    background: var(--accent-hover);
+    color: #0f1219;
+}
+
+Button.primary:active {
+    background: var(--accent-active);
+}
+
+/* Checkbox States */
+Checkbox {
+    color: var(--text-primary);
+}
+
+Checkbox:checked {
+    color: var(--accent);
+    border: 1 var(--accent);
+}
+
+Checkbox:hover {
+    color: var(--accent-hover);
+}
+
+/* Button Rows & Layout Helpers */
+Panel.button-row {
+    direction: row;
+    gap: 10;
+    justify-content: end;
+}

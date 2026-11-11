@@ -35,9 +35,16 @@ public:
     Panel& clipChildren(bool clip) { m_clipChildren = clip; return *this; }
 
     bool backdropBlur() const { return m_backdropBlur; }
+    float blurRadius() const { return m_blurRadius; }
     Panel& backdropBlur(bool enable, float radius = 1.0f) {
         m_backdropBlur = enable;
         m_blurRadius = radius;
+        return *this;
+    }
+
+    bool liquidGlass() const { return m_liquidGlass; }
+    Panel& liquidGlass(bool enable) {
+        m_liquidGlass = enable;
         return *this;
     }
 
@@ -50,6 +57,7 @@ public:
     Panel& style(WidgetStyle s) { m_style = std::move(s); return *this; }
 
     void render(UIRenderBackend& backend) override;
+    void onStyleApplied(const ComputedStyle& style) override;
 
 private:
     std::optional<Color> m_backgroundColor;
@@ -65,6 +73,7 @@ private:
     bool m_clipChildren{ false };
     bool m_backdropBlur{ false };
     float m_blurRadius{ 1.0f };
+    bool m_liquidGlass{ false };
 };
 
 } // namespace PerfUI

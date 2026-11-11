@@ -1,0 +1,29 @@
+<UI styles="styles.pss" script="main.lua">
+    <Panel id="RootOverlay" class="overlay" width="560" height="520">
+        <!-- Header Card -->
+        <Panel class="card" width="500">
+            <Text class="heading" text="PerfUI Style Sheets (PSS) Showcase" />
+            <Text class="subtitle" text="Fully decoupled styling with CSS selectors, pseudo-classes and CSS variables." />
+        </Panel>
+
+        <!-- Settings & Interactive Card -->
+        <Panel id="MainCard" class="card" width="500">
+            <Text class="label" text="Display &amp; Theme Controls" />
+            
+            <Checkbox id="ChkBackdropBlur" text="Enable Dynamic Kawase Blur" checked="true" on-toggle="onToggleBlur" />
+            <Checkbox id="ChkHighDPI" text="High-DPI Adaptive Scaling" checked="false" on-toggle="onToggleDpi" />
+            <Checkbox id="ChkSoundFX" text="Enable Interactive Audio Feedback" checked="true" on-toggle="onToggleSound" />
+
+            <Panel class="button-row" width="460">
+                <Button id="BtnSwitchTheme" text="Switch Color Accent (var)" on-click="onSwitchTheme" />
+                <Button id="BtnDisabled" text="Unavailable Option" enabled="false" />
+                <Button id="BtnApply" class="primary" text="Accept &amp; Save" on-click="onApplySettings" />
+            </Panel>
+        </Panel>
+
+        <!-- Status Card -->
+        <Panel id="StatusCard" class="card" width="500">
+            <Text id="StatusText" class="subtitle" text="Theme: Nordic Gold | Active Stylesheet: styles.pss" />
+        </Panel>
+    </Panel>
+</UI>

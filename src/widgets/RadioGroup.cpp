@@ -36,7 +36,7 @@ void RadioGroup::notifySelection(RadioButton* selectedBtn) {
     for (const auto& child : children()) {
         if (auto* btn = dynamic_cast<RadioButton*>(child.get())) {
             if (btn != selectedBtn && btn->isSelected()) {
-                btn->m_selected = false;
+                btn->setSelected(false);
             }
         }
     }

@@ -585,6 +585,9 @@ UIElement* MarkupLoader::parseAndBuildTree(std::string_view xml, UIElement* pare
 
     UIElement* createdRoot = buildElement(rootNode, parent);
     if (createdRoot) {
+        if (!parent) {
+            createdRoot->setContext(&m_context);
+        }
         createdRoot->updateStyleCascade();
     }
     return createdRoot;

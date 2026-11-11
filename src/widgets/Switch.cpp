@@ -26,6 +26,7 @@ Switch::Switch(bool checked, std::string name)
 void Switch::setChecked(bool checked) {
     if (m_checked != checked) {
         m_checked = checked;
+        markStyleDirty();
         m_thumbAnim.setTarget(checked ? 1.0f : 0.0f);
 
         const auto& themeSwitch = Theme::Current().components.switchToggle;
@@ -78,13 +79,20 @@ void Switch::render(UIRenderBackend& backend) {
     BoxStyle themeBox = themeSwitch.resolveBox(state);
     BoxStyle resolvedBox = resolveBoxStyle(state, themeBox);
 
+    float effAlpha = effectiveOpacity();
+    if (effAlpha <= 0.001f) return;
+
+    auto applyAlpha = [effAlpha](Color c) -> Color {
+        return Color(c.r, c.g, c.b, static_cast<uint8_t>(std::clamp(static_cast<float>(c.a) * effAlpha, 0.0f, 255.0f)));
+    };
+
     float radius = m_bounds.height * 0.5f;
     Color trackColor = resolvedBox.backgroundColor.value_or(m_trackColorAnim.value());
     Color border = isFocused() ? Theme::Current().colors.borderFocus : resolvedBox.borderColor.value_or(Color::Transparent());
     float borderWidth = isFocused() ? 1.5f : resolvedBox.borderWidth.value_or(0.0f);
 
     // Draw track
-    backend.drawRoundedRect(m_bounds, trackColor, radius, border, borderWidth);
+    backend.drawRoundedRect(m_bounds, applyAlpha(trackColor), radius, applyAlpha(border), borderWidth);
 
     // Draw thumb
     float thumbDiameter = m_bounds.height - 4.0f;
@@ -98,10 +106,10 @@ void Switch::render(UIRenderBackend& backend) {
     Point thumbCenter{ currentX + thumbRadius, currentY + thumbRadius };
 
     // Thumb shadow
-    backend.drawShadow(thumbRect, thumbRadius, Color(0, 0, 0, 100), 4.0f, { 0.0f, 1.0f });
+    backend.drawShadow(thumbRect, thumbRadius, Color(0, 0, 0, static_cast<uint8_t>(100.0f * effAlpha)), 4.0f, { 0.0f, 1.0f });
 
     // Thumb fill
-    backend.drawCircle(thumbCenter, thumbRadius, Color::White(), Color(200, 200, 200, 180), 0.5f);
+    backend.drawCircle(thumbCenter, thumbRadius, applyAlpha(Color::White()), applyAlpha(Color(200, 200, 200, 180)), 0.5f);
 
     UIElement::render(backend);
 }

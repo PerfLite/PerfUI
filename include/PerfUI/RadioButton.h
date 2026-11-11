@@ -25,6 +25,7 @@ public:
     }
 
     bool isSelected() const { return m_selected; }
+    bool isChecked() const override { return m_selected; }
     void setSelected(bool sel);
     RadioButton& selected(bool sel) { setSelected(sel); return *this; }
 

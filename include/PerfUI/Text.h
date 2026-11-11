@@ -38,6 +38,7 @@ public:
 
     void measure(Dimensions availableSize) override;
     void render(UIRenderBackend& backend) override;
+    void onStyleApplied(const ComputedStyle& style) override;
 
 private:
     std::string m_text;

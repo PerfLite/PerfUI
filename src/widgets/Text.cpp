@@ -110,4 +110,24 @@ void Text::render(UIRenderBackend& backend) {
     backend.drawText(m_text, Point{ posX, posY }, renderStyle);
 }
 
+void Text::onStyleApplied(const ComputedStyle& style) {
+    if (style.color.has_value()) m_style.color = *style.color;
+    if (style.fontSize.has_value()) {
+        m_style.fontSize = *style.fontSize;
+        markLayoutDirty();
+    }
+    if (style.bold.has_value()) {
+        m_style.bold = *style.bold;
+        markLayoutDirty();
+    }
+    if (style.italic.has_value()) {
+        m_style.italic = *style.italic;
+        markLayoutDirty();
+    }
+    if (style.wrap.has_value()) {
+        m_wrap = *style.wrap;
+        markLayoutDirty();
+    }
+}
+
 } // namespace PerfUI

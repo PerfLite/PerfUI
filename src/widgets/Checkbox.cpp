@@ -1,5 +1,6 @@
 #include "PerfUI/Checkbox.h"
 #include "PerfUI/UIContext.h"
+#include "PerfUI/Theme.h"
 #include <algorithm>
 
 namespace PerfUI {
@@ -17,6 +18,7 @@ Checkbox& Checkbox::checked(bool chk) {
     if (m_checked != chk) {
         m_checked = chk;
         m_checkAnim.setTarget(chk ? 1.0f : 0.0f);
+        markStyleDirty();
         markLayoutDirty();
     }
     return *this;
@@ -79,6 +81,14 @@ void Checkbox::measure(Dimensions availableSize) {
 void Checkbox::render(UIRenderBackend& backend) {
     if (!isVisible()) return;
 
+    float effAlpha = effectiveOpacity();
+    if (effAlpha <= 0.001f) return;
+
+    auto applyAlpha = [effAlpha](Color c) -> Color {
+        return Color(c.r, c.g, c.b, static_cast<uint8_t>(std::clamp(static_cast<float>(c.a) * effAlpha, 0.0f, 255.0f)));
+    };
+
+    const auto& theme = Theme::Current();
     const auto& pad = layout().padding();
     float boxX = m_bounds.x + pad.left;
     float boxY = m_bounds.y + pad.top + (std::max)(0.0f, (m_bounds.height - pad.vertical() - m_boxSize) * 0.5f);
@@ -88,22 +98,30 @@ void Checkbox::render(UIRenderBackend& backend) {
     float checkT = m_checkAnim.value();
 
     Color normalBorder = m_checked ? m_checkColor : m_boxBorder;
-    Color border = Color::Lerp(normalBorder, Color::BorderFocus(), hoverT);
+    Color border = Color::Lerp(normalBorder, theme.colors.borderFocus, hoverT);
 
     Color normalBg = m_boxBg;
-    Color hoverBg = Color(28, 36, 48, 240);
+    Color hoverBg = theme.colors.surfaceActive;
     Color bg = Color::Lerp(normalBg, hoverBg, hoverT);
     if (m_pressed) {
         bg = Color::BackgroundActive();
     }
 
+    if (m_computedStyle.backgroundColor.has_value()) {
+        bg = *m_computedStyle.backgroundColor;
+    }
+    if (m_computedStyle.borderColor.has_value()) {
+        border = *m_computedStyle.borderColor;
+    }
+    float radius = m_computedStyle.cornerRadius.value_or(m_cornerRadius);
+
     if (hoverT > 0.01f) {
-        Color glow = Color::FocusGlow();
-        glow.a = static_cast<uint8_t>(static_cast<float>(glow.a) * hoverT);
-        backend.drawShadow(boxRect, m_cornerRadius, glow, 6.0f * hoverT, { 0.0f, 1.0f * hoverT });
+        Color glow = theme.colors.focusGlow;
+        glow.a = static_cast<uint8_t>(static_cast<float>(glow.a) * hoverT * effAlpha);
+        backend.drawShadow(boxRect, radius, glow, 6.0f * hoverT, { 0.0f, 1.0f * hoverT });
     }
 
-    backend.drawRoundedRect(boxRect, bg, m_cornerRadius, border, 1.0f);
+    backend.drawRoundedRect(boxRect, applyAlpha(bg), radius, applyAlpha(border), 1.0f);
 
     // Draw check indicator with scale & fade animation
     if ((m_checked || checkT > 0.05f) && checkT > 0.02f) {
@@ -115,8 +133,8 @@ void Checkbox::render(UIRenderBackend& backend) {
             boxRect.height - innerPadding * 2.0f
         };
         Color checkCol = m_checkColor;
-        checkCol.a = static_cast<uint8_t>(static_cast<float>(checkCol.a) * checkT);
-        backend.drawRoundedRect(innerRect, checkCol, m_cornerRadius * 0.5f);
+        checkCol.a = static_cast<uint8_t>(static_cast<float>(checkCol.a) * checkT * effAlpha);
+        backend.drawRoundedRect(innerRect, checkCol, radius * 0.5f);
     }
 
     // Draw label
@@ -126,7 +144,14 @@ void Checkbox::render(UIRenderBackend& backend) {
         float textY = m_bounds.y + pad.top + (std::max)(0.0f, (m_bounds.height - pad.vertical() - textDim.height) * 0.5f);
 
         TextStyle style = m_labelStyle;
-        style.color = Color::Lerp(m_labelStyle.color, Color::White(), hoverT);
+        if (m_computedStyle.color.has_value()) {
+            style.color = applyAlpha(*m_computedStyle.color);
+        } else {
+            style.color = applyAlpha(Color::Lerp(m_labelStyle.color, Color::White(), hoverT));
+        }
+        if (m_computedStyle.fontSize.has_value()) style.fontSize = *m_computedStyle.fontSize;
+        if (m_computedStyle.bold.has_value()) style.bold = *m_computedStyle.bold;
+        if (m_computedStyle.italic.has_value()) style.italic = *m_computedStyle.italic;
 
         backend.drawText(m_label, Point{ textX, textY }, style);
     }
