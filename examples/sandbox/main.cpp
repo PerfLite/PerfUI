@@ -202,16 +202,33 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     g_showcaseWindow->setVisible(false);
 
     // Initialize PSS (PerfUI Style Sheets) Demo with Hot-Reload and Lua Scripting
-    g_pssMenuPath = "examples/pss_demo/menu.xml";
-    if (!std::filesystem::exists(g_pssMenuPath)) {
-        char exePathBuf[MAX_PATH];
-        if (::GetModuleFileNameA(nullptr, exePathBuf, MAX_PATH) > 0) {
-            std::filesystem::path exeDir = std::filesystem::path(exePathBuf).parent_path();
-            if (std::filesystem::exists(exeDir / "examples/pss_demo/menu.xml")) {
-                g_pssMenuPath = exeDir / "examples/pss_demo/menu.xml";
-            } else if (std::filesystem::exists(exeDir / "../../examples/pss_demo/menu.xml")) {
-                g_pssMenuPath = exeDir / "../../examples/pss_demo/menu.xml";
+    g_pssMenuPath = "";
+    std::vector<std::filesystem::path> searchCandidates = {
+        "examples/pss_demo/menu.xml",
+        "../examples/pss_demo/menu.xml",
+        "../../examples/pss_demo/menu.xml",
+        "../../../examples/pss_demo/menu.xml",
+        "../../../../examples/pss_demo/menu.xml"
+    };
+
+    char exePathBuf[MAX_PATH];
+    if (::GetModuleFileNameA(nullptr, exePathBuf, MAX_PATH) > 0) {
+        std::filesystem::path cur = std::filesystem::path(exePathBuf).parent_path();
+        for (int i = 0; i < 8; ++i) {
+            searchCandidates.push_back(cur / "examples/pss_demo/menu.xml");
+            if (cur.has_parent_path() && cur.parent_path() != cur) {
+                cur = cur.parent_path();
+            } else {
+                break;
             }
+        }
+    }
+
+    for (const auto& candidate : searchCandidates) {
+        std::error_code ec;
+        if (std::filesystem::exists(candidate, ec)) {
+            g_pssMenuPath = std::filesystem::canonical(candidate, ec);
+            break;
         }
     }
 
@@ -240,15 +257,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     g_pssLoader->onAfterReload([](PerfUI::UIElement* newRoot) {
         g_pssDemoRoot = newRoot;
         if (g_pssDemoRoot) {
-            g_pssDemoRoot->setBounds(PerfUI::Rect{ 360.0f, 60.0f, 560.0f, 540.0f });
+            g_pssDemoRoot->setAbsolute(true);
+            g_pssDemoRoot->layout().centerX(0.0f);
+            g_pssDemoRoot->layout().top(60.0f);
+            g_pssDemoRoot->layout().width(560.0f);
+            g_pssDemoRoot->layout().height(520.0f);
+            g_pssDemoRoot->setVisible(true);
+            if (g_uiContext) {
+                g_uiContext->showToast("PSS Hot-Reload", "menu.xml reloaded successfully", PerfUI::ToastType::Success, 2.0f);
+            }
         }
     });
     g_pssLoader->enableHotReload(true);
 
-    if (std::filesystem::exists(g_pssMenuPath)) {
+    if (!g_pssMenuPath.empty() && std::filesystem::exists(g_pssMenuPath)) {
         g_pssDemoRoot = g_pssLoader->loadFile(g_pssMenuPath, g_uiContext->root());
         if (g_pssDemoRoot) {
-            g_pssDemoRoot->setBounds(PerfUI::Rect{ 360.0f, 60.0f, 560.0f, 540.0f });
+            g_pssDemoRoot->setAbsolute(true);
+            g_pssDemoRoot->layout().centerX(0.0f);
+            g_pssDemoRoot->layout().top(60.0f);
+            g_pssDemoRoot->layout().width(560.0f);
+            g_pssDemoRoot->layout().height(520.0f);
             g_pssDemoRoot->setVisible(true);
 
 #if defined(PERFUI_ENABLE_LUA)
@@ -259,7 +288,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
                 }
             }
 #endif
+            g_uiContext->showToast("PerfUI PSS Demo", "PSS Showcase loaded [F6: toggle, F4: reload styles]", PerfUI::ToastType::Success, 4.0f);
         }
+    } else if (g_uiContext) {
+        g_uiContext->showToast("PSS Demo Warning", "Could not locate examples/pss_demo/menu.xml", PerfUI::ToastType::Warning, 8.0f);
     }
 
     g_mainMenuWindow->onContinueGame([]() {
@@ -491,6 +523,8 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (g_uiContext) {
                         g_uiContext->showToast("PSS Demo [F6]", show ? "PSS Showcase Visible" : "PSS Showcase Hidden", PerfUI::ToastType::Info, 2.0f);
                     }
+                } else if (g_uiContext) {
+                    g_uiContext->showToast("PSS Demo [F6]", "menu.xml was not found or loaded", PerfUI::ToastType::Warning, 3.0f);
                 }
                 return 0;
             }
