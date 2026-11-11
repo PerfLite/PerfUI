@@ -2,6 +2,7 @@
 
 #include "Types.h"
 #include "Animation.h"
+#include "AnimationScheduler.h"
 #include "UIRenderBackend.h"
 #include "UIElement.h"
 #include "Toast.h"
@@ -21,6 +22,7 @@ namespace PerfUI {
 class ModalDialog;
 class Timeline;
 class ComboBox;
+class StyleSheet;
 struct WorldAnchorSnapshot;
 struct WorldAnchorPoint;
 
@@ -87,6 +89,15 @@ public:
     // Timelines & Animation Coordination
     std::shared_ptr<Timeline> createTimeline();
     void removeTimeline(const std::shared_ptr<Timeline>& timeline);
+    AnimationScheduler& animationScheduler() { return m_animationScheduler; }
+    const AnimationScheduler& animationScheduler() const { return m_animationScheduler; }
+    void setAnimationTimeScale(float scale) { m_animationScheduler.setTimeScale(scale); }
+    float animationTimeScale() const { return m_animationScheduler.timeScale(); }
+    void pauseAnimations() { m_animationScheduler.setPaused(true); }
+    void resumeAnimations() { m_animationScheduler.setPaused(false); }
+    bool isAnimationsPaused() const { return m_animationScheduler.isPaused(); }
+    void setReducedMotion(bool enabled) { m_animationScheduler.setReducedMotion(enabled); }
+    bool reducedMotion() const { return m_animationScheduler.isReducedMotion(); }
 
     // Overlay Layer (Tooltips, Popups, Dropdowns)
     void setOverlayRender(std::function<void(UIRenderBackend&)> callback) {
@@ -195,6 +206,7 @@ public:
     bool registerHotkey(std::string id, uint32_t keyCode, std::function<void()> callback);
     void unregisterHotkey(const std::string& id);
     bool triggerHotkey(uint32_t keyCode);
+    bool hasHotkey(uint32_t keyCode) const;
     size_t hotkeyCount() const;
     void clearHotkeys();
 
@@ -202,6 +214,13 @@ public:
     void setWorldAnchorSnapshot(std::shared_ptr<const WorldAnchorSnapshot> snapshot);
     std::shared_ptr<const WorldAnchorSnapshot> worldAnchorSnapshot() const;
     const WorldAnchorPoint* getWorldAnchorPoint(uint32_t targetId) const;
+
+    // Stylesheet & PSS API (Stage 1)
+    StyleSheet& styleSheet();
+    const StyleSheet& styleSheet() const;
+    void reloadStyles();
+    void setCssVariable(std::string name, std::string value);
+    std::string getCssVariable(const std::string& name) const;
 
 private:
     void performLayout();
@@ -236,7 +255,7 @@ private:
     OverlayManager m_overlayManager;
     float m_lastDeltaTime{ 0.016f };
 
-    // Animations & Timelines
+    // Animations & Timelines (legacy ABI layout preservation)
     std::vector<std::shared_ptr<Timeline>> m_timelines;
 
     // Hotkeys storage
@@ -254,6 +273,11 @@ private:
 
     // World Anchors
     std::shared_ptr<const WorldAnchorSnapshot> m_worldAnchorSnapshot;
+
+    // Central Animation Scheduler & hotkey trigger tracking (appended to preserve ABI)
+    AnimationScheduler m_animationScheduler{ this };
+    std::unordered_map<uint32_t, std::chrono::steady_clock::time_point> m_lastHotkeyTrigger;
+    std::unique_ptr<StyleSheet> m_styleSheet;
 };
 
 } // namespace PerfUI

@@ -3,6 +3,8 @@
 #include "Types.h"
 #include "Layout.h"
 #include "Style.h"
+#include "PerfUI/Style/ComputedStyle.h"
+#include <unordered_map>
 #include "UIRenderBackend.h"
 #include <vector>
 #include <memory>
@@ -95,6 +97,7 @@ public:
     void addClass(std::string className) {
         if (!className.empty() && !hasClass(className)) {
             m_classes.push_back(std::move(className));
+            markStyleDirty();
         }
     }
     bool hasClass(std::string_view className) const {
@@ -105,11 +108,39 @@ public:
     }
     void removeClass(std::string_view className) {
         auto it = std::remove(m_classes.begin(), m_classes.end(), className);
-        m_classes.erase(it, m_classes.end());
+        if (it != m_classes.end()) {
+            m_classes.erase(it, m_classes.end());
+            markStyleDirty();
+        }
+    }
+    void toggleClass(std::string_view className) {
+        if (hasClass(className)) removeClass(className);
+        else addClass(std::string(className));
     }
     void setClasses(std::vector<std::string> cls) {
         m_classes = std::move(cls);
+        markStyleDirty();
     }
+
+    // Type Name & Pseudo-classes
+    virtual std::string_view typeName() const;
+    void setTypeName(std::string name);
+    virtual uint8_t activePseudoClasses() const;
+    virtual bool isChecked() const { return false; }
+
+    // Computed style & PSS Cascade
+    const ComputedStyle& computedStyle() const { return m_computedStyle; }
+    void setComputedStyle(ComputedStyle s) { m_computedStyle = std::move(s); }
+    const std::unordered_map<std::string, std::string>& inlineAttrs() const { return m_inlineAttrs; }
+    void setInlineAttrs(std::unordered_map<std::string, std::string> attrs) { m_inlineAttrs = std::move(attrs); }
+    void addInlineAttr(std::string k, std::string v) { m_inlineAttrs[std::move(k)] = std::move(v); }
+
+    bool isStyleDirty() const { return m_styleDirty; }
+    void markStyleDirty();
+    void invalidateStyleSubtree();
+    void updateStyleCascade();
+    void applyComputedStyle(const ComputedStyle& style);
+    virtual void onStyleApplied(const ComputedStyle& style) { (void)style; }
 
     // Opacity
     float opacity() const { return m_opacity; }
@@ -254,6 +285,11 @@ protected:
     std::string m_tooltip;
     std::vector<std::string> m_classes;
     std::function<bool(const Point&)> m_onContextMenu;
+
+    std::string m_typeName;
+    ComputedStyle m_computedStyle{};
+    std::unordered_map<std::string, std::string> m_inlineAttrs;
+    bool m_styleDirty{ false };
 };
 
 } // namespace PerfUI

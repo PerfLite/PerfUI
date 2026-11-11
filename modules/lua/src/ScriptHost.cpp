@@ -18,6 +18,7 @@
 #include "PerfUI/Animation.h"
 #include "PerfUI/WorldAnchor.h"
 #include "PerfUI/Image.h"
+#include "PerfUI/SvgImage.h"
 #include "PerfUI/Localization.h"
 
 extern "C" {
@@ -632,6 +633,8 @@ int Handle_setColor(lua_State* L)
         pb->fillColor(col);
     } else if (auto* pnl = dynamic_cast<Panel*>(elem)) {
         pnl->backgroundColor(col);
+    } else if (auto* svg = dynamic_cast<SvgImage*>(elem)) {
+        svg->tint(col);
     }
     return 0;
 }
@@ -836,6 +839,48 @@ int Handle_setFlipY(lua_State* L)
     return 0;
 }
 
+int Handle_addClass(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "addClass");
+    const char* cls = luaL_checkstring(L, 2);
+    if (elem && cls) {
+        elem->addClass(cls);
+    }
+    return 0;
+}
+
+int Handle_removeClass(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "removeClass");
+    const char* cls = luaL_checkstring(L, 2);
+    if (elem && cls) {
+        elem->removeClass(cls);
+    }
+    return 0;
+}
+
+int Handle_toggleClass(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "toggleClass");
+    const char* cls = luaL_checkstring(L, 2);
+    if (elem && cls) {
+        elem->toggleClass(cls);
+    }
+    return 0;
+}
+
+int Handle_hasClass(lua_State* L)
+{
+    UIElement* elem = CheckHandleElement(L, 1, "hasClass");
+    const char* cls = luaL_checkstring(L, 2);
+    if (elem && cls) {
+        lua_pushboolean(L, elem->hasClass(cls) ? 1 : 0);
+    } else {
+        lua_pushboolean(L, 0);
+    }
+    return 1;
+}
+
 int Handle_tostring(lua_State* L)
 {
     auto* handle = static_cast<LuaElementHandle*>(luaL_checkudata(L, 1, kElementHandleMeta));
@@ -903,6 +948,8 @@ void RegisterElementHandleMeta(lua_State* L)
         lua_setfield(L, -2, "selectIndex");
         lua_pushcfunction(L, Handle_setColor);
         lua_setfield(L, -2, "setColor");
+        lua_pushcfunction(L, Handle_setColor);
+        lua_setfield(L, -2, "setTint");
         lua_pushcfunction(L, Handle_setSize);
         lua_setfield(L, -2, "setSize");
         lua_pushcfunction(L, Handle_setPosition);
@@ -937,6 +984,16 @@ void RegisterElementHandleMeta(lua_State* L)
         lua_setfield(L, -2, "setUV");
         lua_pushcfunction(L, Handle_setFlipY);
         lua_setfield(L, -2, "setFlipY");
+
+        // CSS Classes
+        lua_pushcfunction(L, Handle_addClass);
+        lua_setfield(L, -2, "addClass");
+        lua_pushcfunction(L, Handle_removeClass);
+        lua_setfield(L, -2, "removeClass");
+        lua_pushcfunction(L, Handle_toggleClass);
+        lua_setfield(L, -2, "toggleClass");
+        lua_pushcfunction(L, Handle_hasClass);
+        lua_setfield(L, -2, "hasClass");
 
         lua_setfield(L, -2, "__index");
     }
@@ -1107,6 +1164,95 @@ int LL_UiLoadDictionary(lua_State* L)
     return 1;
 }
 
+static UIElement* ResolveElementArg(lua_State* L, int idx, ScriptHost::Impl* impl)
+{
+    if (lua_isstring(L, idx)) {
+        const char* name = lua_tostring(L, idx);
+        return impl ? impl->findElement(name) : nullptr;
+    }
+    auto* handle = static_cast<LuaElementHandle*>(luaL_checkudata(L, idx, kElementHandleMeta));
+    return (handle && handle->ref.isValid()) ? handle->ref.get() : nullptr;
+}
+
+int LL_UiAddClass(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    UIElement* elem = ResolveElementArg(L, 1, impl);
+    const char* cls = luaL_checkstring(L, 2);
+    if (elem && cls) {
+        elem->addClass(cls);
+    }
+    return 0;
+}
+
+int LL_UiRemoveClass(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    UIElement* elem = ResolveElementArg(L, 1, impl);
+    const char* cls = luaL_checkstring(L, 2);
+    if (elem && cls) {
+        elem->removeClass(cls);
+    }
+    return 0;
+}
+
+int LL_UiToggleClass(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    UIElement* elem = ResolveElementArg(L, 1, impl);
+    const char* cls = luaL_checkstring(L, 2);
+    if (elem && cls) {
+        elem->toggleClass(cls);
+    }
+    return 0;
+}
+
+int LL_UiHasClass(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    UIElement* elem = ResolveElementArg(L, 1, impl);
+    const char* cls = luaL_checkstring(L, 2);
+    if (elem && cls) {
+        lua_pushboolean(L, elem->hasClass(cls) ? 1 : 0);
+    } else {
+        lua_pushboolean(L, 0);
+    }
+    return 1;
+}
+
+int LL_UiSetVar(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    const char* name = luaL_checkstring(L, 1);
+    const char* val = luaL_checkstring(L, 2);
+    if (impl && impl->boundContext && name && val) {
+        impl->boundContext->setCssVariable(name, val);
+    }
+    return 0;
+}
+
+int LL_UiGetVar(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    const char* name = luaL_checkstring(L, 1);
+    if (impl && impl->boundContext && name) {
+        std::string val = impl->boundContext->getCssVariable(name);
+        lua_pushstring(L, val.c_str());
+    } else {
+        lua_pushstring(L, "");
+    }
+    return 1;
+}
+
+int LL_UiReloadStyles(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    if (impl && impl->boundContext) {
+        impl->boundContext->reloadStyles();
+    }
+    return 0;
+}
+
 void RegisterUiTable(lua_State* L)
 {
     RegisterElementHandleMeta(L);
@@ -1139,6 +1285,22 @@ void RegisterUiTable(lua_State* L)
     lua_setfield(L, -2, "getLanguage");
     lua_pushcfunction(L, LL_UiLoadDictionary);
     lua_setfield(L, -2, "loadDictionary");
+
+    // PSS / CSS Style API
+    lua_pushcfunction(L, LL_UiAddClass);
+    lua_setfield(L, -2, "addClass");
+    lua_pushcfunction(L, LL_UiRemoveClass);
+    lua_setfield(L, -2, "removeClass");
+    lua_pushcfunction(L, LL_UiToggleClass);
+    lua_setfield(L, -2, "toggleClass");
+    lua_pushcfunction(L, LL_UiHasClass);
+    lua_setfield(L, -2, "hasClass");
+    lua_pushcfunction(L, LL_UiSetVar);
+    lua_setfield(L, -2, "setVar");
+    lua_pushcfunction(L, LL_UiGetVar);
+    lua_setfield(L, -2, "getVar");
+    lua_pushcfunction(L, LL_UiReloadStyles);
+    lua_setfield(L, -2, "reloadStyles");
 
     lua_newtable(L);
     lua_pushcfunction(L, LL_UiThemeColor);
@@ -1262,8 +1424,43 @@ void ScriptHost::Impl::applyModule(const RegisteredModule& module)
         reportError("module '" + module.name + "': unknown exception");
     }
 
-    lua_rawgeti(L, LUA_REGISTRYINDEX, tableRef);
-    lua_setglobal(L, module.name.c_str());
+    std::string modName = module.name;
+    auto dotPos = modName.find('.');
+    if (dotPos != std::string::npos) {
+        std::string parentName = modName.substr(0, dotPos);
+        std::string childName = modName.substr(dotPos + 1);
+
+        lua_getglobal(L, parentName.c_str());
+        if (!lua_istable(L, -1)) {
+            lua_pop(L, 1);
+            lua_newtable(L);
+            lua_pushvalue(L, -1);
+            lua_setglobal(L, parentName.c_str());
+        }
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, tableRef);
+        lua_setfield(L, -2, childName.c_str());
+        lua_pop(L, 1);
+    } else {
+        lua_getglobal(L, module.name.c_str());
+        if (lua_istable(L, -1)) {
+            int globalIdx = lua_gettop(L);
+            lua_rawgeti(L, LUA_REGISTRYINDEX, tableRef);
+            int newTableIdx = lua_gettop(L);
+            lua_pushnil(L);
+            while (lua_next(L, newTableIdx) != 0) {
+                lua_pushvalue(L, -2);
+                lua_pushvalue(L, -2);
+                lua_settable(L, globalIdx);
+                lua_pop(L, 1);
+            }
+            lua_pop(L, 2);
+        } else {
+            lua_pop(L, 1);
+            lua_rawgeti(L, LUA_REGISTRYINDEX, tableRef);
+            lua_setglobal(L, module.name.c_str());
+        }
+    }
     luaL_unref(L, LUA_REGISTRYINDEX, tableRef);
 }
 

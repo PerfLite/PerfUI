@@ -12,6 +12,7 @@
 #include "PerfUI/WorldAnchor.h"
 #include "PerfUI/SettingsView.h"
 #include "PerfUI/Localization.h"
+#include "PerfUI/Style/StyleSheet.h"
 #include "../src/backends/mock/MockRenderBackend.h"
 
 #include <iostream>
@@ -781,6 +782,149 @@ int main() {
         auto* img = dynamic_cast<PerfUI::Image*>(loader.findByName("BannerImg"));
         TEST_ASSERT(img != nullptr, "Image found with id='BannerImg'");
         TEST_ASSERT(img->tint() == PerfUI::Color(0xFF, 0x88, 0x00, 0xFF), "Image tint #FF8800 applied");
+    }
+
+    // -------------------------------------------------------------
+    // Test 16: Stage 1 PSS (PerfUI Style Sheets) Engine & Cascade
+    // -------------------------------------------------------------
+    {
+        std::cout << "\nTest 16: Stage 1 PSS Engine (Selectors, Specificity, Cascade, Variables, Invalidation)...\n";
+        UIContext context;
+        MarkupLoader loader(context);
+
+        const std::string pssXml = R"(
+            <UI>
+                <Styles>
+                    /* Comments support */
+                    :root {
+                        --gold: #c8a45a;
+                        --card-bg: rgba(10, 10, 14, 0.9);
+                        --pad: 12;
+                    }
+
+                    Panel {
+                        opacity: 0.95;
+                    }
+
+                    .card {
+                        background: var(--card-bg);
+                        radius: 6;
+                        padding: var(--pad);
+                    }
+
+                    Panel.card.big {
+                        width: 350;
+                    }
+
+                    #myBtn {
+                        width: 500;
+                        color: var(--gold);
+                    }
+
+                    Button {
+                        width: 120;
+                    }
+
+                    Button {
+                        width: 220; /* Later rule wins at equal specificity */
+                    }
+
+                    Panel > Text.title {
+                        font-size: 24;
+                        color: var(--gold);
+                    }
+
+                    Panel .desc {
+                        font-size: 14;
+                        color: var(--missing-token, #aabbcc);
+                    }
+
+                    Button, .clickable {
+                        height: 40;
+                    }
+                </Styles>
+
+                <Panel id="MainCard" class="card big">
+                    <Text id="TitleText" class="title" text="Card Title" />
+                    <Panel id="Inner">
+                        <Text id="DescText" class="desc" text="Inner Description" />
+                    </Panel>
+                    <Button id="myBtn" class="clickable" text="Click Me" />
+                    <Button id="standardBtn" text="Standard Button" />
+                    <Button id="inlineOverrideBtn" width="333" text="Inline Override" />
+                </Panel>
+            </UI>
+        )";
+
+        auto* root = loader.loadString(pssXml);
+        TEST_ASSERT(root != nullptr, "PSS markup loaded successfully");
+
+        auto* mainCard = loader.findByName("MainCard");
+        TEST_ASSERT(mainCard != nullptr, "MainCard found");
+        TEST_ASSERT(mainCard->computedStyle().width.value_or(0.0f) == 350.0f, "MainCard width 350 from compound selector 'Panel.card.big'");
+        TEST_ASSERT(mainCard->computedStyle().cornerRadius.value_or(0.0f) == 6.0f, "MainCard radius 6 from class selector '.card'");
+        TEST_ASSERT(mainCard->computedStyle().opacity.value_or(0.0f) == 0.95f, "MainCard opacity 0.95 from tag selector 'Panel'");
+        TEST_ASSERT(mainCard->computedStyle().padding.has_value() && mainCard->computedStyle().padding->left == 12.0f, "MainCard padding 12 from var(--pad)");
+
+        // Specificity: ID (#myBtn = 500) beats Tag (Button = 220)
+        auto* myBtn = loader.findByName("myBtn");
+        TEST_ASSERT(myBtn != nullptr, "myBtn found");
+        TEST_ASSERT(myBtn->computedStyle().width.value_or(0.0f) == 500.0f, "#myBtn width 500 (ID beats Tag)");
+        TEST_ASSERT(myBtn->computedStyle().height.value_or(0.0f) == 40.0f, "#myBtn height 40 from comma selector 'Button, .clickable'");
+        TEST_ASSERT(myBtn->computedStyle().color == Color::FromHex("#c8a45a"), "#myBtn color is var(--gold)");
+
+        // Later rule wins at same specificity
+        auto* standardBtn = loader.findByName("standardBtn");
+        TEST_ASSERT(standardBtn != nullptr, "standardBtn found");
+        TEST_ASSERT(standardBtn->computedStyle().width.value_or(0.0f) == 220.0f, "standardBtn width 220 (later rule won over 120)");
+
+        // Source priority: Inline XML attribute beats PSS
+        auto* inlineOverrideBtn = loader.findByName("inlineOverrideBtn");
+        TEST_ASSERT(inlineOverrideBtn != nullptr, "inlineOverrideBtn found");
+        TEST_ASSERT(inlineOverrideBtn->computedStyle().width.value_or(0.0f) == 333.0f, "inlineOverrideBtn width 333 (inline XML beats PSS 220)");
+
+        // Child selector (Panel > Text.title)
+        auto* titleText = loader.findByName("TitleText");
+        TEST_ASSERT(titleText != nullptr, "TitleText found");
+        TEST_ASSERT(titleText->computedStyle().fontSize.value_or(0.0f) == 24.0f, "TitleText font-size 24 from child selector 'Panel > Text.title'");
+        TEST_ASSERT(titleText->computedStyle().color == Color::FromHex("#c8a45a"), "TitleText color var(--gold)");
+
+        // Descendant selector (Panel .desc) with fallback in var()
+        auto* descText = loader.findByName("DescText");
+        TEST_ASSERT(descText != nullptr, "DescText found");
+        TEST_ASSERT(descText->computedStyle().fontSize.value_or(0.0f) == 14.0f, "DescText font-size 14 from descendant selector 'Panel .desc'");
+        TEST_ASSERT(descText->computedStyle().color == Color::FromHex("#aabbcc"), "DescText color var(--missing-token, #aabbcc) fallback");
+
+        // Dynamic variable update in runtime
+        context.setCssVariable("--gold", "#ffffff");
+        TEST_ASSERT(titleText->computedStyle().color == Color::White(), "Runtime variable update (--gold -> #ffffff) recalculated dependent styles");
+
+        // Class manipulation via C++ API
+        mainCard->removeClass("big");
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(!mainCard->computedStyle().width.has_value() || mainCard->computedStyle().width.value() != 350.0f, "Removing class 'big' clears width 350");
+
+        mainCard->addClass("big");
+        context.root()->updateStyleCascade();
+        TEST_ASSERT(mainCard->computedStyle().width.value_or(0.0f) == 350.0f, "Adding class 'big' reapplies width 350");
+
+        // Performance benchmark: 1000 elements cascade recalculation
+        auto benchRoot = std::make_unique<UIElement>("BenchRoot");
+        benchRoot->setContext(&context);
+        for (int i = 0; i < 500; ++i) {
+            auto p = std::make_unique<Panel>("Card" + std::to_string(i));
+            p->addClass("card");
+            auto b = std::make_unique<Button>("Btn" + std::to_string(i));
+            p->addChild(std::move(b));
+            benchRoot->addChild(std::move(p));
+        }
+        auto t0 = std::chrono::high_resolution_clock::now();
+        benchRoot->invalidateStyleSubtree();
+        benchRoot->updateStyleCascade();
+        auto t1 = std::chrono::high_resolution_clock::now();
+        double elapsedMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        std::cout << "  [Benchmark] 1000 elements style cascade recalculation time: " << elapsedMs << " ms\n";
+        TEST_ASSERT(elapsedMs < 30.0, "1000 elements style cascade recalculated under 30ms");
     }
 
     // -------------------------------------------------------------

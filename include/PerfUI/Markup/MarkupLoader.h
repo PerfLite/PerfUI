@@ -46,6 +46,10 @@ public:
 
     void clearResult() { m_lastResult = LoadResult{}; }
 
+    // Stylesheet (PSS) API
+    bool loadStyles(const std::filesystem::path& path);
+    void reloadStyles();
+
 private:
     UIElement* parseAndBuildTree(std::string_view xml, UIElement* parent);
     void setupElementProperties(UIElement* element, const std::string& tag, const AttrMap& attrs, int lineNumber);

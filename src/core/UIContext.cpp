@@ -4,6 +4,7 @@
 #include "PerfUI/Animation.h"
 #include "PerfUI/Diagnostics.h"
 #include "PerfUI/WorldAnchor.h"
+#include "PerfUI/Style/StyleSheet.h"
 #include <algorithm>
 #include <chrono>
 
@@ -12,6 +13,7 @@ namespace PerfUI {
 UIContext::UIContext() {
     m_root = std::make_unique<UIElement>("Root");
     m_root->setContext(this);
+    m_styleSheet = std::make_unique<StyleSheet>();
 }
 
 UIContext::~UIContext() = default;
@@ -68,18 +70,8 @@ void UIContext::update(float deltaTime) {
     // Context menu lifecycle
     m_contextMenu.update(deltaTime);
 
-    // Timelines lifecycle
-    for (auto it = m_timelines.begin(); it != m_timelines.end();) {
-        auto& tl = *it;
-        if (!tl || tl->state() == Timeline::State::Finished) {
-            it = m_timelines.erase(it);
-        } else {
-            if (tl->state() == Timeline::State::Playing) {
-                tl->update(deltaTime);
-            }
-            ++it;
-        }
-    }
+    // Central Animation Scheduler lifecycle (Timelines, timeScale, reducedMotion)
+    m_animationScheduler.update(deltaTime);
 
     // Tooltip timer logic
     if (m_hoveredElement && !m_hoveredElement->tooltip().empty()) {
@@ -139,7 +131,10 @@ void UIContext::render(UIRenderBackend& backend, bool renderTree) {
     auto start = std::chrono::high_resolution_clock::now();
     backend.beginFrame();
     if (renderTree && m_root && m_root->isVisible()) {
+        bool hasXf = m_root->hasVisualTransform();
+        if (hasXf) backend.pushTransform(m_root->renderOffset(), m_root->renderScale(), m_root->pivot(), m_root->bounds());
         m_root->render(backend);
+        if (hasXf) backend.popTransform();
     }
     if (renderTree) {
         renderOverlay(backend);
@@ -172,7 +167,10 @@ void UIContext::renderOverlay(UIRenderBackend& backend) {
 
     // 2. Modal Dialog rendering
     if (m_activeModal) {
+        bool hasXf = m_activeModal->hasVisualTransform();
+        if (hasXf) backend.pushTransform(m_activeModal->renderOffset(), m_activeModal->renderScale(), m_activeModal->pivot(), m_activeModal->bounds());
         m_activeModal->render(backend);
+        if (hasXf) backend.popTransform();
     }
 
     // 3. ComboBox dropdown overlay
@@ -579,12 +577,20 @@ void UIContext::unregisterHotkey(const std::string& id) {
 }
 
 bool UIContext::triggerHotkey(uint32_t keyCode) {
+    auto now = std::chrono::steady_clock::now();
     std::function<void()> cbToRun;
     {
         std::lock_guard<std::mutex> lock(m_hotkeyMutex);
+        auto it = m_lastHotkeyTrigger.find(keyCode);
+        if (it != m_lastHotkeyTrigger.end()) {
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second).count() < 180) {
+                return true; // Debounce rapid duplicate trigger
+            }
+        }
         for (const auto& [id, item] : m_hotkeys) {
             if (item.keyCode == keyCode && item.callback) {
                 cbToRun = item.callback;
+                m_lastHotkeyTrigger[keyCode] = now;
                 break;
             }
         }
@@ -592,6 +598,16 @@ bool UIContext::triggerHotkey(uint32_t keyCode) {
     if (cbToRun) {
         cbToRun();
         return true;
+    }
+    return false;
+}
+
+bool UIContext::hasHotkey(uint32_t keyCode) const {
+    std::lock_guard<std::mutex> lock(m_hotkeyMutex);
+    for (const auto& [id, item] : m_hotkeys) {
+        if (item.keyCode == keyCode) {
+            return true;
+        }
     }
     return false;
 }
@@ -607,16 +623,11 @@ void UIContext::clearHotkeys() {
 }
 
 std::shared_ptr<Timeline> UIContext::createTimeline() {
-    auto tl = std::make_shared<Timeline>();
-    m_timelines.push_back(tl);
-    return tl;
+    return m_animationScheduler.createTimeline();
 }
 
 void UIContext::removeTimeline(const std::shared_ptr<Timeline>& timeline) {
-    auto it = std::find(m_timelines.begin(), m_timelines.end(), timeline);
-    if (it != m_timelines.end()) {
-        m_timelines.erase(it);
-    }
+    m_animationScheduler.removeTimeline(timeline);
 }
 
 void UIContext::setWorldAnchorSnapshot(std::shared_ptr<const WorldAnchorSnapshot> snapshot) {
@@ -636,6 +647,40 @@ const WorldAnchorPoint* UIContext::getWorldAnchorPoint(uint32_t targetId) const 
         return &it->second;
     }
     return nullptr;
+}
+
+StyleSheet& UIContext::styleSheet() {
+    if (!m_styleSheet) m_styleSheet = std::make_unique<StyleSheet>();
+    return *m_styleSheet;
+}
+
+const StyleSheet& UIContext::styleSheet() const {
+    if (!m_styleSheet) {
+        const_cast<UIContext*>(this)->m_styleSheet = std::make_unique<StyleSheet>();
+    }
+    return *m_styleSheet;
+}
+
+void UIContext::reloadStyles() {
+    if (m_styleSheet) {
+        m_styleSheet->reloadFiles();
+    }
+    if (m_root) {
+        m_root->invalidateStyleSubtree();
+        m_root->updateStyleCascade();
+    }
+}
+
+void UIContext::setCssVariable(std::string name, std::string value) {
+    styleSheet().setVariable(std::move(name), std::move(value));
+    if (m_root) {
+        m_root->invalidateStyleSubtree();
+        m_root->updateStyleCascade();
+    }
+}
+
+std::string UIContext::getCssVariable(const std::string& name) const {
+    return styleSheet().getVariable(name);
 }
 
 } // namespace PerfUI

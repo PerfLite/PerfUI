@@ -44,6 +44,7 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/Image.h
     include/PerfUI/Theme.h
     include/PerfUI/Animation.h
+    include/PerfUI/AnimationScheduler.h
     include/PerfUI/TabBar.h
     include/PerfUI/ComboBox.h
     include/PerfUI/TextInput.h
@@ -51,6 +52,8 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/ConfigManager.h
     include/PerfUI/Toast.h
     include/PerfUI/ContextMenu.h
+    include/PerfUI/Localization.h
+    include/PerfUI/SettingsWindow.h
     include/PerfUI/ModalDialog.h
     include/PerfUI/MapCanvas.h
     include/PerfUI/Overlay.h
@@ -61,11 +64,17 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/PerfUI.h
     src/core/UIElement.cpp
     src/core/UIContext.cpp
+    third_party/pugixml/pugixml.cpp
     src/core/Animation.cpp
+    src/core/AnimationScheduler.cpp
+    src/core/Diagnostics.cpp
+    src/core/ModuleLog.cpp
+    src/core/Localization.cpp
     src/core/Theme.cpp
     src/core/ConfigManager.cpp
     src/core/OverlayManager.cpp
     src/layout/LayoutEngine.cpp
+    src/layout/LayoutExtensions.cpp
     src/widgets/Panel.cpp
     src/widgets/Text.cpp
     src/widgets/Label.cpp
@@ -90,10 +99,12 @@ add_library(PerfUI_Core STATIC
     src/widgets/ProgressBar.cpp
     src/widgets/Slider.cpp
     src/widgets/Image.cpp
+    src/widgets/SvgImage.cpp
     src/widgets/TabBar.cpp
     src/widgets/ComboBox.cpp
     src/widgets/TextInput.cpp
     src/widgets/SettingsView.cpp
+    src/widgets/SettingsWindow.cpp
     src/widgets/Toast.cpp
     src/widgets/ContextMenu.cpp
     src/widgets/ModalDialog.cpp
@@ -101,10 +112,18 @@ add_library(PerfUI_Core STATIC
     src/widgets/MapCanvas.cpp
     src/widgets/WorldAnchor.cpp
     src/widgets/MainMenuWindow.cpp
+    include/PerfUI/Style/StyleTypes.h
+    include/PerfUI/Style/ComputedStyle.h
+    include/PerfUI/Style/StyleSheet.h
+    src/style/StyleTokenizer.h
+    src/style/StyleParser.h
+    src/style/StyleParser.cpp
+    src/style/StyleSheet.cpp
 )
 
 target_include_directories(PerfUI_Core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/third_party/pugixml>
     $<INSTALL_INTERFACE:include>
 )
 
@@ -352,6 +371,24 @@ target_link_libraries(PerfUI_Test_WorldAnchor PRIVATE
 )
 
 # ---------------------------------------------------------------------------
+# 14. PerfUI_Test_Animation (Animation, Tweens & Timeline Test Suite)
+# ---------------------------------------------------------------------------
+add_executable(PerfUI_Test_Animation
+    tests/AnimationTest.cpp
+    src/backends/mock/MockRenderBackend.h
+)
+
+target_include_directories(PerfUI_Test_Animation PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/mock
+)
+
+target_link_libraries(PerfUI_Test_Animation PRIVATE
+    PerfUI_Markup
+    PerfUI_Core
+    user32
+)
+
+# ---------------------------------------------------------------------------
 # CTest Integration
 # ---------------------------------------------------------------------------
 enable_testing()
@@ -364,6 +401,7 @@ add_test(NAME TextureTest COMMAND PerfUI_Test_Texture)
 add_test(NAME MapCanvasTest COMMAND PerfUI_Test_MapCanvas)
 add_test(NAME StyleSystemTest COMMAND PerfUI_Test_Style)
 add_test(NAME WorldAnchorTest COMMAND PerfUI_Test_WorldAnchor)
+add_test(NAME AnimationTest COMMAND PerfUI_Test_Animation)
 
 
 

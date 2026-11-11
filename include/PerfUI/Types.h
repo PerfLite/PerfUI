@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -11,6 +12,7 @@
 namespace PerfUI {
 
 using ElementId = uint64_t;
+using TextureId = uint64_t;
 
 struct Point {
     float x{ 0.0f };
@@ -33,6 +35,7 @@ struct Dimensions {
 
     constexpr Dimensions() = default;
     constexpr Dimensions(float w, float h) : width(w), height(h) {}
+    constexpr bool operator==(const Dimensions& other) const = default;
 };
 
 struct Insets {
@@ -48,6 +51,7 @@ struct Insets {
 
     constexpr float horizontal() const { return left + right; }
     constexpr float vertical() const { return top + bottom; }
+    constexpr bool operator==(const Insets& other) const = default;
 };
 
 struct Rect {
@@ -78,6 +82,8 @@ struct Rect {
             newH > 0.0f ? newH : 0.0f
         };
     }
+
+    constexpr bool operator==(const Rect& other) const = default;
 };
 
 struct Color {
@@ -122,6 +128,35 @@ struct Color {
             static_cast<uint8_t>(static_cast<float>(c1.b) + static_cast<float>(c2.b - c1.b) * f),
             static_cast<uint8_t>(static_cast<float>(c1.a) + static_cast<float>(c2.a - c1.a) * f)
         };
+    }
+
+    static inline Color FromHex(std::string_view s, Color defaultColor = Color::White()) {
+        while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) s.remove_prefix(1);
+        while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) s.remove_suffix(1);
+        if (s.empty()) return defaultColor;
+
+        if (s.front() == '#') s.remove_prefix(1);
+
+        auto parseByte = [](std::string_view sv) -> uint8_t {
+            char buf[3] = { sv[0], sv[1], '\0' };
+            return static_cast<uint8_t>(std::strtoul(buf, nullptr, 16));
+        };
+        auto parseNibble = [](char c) -> uint8_t {
+            char buf[2] = { c, '\0' };
+            unsigned long n = std::strtoul(buf, nullptr, 16);
+            return static_cast<uint8_t>(n * 17);
+        };
+
+        if (s.size() == 6) { // RRGGBB
+            return Color(parseByte(s.substr(0, 2)), parseByte(s.substr(2, 2)), parseByte(s.substr(4, 2)), 255);
+        } else if (s.size() == 8) { // RRGGBBAA
+            return Color(parseByte(s.substr(0, 2)), parseByte(s.substr(2, 2)), parseByte(s.substr(4, 2)), parseByte(s.substr(6, 2)));
+        } else if (s.size() == 3) { // RGB
+            return Color(parseNibble(s[0]), parseNibble(s[1]), parseNibble(s[2]), 255);
+        } else if (s.size() == 4) { // RGBA
+            return Color(parseNibble(s[0]), parseNibble(s[1]), parseNibble(s[2]), parseNibble(s[3]));
+        }
+        return defaultColor;
     }
 
     constexpr uint32_t toRGBA32() const {
@@ -177,6 +212,13 @@ enum class NavDirection {
     Down,
     Left,
     Right
+};
+
+enum class BlendMode : uint8_t {
+    Normal = 0,
+    Additive,
+    Multiply,
+    Screen
 };
 
 } // namespace PerfUI

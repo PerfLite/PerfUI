@@ -34,6 +34,7 @@
 #include "PerfUI/UIContext.h"
 
 #include <sstream>
+#include <iostream>
 
 namespace PerfUI {
 
@@ -57,7 +58,11 @@ UIElement* WidgetRegistry::create(const std::string& tag, UIElement* parent, con
     if (it == m_factories.end()) {
         return nullptr;
     }
-    return it->second(parent, attrs);
+    UIElement* elem = it->second(parent, attrs);
+    if (elem) {
+        elem->setTypeName(tag);
+    }
+    return elem;
 }
 
 bool WidgetRegistry::hasWidget(const std::string& tag) const {

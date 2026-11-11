@@ -26,11 +26,13 @@ struct BoxStyle {
     std::optional<float> cornerRadius;
     std::optional<ShadowStyle> shadow;
     std::optional<float> opacity;
+    std::optional<bool> liquidGlass;
     TextureId backgroundTexture{ 0 };
 
     BoxStyle& bg(Color c) { backgroundColor = c; return *this; }
     BoxStyle& border(Color c, float width = 1.0f) { borderColor = c; borderWidth = width; return *this; }
     BoxStyle& radius(float r) { cornerRadius = r; return *this; }
+    BoxStyle& glass(bool lg = true) { liquidGlass = lg; return *this; }
     BoxStyle& dropShadow(Color c, float blur = 16.0f, Point offset = { 0.0f, 4.0f }) {
         shadow = ShadowStyle{ c, blur, offset };
         return *this;
@@ -46,6 +48,7 @@ struct BoxStyle {
         if (!res.cornerRadius.has_value()) res.cornerRadius = fallback.cornerRadius;
         if (!res.shadow.has_value()) res.shadow = fallback.shadow;
         if (!res.opacity.has_value()) res.opacity = fallback.opacity;
+        if (!res.liquidGlass.has_value()) res.liquidGlass = fallback.liquidGlass;
         if (res.backgroundTexture == 0) res.backgroundTexture = fallback.backgroundTexture;
         return res;
     }

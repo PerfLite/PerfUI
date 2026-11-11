@@ -63,6 +63,7 @@ add_includedirs("modules/postfx/include")
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
+        "src/style/*.cpp",
         "src/backends/imgui/*.cpp",
         "src/skyrim/*.cpp",
         "third_party/pugixml/pugixml.cpp",
@@ -106,11 +107,14 @@ target("PerfUI_Test_Independence")
     set_languages("c++20")
     add_defines("PERFUI_STATIC")
     add_syslinks("user32")
-    add_includedirs("include", "src/backends/mock", "src")
+    add_includedirs("include", "src/backends/mock", "src", "third_party/pugixml")
     add_files(
         "src/core/*.cpp",
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
         "tests/BackendIndependenceTest.cpp"
     )
 
@@ -119,11 +123,14 @@ target("PerfUI_Test_Layout")
     set_languages("c++20")
     add_defines("PERFUI_STATIC")
     add_syslinks("user32")
-    add_includedirs("include", "src/backends/mock", "src")
+    add_includedirs("include", "src/backends/mock", "src", "third_party/pugixml")
     add_files(
         "src/core/*.cpp",
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
         "tests/LayoutTest.cpp"
     )
 
@@ -132,11 +139,14 @@ target("PerfUI_Test_Animation")
     set_languages("c++20")
     add_defines("PERFUI_STATIC")
     add_syslinks("user32")
-    add_includedirs("include", "src/backends/mock", "src")
+    add_includedirs("include", "src/backends/mock", "src", "third_party/pugixml")
     add_files(
         "src/core/*.cpp",
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
         "tests/AnimationTest.cpp"
     )
 
@@ -145,11 +155,14 @@ target("PerfUI_Test_WorldAnchor")
     set_languages("c++20")
     add_defines("PERFUI_STATIC")
     add_syslinks("user32")
-    add_includedirs("include", "src/backends/mock", "src")
+    add_includedirs("include", "src/backends/mock", "src", "third_party/pugixml")
     add_files(
         "src/core/*.cpp",
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
         "tests/WorldAnchorTest.cpp"
     )
 
@@ -158,11 +171,14 @@ target("PerfUI_Bench_ImGui")
     set_languages("c++20")
     add_defines("PERFUI_STATIC")
     add_syslinks("user32")
-    add_includedirs("include", "src/backends/imgui", "third_party/imgui", "src")
+    add_includedirs("include", "src/backends/imgui", "third_party/imgui", "src", "third_party/pugixml")
     add_files(
         "src/core/*.cpp",
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
         "src/backends/imgui/ImGuiRenderBackend.cpp",
         "third_party/imgui/imgui.cpp",
         "third_party/imgui/imgui_draw.cpp",
@@ -178,6 +194,7 @@ target("PerfUI_Markup")
     add_includedirs("include", "third_party/pugixml", "src/markup", "src")
     add_files(
         "src/markup/*.cpp",
+        "src/style/*.cpp",
         "third_party/pugixml/pugixml.cpp"
     )
 
@@ -192,6 +209,7 @@ target("PerfUI_Test_Markup")
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
+        "src/style/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/MarkupTest.cpp"
     )
@@ -201,11 +219,14 @@ target("PerfUI_Test_Overlay")
     set_languages("c++20")
     add_defines("PERFUI_STATIC")
     add_syslinks("user32")
-    add_includedirs("include", "src/backends/mock", "src")
+    add_includedirs("include", "src/backends/mock", "src", "third_party/pugixml")
     add_files(
         "src/core/*.cpp",
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
         "tests/OverlayTest.cpp"
     )
 
@@ -214,11 +235,14 @@ target("PerfUI_Test_Diagnostics")
     set_languages("c++20")
     add_defines("PERFUI_STATIC")
     add_syslinks("user32")
-    add_includedirs("include", "src/backends/mock", "src")
+    add_includedirs("include", "src/backends/mock", "src", "third_party/pugixml")
     add_files(
         "src/core/*.cpp",
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
         "tests/DiagnosticsTest.cpp"
     )
 
@@ -227,11 +251,14 @@ target("PerfUI_Test_Texture")
     set_languages("c++20")
     add_defines("PERFUI_STATIC")
     add_syslinks("user32")
-    add_includedirs("include", "src/backends/mock", "src")
+    add_includedirs("include", "src/backends/mock", "src", "third_party/pugixml")
     add_files(
         "src/core/*.cpp",
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
         "tests/TextureTest.cpp"
     )
 
@@ -243,11 +270,14 @@ target("PerfUI_Test_MapCanvas")
     if is_plat("windows") then
         add_cxflags("/utf-8", { force = true })
     end
-    add_includedirs("include", "src/backends/mock", "src")
+    add_includedirs("include", "src/backends/mock", "src", "third_party/pugixml")
     add_files(
         "src/core/*.cpp",
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
         "tests/MapCanvasTest.cpp"
     )
 
@@ -265,6 +295,7 @@ target("PerfUI_Test_Style")
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
+        "src/style/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/StyleSystemTest.cpp"
     )
@@ -274,11 +305,14 @@ target("PerfUI_Test_Svg")
     set_languages("c++20")
     add_defines("PERFUI_STATIC")
     add_syslinks("user32")
-    add_includedirs("include", "src/backends/mock", "third_party/nanosvg", "src")
+    add_includedirs("include", "src/backends/mock", "third_party/nanosvg", "src", "third_party/pugixml")
     add_files(
         "src/core/*.cpp",
         "src/layout/*.cpp",
         "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
         "tests/SvgTest.cpp"
     )
 
@@ -303,11 +337,14 @@ if has_config("perfui_lua") then
         add_defines("PERFUI_STATIC")
         add_syslinks("user32")
         add_deps("PerfUI_Lua")
-        add_includedirs("include", "modules/lua/include", "src/backends/mock", "src")
+        add_includedirs("include", "modules/lua/include", "src/backends/mock", "src", "third_party/pugixml")
         add_files(
             "src/core/*.cpp",
             "src/layout/*.cpp",
             "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
+            "third_party/pugixml/pugixml.cpp",
             "modules/lua/tests/ScriptHostTest.cpp"
         )
         add_tests("script_host")
@@ -324,6 +361,7 @@ if has_config("perfui_lua") then
             "src/layout/*.cpp",
             "src/widgets/*.cpp",
             "src/markup/*.cpp",
+        "src/style/*.cpp",
             "third_party/pugixml/pugixml.cpp",
             "modules/lua/tests/LuaUiApiTest.cpp"
         )

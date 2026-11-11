@@ -13,6 +13,7 @@
 #include "PerfUI/TextInput.h"
 #include "PerfUI/SvgImage.h"
 #include "PerfUI/Theme.h"
+#include "PerfUI/Style/StyleSheet.h"
 
 #include <pugixml.hpp>
 #include <fstream>
@@ -201,6 +202,11 @@ UIElement* MarkupLoader::loadString(std::string_view xml, UIElement* parent) {
         m_root = newTree;
     }
 
+    if (m_root) {
+        m_root->invalidateStyleSubtree();
+        m_root->updateStyleCascade();
+    }
+
     return m_root;
 }
 
@@ -215,6 +221,8 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
     } else if (itName != attrs.end()) {
         element->name(itName->second);
     }
+
+    element->setInlineAttrs(attrs);
 
     for (const auto& [k, v] : attrs) {
         if (!isKnownWidgetAttribute(tag, k)) {
@@ -436,6 +444,33 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
     }
 }
 
+bool MarkupLoader::loadStyles(const std::filesystem::path& path) {
+    std::filesystem::path resolved = path;
+    if (resolved.is_relative() && !m_sourceFilePath.empty()) {
+        auto candidate = m_sourceFilePath.parent_path() / resolved;
+        if (std::filesystem::exists(candidate)) {
+            resolved = candidate;
+        } else if (std::filesystem::exists("Data" / resolved)) {
+            resolved = "Data" / resolved;
+        } else if (std::filesystem::exists("Data/Styles" / resolved)) {
+            resolved = "Data/Styles" / resolved;
+        }
+    }
+    bool ok = m_context.styleSheet().loadFile(resolved);
+    if (!ok) {
+        m_lastResult.warnings.push_back("Failed to load stylesheet: " + resolved.string());
+    }
+    if (m_root) {
+        m_root->invalidateStyleSubtree();
+        m_root->updateStyleCascade();
+    }
+    return ok;
+}
+
+void MarkupLoader::reloadStyles() {
+    m_context.reloadStyles();
+}
+
 UIElement* MarkupLoader::parseAndBuildTree(std::string_view xml, UIElement* parent) {
     pugi::xml_document doc;
     pugi::xml_parse_result parseResult = doc.load_buffer(xml.data(), xml.size());
@@ -481,17 +516,49 @@ UIElement* MarkupLoader::parseAndBuildTree(std::string_view xml, UIElement* pare
         }
 
         if (tag == "UI") {
+            if (auto stylesAttr = node.attribute("styles")) {
+                std::string stylesStr = stylesAttr.as_string();
+                std::istringstream iss(stylesStr);
+                std::string pathToken;
+                while (iss >> pathToken) {
+                    loadStyles(pathToken);
+                }
+            }
             if (auto scriptAttr = node.attribute("script")) {
                 m_scriptAttribute = scriptAttr.as_string();
             }
             UIElement* firstCreated = nullptr;
             for (pugi::xml_node child : node.children()) {
+                std::string childTag = child.name();
+                if (childTag == "Styles" || childTag == "Style") {
+                    if (auto srcAttr = child.attribute("src")) {
+                        loadStyles(srcAttr.as_string());
+                    } else {
+                        std::string inlineCss = child.child_value();
+                        if (!inlineCss.empty()) {
+                            m_context.styleSheet().loadString(inlineCss, "<inline>");
+                        }
+                    }
+                    continue;
+                }
                 UIElement* created = buildElement(child, currentParent);
                 if (!firstCreated && created) {
                     firstCreated = created;
                 }
             }
             return firstCreated;
+        }
+
+        if (tag == "Styles" || tag == "Style") {
+            if (auto srcAttr = node.attribute("src")) {
+                loadStyles(srcAttr.as_string());
+            } else {
+                std::string inlineCss = node.child_value();
+                if (!inlineCss.empty()) {
+                    m_context.styleSheet().loadString(inlineCss, "<inline>");
+                }
+            }
+            return nullptr;
         }
 
         if (!WidgetRegistry::instance().hasWidget(tag)) {
@@ -517,6 +584,9 @@ UIElement* MarkupLoader::parseAndBuildTree(std::string_view xml, UIElement* pare
     };
 
     UIElement* createdRoot = buildElement(rootNode, parent);
+    if (createdRoot) {
+        createdRoot->updateStyleCascade();
+    }
     return createdRoot;
 }
 
