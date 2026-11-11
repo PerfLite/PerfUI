@@ -10,6 +10,13 @@
 #include "imgui_impl_dx11.h"
 
 #include "PerfUI/PerfUI.h"
+#include "PerfUI/Markup/MarkupLoader.h"
+#if defined(PERFUI_ENABLE_LUA)
+#include "PerfUI/Lua/ScriptHost.h"
+#include "PerfUI/Lua/ScriptCallbackResolver.h"
+#endif
+#include <filesystem>
+#include <string>
 #include "../../src/backends/imgui/ImGuiRenderBackend.h"
 #include "../map_demo/MapDemoHud.h"
 #include "../modder_custom_hud/CustomHealthBar.h"
@@ -39,6 +46,15 @@ static PerfUI::Examples::CustomHealthBar* g_customHud = nullptr;
 static PerfUI::Examples::MapDemoHud* g_mapDemo = nullptr;
 static PerfUI::Examples::DesignSystemShowcase* g_showcaseWindow = nullptr;
 static float g_simulatedHealth = 100.0f;
+
+// PSS Demo (Markup + Stylesheet + Lua scripting + Hot-reload)
+static std::unique_ptr<PerfUI::MarkupLoader> g_pssLoader;
+#if defined(PERFUI_ENABLE_LUA)
+static std::unique_ptr<PerfUI::ScriptHost> g_pssScriptHost;
+static std::unique_ptr<PerfUI::ScriptCallbackResolver> g_pssResolver;
+#endif
+static PerfUI::UIElement* g_pssDemoRoot = nullptr;
+static std::filesystem::path g_pssMenuPath;
 
 // Simple custom test component to demonstrate retained rendering
 class DemoPanel : public PerfUI::UIElement {
@@ -180,10 +196,71 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     g_mapDemo = g_uiContext->root()->add<PerfUI::Examples::MapDemoHud>();
     g_mapDemo->setVisible(false);
 
-    // Design System & Components showcase (visible by default, toggled via F7)
+    // Design System & Components showcase (toggled via F7)
     g_showcaseWindow = g_uiContext->root()->add<PerfUI::Examples::DesignSystemShowcase>();
     g_showcaseWindow->setBounds(PerfUI::Rect{ 80.0f, 40.0f, 1120.0f, 640.0f });
-    g_showcaseWindow->setVisible(true);
+    g_showcaseWindow->setVisible(false);
+
+    // Initialize PSS (PerfUI Style Sheets) Demo with Hot-Reload and Lua Scripting
+    g_pssMenuPath = "examples/pss_demo/menu.xml";
+    if (!std::filesystem::exists(g_pssMenuPath)) {
+        char exePathBuf[MAX_PATH];
+        if (::GetModuleFileNameA(nullptr, exePathBuf, MAX_PATH) > 0) {
+            std::filesystem::path exeDir = std::filesystem::path(exePathBuf).parent_path();
+            if (std::filesystem::exists(exeDir / "examples/pss_demo/menu.xml")) {
+                g_pssMenuPath = exeDir / "examples/pss_demo/menu.xml";
+            } else if (std::filesystem::exists(exeDir / "../../examples/pss_demo/menu.xml")) {
+                g_pssMenuPath = exeDir / "../../examples/pss_demo/menu.xml";
+            }
+        }
+    }
+
+#if defined(PERFUI_ENABLE_LUA)
+    g_pssScriptHost = std::make_unique<PerfUI::ScriptHost>("PSSDemo");
+    g_pssScriptHost->bindContext(g_uiContext.get(), g_uiContext->root());
+    g_pssResolver = std::make_unique<PerfUI::ScriptCallbackResolver>(*g_pssScriptHost);
+#endif
+
+    g_pssLoader = std::make_unique<PerfUI::MarkupLoader>(*g_uiContext);
+#if defined(PERFUI_ENABLE_LUA)
+    g_pssLoader->setCallbackResolver(g_pssResolver.get());
+    g_pssLoader->onScriptReload([](const std::string& relPath) {
+        if (!g_pssScriptHost || !g_pssLoader) return;
+        g_pssScriptHost->reset();
+        g_pssScriptHost->bindContext(g_uiContext.get(), g_uiContext->root());
+        auto scriptPath = g_pssLoader->loadedFilePath().parent_path() / relPath;
+        if (std::filesystem::exists(scriptPath)) {
+            g_pssScriptHost->loadFile(scriptPath);
+        }
+        if (g_uiContext) {
+            g_uiContext->showToast("PSS Script Reload", relPath, PerfUI::ToastType::Success, 2.0f);
+        }
+    });
+#endif
+    g_pssLoader->onAfterReload([](PerfUI::UIElement* newRoot) {
+        g_pssDemoRoot = newRoot;
+        if (g_pssDemoRoot) {
+            g_pssDemoRoot->setBounds(PerfUI::Rect{ 360.0f, 60.0f, 560.0f, 540.0f });
+        }
+    });
+    g_pssLoader->enableHotReload(true);
+
+    if (std::filesystem::exists(g_pssMenuPath)) {
+        g_pssDemoRoot = g_pssLoader->loadFile(g_pssMenuPath, g_uiContext->root());
+        if (g_pssDemoRoot) {
+            g_pssDemoRoot->setBounds(PerfUI::Rect{ 360.0f, 60.0f, 560.0f, 540.0f });
+            g_pssDemoRoot->setVisible(true);
+
+#if defined(PERFUI_ENABLE_LUA)
+            if (!g_pssLoader->scriptAttribute().empty()) {
+                auto scriptPath = g_pssMenuPath.parent_path() / g_pssLoader->scriptAttribute();
+                if (std::filesystem::exists(scriptPath)) {
+                    g_pssScriptHost->loadFile(scriptPath);
+                }
+            }
+#endif
+        }
+    }
 
     g_mainMenuWindow->onContinueGame([]() {
         if (g_mainMenuWindow && g_journalWindow) {
@@ -227,6 +304,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         float height = static_cast<float>(rect.bottom - rect.top);
         g_uiContext->setViewportSize({ width, height });
 
+        // Poll PSS markup hot-reload
+        if (g_pssLoader) {
+            g_pssLoader->poll();
+        }
+#if defined(PERFUI_ENABLE_LUA)
+        if (g_pssScriptHost) {
+            g_pssScriptHost->update(dt);
+        }
+#endif
+
         // Update & Render PerfUI through UIRenderBackend abstraction
         g_uiContext->update(dt);
         g_uiContext->render(*g_renderBackend);
@@ -242,6 +329,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     }
 
     // Cleanup
+    g_pssDemoRoot = nullptr;
+    g_pssLoader.reset();
+#if defined(PERFUI_ENABLE_LUA)
+    g_pssResolver.reset();
+    g_pssScriptHost.reset();
+#endif
     g_uiContext.reset();
     g_renderBackend.reset();
 
@@ -374,6 +467,13 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 g_uiContext->onKeyDown(static_cast<int>(wParam));
                 return 0;
             }
+            if (wParam == VK_F4) {
+                if (g_uiContext) {
+                    g_uiContext->reloadStyles();
+                    g_uiContext->showToast("PSS Stylesheet [F4]", "Stylesheets reloaded successfully", PerfUI::ToastType::Success, 2.0f);
+                }
+                return 0;
+            }
             if (wParam == VK_F5) {
                 static int s_themeIdx = 0;
                 const char* themes[] = { "Nordic Fantasy", "Dark Fantasy", "Minimalist", "Vanilla Skyrim", "Futuristic" };
@@ -381,6 +481,16 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 PerfUI::Theme::ApplyPreset(themes[s_themeIdx]);
                 if (g_uiContext) {
                     g_uiContext->showToast("Theme Preset [F5]", themes[s_themeIdx], PerfUI::ToastType::Success, 2.0f);
+                }
+                return 0;
+            }
+            if (wParam == VK_F6) {
+                if (g_pssDemoRoot) {
+                    bool show = !g_pssDemoRoot->isVisible();
+                    g_pssDemoRoot->setVisible(show);
+                    if (g_uiContext) {
+                        g_uiContext->showToast("PSS Demo [F6]", show ? "PSS Showcase Visible" : "PSS Showcase Hidden", PerfUI::ToastType::Info, 2.0f);
+                    }
                 }
                 return 0;
             }
@@ -488,3 +598,9 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
+
+#if defined(_WIN32)
+int main(int argc, char** argv) {
+    return WinMain(GetModuleHandle(nullptr), nullptr, GetCommandLineA(), SW_SHOWDEFAULT);
+}
+#endif

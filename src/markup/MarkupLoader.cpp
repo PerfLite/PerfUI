@@ -58,11 +58,11 @@ static bool isKnownWidgetAttribute(const std::string& tag, const std::string& ke
     } else if (tag == "Text") {
         return key == "text" || key == "font" || key == "font-size" || key == "color" || key == "bold" || key == "italic" || key == "wrap";
     } else if (tag == "Button") {
-        return key == "text" || key == "label" || key == "onClick" || key == "font" || key == "font-size" || key == "radius";
+        return key == "text" || key == "label" || key == "onClick" || key == "on-click" || key == "font" || key == "font-size" || key == "radius";
     } else if (tag == "ScrollView") {
         return key == "scroll" || key == "scrollSpeed" || key == "scroll-speed" || key == "showScrollbar" || key == "show-scrollbar" || key == "offset";
     } else if (tag == "Checkbox") {
-        return key == "label" || key == "text" || key == "checked" || key == "boxSize" || key == "box-size" || key == "fontSize" || key == "font-size" || key == "checkColor" || key == "check-color" || key == "labelColor" || key == "label-color" || key == "onToggle" || key == "onChange";
+        return key == "label" || key == "text" || key == "checked" || key == "boxSize" || key == "box-size" || key == "fontSize" || key == "font-size" || key == "checkColor" || key == "check-color" || key == "labelColor" || key == "label-color" || key == "onToggle" || key == "on-toggle" || key == "onChange";
     } else if (tag == "ProgressBar") {
         return key == "value" || key == "progress" || key == "min" || key == "max" || key == "showLabel" || key == "show-label" || key == "fillColor" || key == "fill-color" || key == "trackColor" || key == "track-color" || key == "height" || key == "radius" || key == "text" || key == "borderColor" || key == "border-color" || key == "borderWidth" || key == "border-width" || key == "fontSize" || key == "font-size";
     } else if (tag == "Slider") {
@@ -307,6 +307,7 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
     // Bind Button onClick callback
     if (tag == "Button") {
         auto itClick = attrs.find("onClick");
+        if (itClick == attrs.end()) itClick = attrs.find("on-click");
         if (itClick != attrs.end()) {
             const std::string& cbName = itClick->second;
             auto itCb = m_callbacks.find(cbName);
@@ -326,6 +327,7 @@ void MarkupLoader::setupElementProperties(UIElement* element, const std::string&
         }
     } else if (tag == "Checkbox") {
         auto it = attrs.find("onToggle");
+        if (it == attrs.end()) it = attrs.find("on-toggle");
         if (it == attrs.end()) it = attrs.find("onChange");
         if (it != attrs.end()) {
             const std::string& cbName = it->second;

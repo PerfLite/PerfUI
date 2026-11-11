@@ -26,9 +26,10 @@ function onSwitchTheme()
 end
 
 function onToggleBlur(checked)
+    local isChecked = (checked == 1 or checked == true)
     local card = ui.find("MainCard")
     if card then
-        if checked then
+        if isChecked then
             card:addClass("blur-active")
         else
             card:removeClass("blur-active")
@@ -37,16 +38,18 @@ function onToggleBlur(checked)
 end
 
 function onToggleDpi(checked)
+    local isChecked = (checked == 1 or checked == true)
     local status = ui.find("StatusText")
     if status then
-        status:setText("High-DPI Scaling: " .. (checked and "Enabled" or "Disabled"))
+        status:setText("High-DPI Scaling: " .. (isChecked and "Enabled" or "Disabled"))
     end
 end
 
 function onToggleSound(checked)
+    local isChecked = (checked == 1 or checked == true)
     local status = ui.find("StatusText")
     if status then
-        status:setText("Sound Feedback: " .. (checked and "Muted" or "Active"))
+        status:setText("Sound Feedback: " .. (isChecked and "Active" or "Muted"))
     end
 end
 

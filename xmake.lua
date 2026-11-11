@@ -367,3 +367,54 @@ if has_config("perfui_lua") then
         )
         add_tests("lua_ui_api")
 end
+
+if is_plat("windows") then
+    target("PerfUI_Sandbox")
+        set_kind("binary")
+        set_languages("c++20")
+        add_defines("NOMINMAX", "WIN32_LEAN_AND_MEAN", "PERFUI_STATIC")
+        add_cxflags("/utf-8", { force = true })
+        add_syslinks("d3d11", "dxgi", "d3dcompiler", "user32", "gdi32", "shell32")
+        add_includedirs(
+            "include",
+            "src",
+            "src/markup",
+            "src/backends/imgui",
+            "third_party/imgui",
+            "third_party/imgui/backends",
+            "third_party/pugixml",
+            "third_party/nanosvg",
+            "modules/postfx/include",
+            "examples/sandbox",
+            "examples/map_demo",
+            "examples/modder_custom_hud"
+        )
+
+        if has_config("perfui_lua") then
+            add_defines("PERFUI_ENABLE_LUA")
+            add_includedirs("modules/lua/include", "third_party/lua")
+            add_deps("PerfUI_Lua")
+        end
+
+        if has_config("perfui_postfx") then
+            add_defines("PERFUI_ENABLE_POSTFX")
+            add_files("modules/postfx/src/*.cpp")
+        end
+
+        add_files(
+            "examples/sandbox/main.cpp",
+            "third_party/imgui/backends/imgui_impl_win32.cpp",
+            "third_party/imgui/backends/imgui_impl_dx11.cpp",
+            "third_party/imgui/imgui.cpp",
+            "third_party/imgui/imgui_draw.cpp",
+            "third_party/imgui/imgui_tables.cpp",
+            "third_party/imgui/imgui_widgets.cpp",
+            "src/core/*.cpp",
+            "src/layout/*.cpp",
+            "src/widgets/*.cpp",
+            "src/markup/*.cpp",
+            "src/style/*.cpp",
+            "src/backends/imgui/ImGuiRenderBackend.cpp",
+            "third_party/pugixml/pugixml.cpp"
+        )
+end
