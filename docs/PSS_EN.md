@@ -140,10 +140,16 @@ Mutating a CSS variable via `ui.setVar("--gold", "#00ffff")` lazily invalidates 
 | `gap` | `gap` | Spacing between sibling elements |
 | `padding` | `padding` | Internal padding (1, 2, or 4 numbers) |
 | `margin` | `margin` | External margin (1, 2, or 4 numbers) |
-| `background`, `background-color`, `bg` | `bg`, `background` | Background fill (Hex, RGBA, Named) |
+| `background`, `background-color`, `bg` | `bg`, `background` | Background fill (Hex, RGBA, Named) or `linear-gradient(...)` |
 | `border`, `border-color` | `border`, `border-color` | Composite border (`[width] [color]` or `[color]`) |
 | `border-width` | `border-width` | Border line thickness |
 | `border-radius`, `radius` | `radius` | Corner radius |
+| `outline` | `outline` | Shorthand outline definition (`outline: 1.5px solid #c8a45a`) |
+| `outline-color` | `outline-color` | Outline stroke color (Hex, RGBA, Named, var) |
+| `outline-width` | `outline-width` | Outline stroke thickness (`px`) |
+| `outline-offset` | `outline-offset` | Inset (`-3.5px`) or outset (`4px`) distance |
+| `border-image` | `border-image` | Nine-slice texture frame (`"textures/frame.png" 16px`) |
+| `border-image-slice` | `border-image-slice` | Nine-slice pixel metrics (1, 2, or 4 numbers) |
 | `shadow` | `shadow` | Drop shadow (`true`, `false`) |
 | `color` | `color` | Text color |
 | `font-size` | `font-size` | Text font size in pixels |
@@ -218,10 +224,13 @@ Button {
 - `border-color` (Border stroke color, `Color`)
 - `border-width` (Border thickness, `float`)
 - `corner-radius` / `radius` (Corner rounding, `float`)
+- `outline-color` (Outline color, `Color`)
+- `outline-width` (Outline thickness, `float`)
+- `outline-offset` (Outline offset, `float`)
 - `color` (Text foreground color, `Color`)
 - `opacity` (Alpha transparency, `float`)
 - `transform-scale` (Visual scaling, `Point`)
-- `transform-offset` (Visual offset, `Point`)
+- `transform-offset` / `transform-offset-x` / `transform-offset-y` (Visual offset, `Point` / `float`)
 - `width` / `height` (Dimensions, `float`, with non-blocking layout invalidation)
 - `all` (Applies to all animatable properties above)
 
@@ -233,6 +242,11 @@ Button {
 - `ease-in-out` — smooth acceleration and deceleration
 - `cubic-bezier(x1, y1, x2, y2)` — arbitrary cubic Bézier spline parameters
 - Game easing curves: `ease-out-bounce`, `ease-out-elastic`, `ease-in-quad`, `ease-out-quad`, `ease-in-cubic`, `ease-out-cubic`.
+- **Physical Spring Dynamics `spring(...)`**:
+  - Named parameters: `spring(stiffness: 190, damping: 18, mass: 1)`
+  - Positional syntax: `spring(200, 15)`
+  - Physics presets: `spring(snappy)`, `spring(gentle)`, `spring(wobbly)`
+  - Driven by second-order damped harmonic oscillator (`PerfUI::SpringFloat`) with natural overshoot and continuous velocity preservation during reversals.
 
 ### Seamless Mid-Transition Reversal
 If an element's state changes while a transition is actively interpolating (e.g., the pointer leaves a button at 40% animation progress), the interpolation reverses **from the current visual value** back towards the resting state. There are no visual jumps, snaps, or flickering.
@@ -254,3 +268,88 @@ If an element's state changes while a transition is actively interpolating (e.g.
    - 5,000 elements: cold cascade computation of the full tree takes **~4.5 ms**.
    - 5,000 elements: single element state/class transition cascade takes **~0.12 ms**.
    - 100 simultaneous active button transitions: per-frame update cost is **< 0.02 ms**.
+
+---
+
+## 8. Advanced Styling (Outline, Gradients, 9-Slice)
+
+### 8.1. Inset and Outset Contours (`outline`, `outline-offset`)
+Unlike `border`, `outline` does not take up room in flexbox layout and supports negative `outline-offset`, creating inner frames over the element background:
+
+```css
+.card {
+    border: 1.5px solid rgba(48, 58, 74, 0.85); /* Outer steel */
+    outline: 1px solid rgba(218, 175, 90, 0.25); /* Inner gold filigree */
+    outline-offset: -3.5px; /* Inset frame position */
+}
+```
+
+### 8.2. Linear Gradients (`linear-gradient`)
+The `background` property supports 2-stop and 3-stop linear gradients without custom shader passes:
+
+```css
+/* Smooth fade to darkness */
+.art-fade {
+    background: linear-gradient(to bottom, transparent, rgba(11, 14, 20, 0.95));
+}
+
+/* 3-stop gradient divider (transparent -> gold -> transparent) */
+.gold-separator {
+    background: linear-gradient(to right, transparent, #daaf5a, transparent);
+}
+```
+
+Supported directions: `to bottom`, `to top`, `to right`, `to left`.
+
+### 8.3. Nine-Slice Texture Frames (`border-image`)
+Enables AAA texture frame borders without C++ code:
+
+```css
+.scroll-panel {
+    border-image: "textures/frame.png" 16px;
+}
+
+/* Distinct slices (top, right, bottom, left) */
+.custom-panel {
+    border-image: "textures/frame.png" 10px 12px 14px 16px;
+}
+```
+
+### 8.4. AAA Menu Card Example
+
+```css
+/* Card resting state */
+.menu-card {
+    width: 235px;
+    height: 350px;
+    border-radius: 8px;
+    background-color: rgba(14, 18, 26, 0.9);
+    
+    /* Double frame: outer steel + inset gold */
+    border: 1.5px solid rgba(48, 58, 74, 0.85);
+    outline: 1px solid rgba(218, 175, 90, 0.25);
+    outline-offset: -3.5px;
+    
+    /* Drop shadow */
+    box-shadow: true;
+    
+    /* Spring physics for lift */
+    transform-offset-y: 0px;
+    transition: transform-offset-y 0.35s spring(stiffness: 190, damping: 18),
+                transform-scale 0.35s spring(stiffness: 190, damping: 18),
+                outline-color 0.2s ease;
+}
+
+/* Hover state — physical lift and micro-zoom */
+.menu-card:hover {
+    transform-offset-y: -22px;
+    transform-scale: 1.03;
+    outline: 1.5px solid rgba(218, 175, 90, 0.65);
+}
+
+/* Soft gradient fade for banner */
+.card-image-fade {
+    height: 68px;
+    background: linear-gradient(to bottom, transparent, rgba(11, 14, 20, 0.95));
+}
+```

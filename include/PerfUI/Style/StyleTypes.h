@@ -5,6 +5,7 @@
 #include <vector>
 #include <unordered_map>
 #include <compare>
+#include <optional>
 #include "PerfUI/Types.h"
 #include "PerfUI/Animation.h"
 
@@ -84,18 +85,54 @@ enum class TransitionProperty : uint8_t {
     Opacity,
     TransformScale,
     TransformOffset,
+    TransformOffsetX,
+    TransformOffsetY,
+    OutlineColor,
+    OutlineWidth,
+    OutlineOffset,
     Width,
     Height,
     None
 };
 
+enum class TransitionTimingType : uint8_t {
+    Easing,
+    Spring
+};
+
+struct SpringConfig {
+    float stiffness{ 180.0f };
+    float damping{ 18.0f };
+    float mass{ 1.0f };
+
+    bool operator==(const SpringConfig&) const = default;
+};
+
 struct TransitionSpec {
     TransitionProperty property{ TransitionProperty::All };
+    TransitionTimingType timingType{ TransitionTimingType::Easing };
     float duration{ 0.0f }; // in seconds
     EasingDef easing{ Easing::EaseOutCubic };
+    SpringConfig spring{};
     float delay{ 0.0f };    // in seconds
 
     bool operator==(const TransitionSpec&) const = default;
+};
+
+enum class GradientDirection : uint8_t {
+    ToBottom,
+    ToTop,
+    ToRight,
+    ToLeft
+};
+
+struct LinearGradientDef {
+    GradientDirection direction{ GradientDirection::ToBottom };
+    Color startColor{ Color::Transparent() };
+    Color endColor{ Color::Transparent() };
+    std::optional<Color> midColor;
+
+    bool operator==(const LinearGradientDef&) const = default;
 };
 
 } // namespace PerfUI

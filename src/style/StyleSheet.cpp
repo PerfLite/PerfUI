@@ -1,6 +1,7 @@
 #include "PerfUI/Style/StyleSheet.h"
 #include "StyleParser.h"
 #include "PerfUI/UIElement.h"
+#include "PerfUI/UIContext.h"
 #include "../markup/MarkupLayoutParser.h"
 #include <fstream>
 #include <algorithm>
@@ -397,6 +398,73 @@ static bool isEasingToken(const std::string& tok, EasingDef& outEasing) {
     return false;
 }
 
+static bool isSpringToken(const std::string& tok, SpringConfig& outSpring) {
+    std::string s = toLowerString(tok);
+    if (s.rfind("spring(", 0) != 0 || s.back() != ')') {
+        return false;
+    }
+    std::string inner = s.substr(7, s.size() - 8);
+    // Presets
+    std::string trimmedInner;
+    for (char c : inner) {
+        if (!std::isspace(static_cast<unsigned char>(c))) trimmedInner += c;
+    }
+    if (trimmedInner == "gentle") {
+        outSpring = { SpringPreset::Gentle.stiffness, SpringPreset::Gentle.damping, SpringPreset::Gentle.mass };
+        return true;
+    }
+    if (trimmedInner == "snappy") {
+        outSpring = { SpringPreset::Snappy.stiffness, SpringPreset::Snappy.damping, SpringPreset::Snappy.mass };
+        return true;
+    }
+    if (trimmedInner == "wobbly") {
+        outSpring = { SpringPreset::Wobbly.stiffness, SpringPreset::Wobbly.damping, SpringPreset::Wobbly.mass };
+        return true;
+    }
+
+    auto parts = splitTopLevelCommas(inner);
+    if (parts.empty()) return false;
+
+    bool hasNamed = false;
+    for (const auto& part : parts) {
+        if (part.find(':') != std::string::npos || part.find('=') != std::string::npos) {
+            hasNamed = true;
+            break;
+        }
+    }
+
+    SpringConfig cfg{};
+    if (hasNamed) {
+        for (const auto& part : parts) {
+            size_t sep = part.find(':');
+            if (sep == std::string::npos) sep = part.find('=');
+            if (sep == std::string::npos) continue;
+            std::string key = toLowerString(part.substr(0, sep));
+            while (!key.empty() && std::isspace(static_cast<unsigned char>(key.front()))) key.erase(key.begin());
+            while (!key.empty() && std::isspace(static_cast<unsigned char>(key.back()))) key.pop_back();
+
+            std::string valStr = part.substr(sep + 1);
+            float val = std::strtof(valStr.c_str(), nullptr);
+            if (key == "stiffness" || key == "k") cfg.stiffness = val;
+            else if (key == "damping" || key == "c") cfg.damping = val;
+            else if (key == "mass" || key == "m") cfg.mass = val;
+        }
+        outSpring = cfg;
+        return true;
+    } else {
+        if (parts.size() >= 2) {
+            cfg.stiffness = std::strtof(parts[0].c_str(), nullptr);
+            cfg.damping = std::strtof(parts[1].c_str(), nullptr);
+            if (parts.size() >= 3) {
+                cfg.mass = std::strtof(parts[2].c_str(), nullptr);
+            }
+            outSpring = cfg;
+            return true;
+        }
+    }
+    return false;
+}
+
 static TransitionProperty parseTransitionProperty(const std::string& tok) {
     std::string s = toLowerString(tok);
     if (s == "all") return TransitionProperty::All;
@@ -408,6 +476,12 @@ static TransitionProperty parseTransitionProperty(const std::string& tok) {
     if (s == "opacity" || s == "alpha") return TransitionProperty::Opacity;
     if (s == "transform-scale" || s == "transformscale" || s == "scale") return TransitionProperty::TransformScale;
     if (s == "transform-offset" || s == "transformoffset" || s == "offset") return TransitionProperty::TransformOffset;
+    if (s == "transform-offset-x" || s == "transformoffsetx" || s == "offset-x") return TransitionProperty::TransformOffsetX;
+    if (s == "transform-offset-y" || s == "transformoffsety" || s == "offset-y") return TransitionProperty::TransformOffsetY;
+    if (s == "outline-color") return TransitionProperty::OutlineColor;
+    if (s == "outline-width") return TransitionProperty::OutlineWidth;
+    if (s == "outline-offset") return TransitionProperty::OutlineOffset;
+    if (s == "outline") return TransitionProperty::OutlineColor;
     if (s == "width") return TransitionProperty::Width;
     if (s == "height") return TransitionProperty::Height;
     if (s == "none") return TransitionProperty::None;
@@ -432,6 +506,7 @@ static void parseTransitionShorthand(const std::string& val, std::vector<Transit
         for (const auto& tok : tokens) {
             float sec = 0.0f;
             EasingDef easing;
+            SpringConfig spring;
             if (isTimeToken(tok, sec)) {
                 if (!timeParsed) {
                     spec.duration = sec;
@@ -440,7 +515,11 @@ static void parseTransitionShorthand(const std::string& val, std::vector<Transit
                     spec.delay = sec;
                 }
             } else if (isEasingToken(tok, easing)) {
+                spec.timingType = TransitionTimingType::Easing;
                 spec.easing = easing;
+            } else if (isSpringToken(tok, spring)) {
+                spec.timingType = TransitionTimingType::Spring;
+                spec.spring = spring;
             } else {
                 TransitionProperty p = parseTransitionProperty(tok);
                 if (p != TransitionProperty::None || tok == "all") {
@@ -488,15 +567,37 @@ static void applyTransitionDuration(ComputedStyle& c, const std::string& val) {
 
 static void applyTransitionTiming(ComputedStyle& c, const std::string& val) {
     auto timingTokens = splitTopLevelCommas(val);
-    std::vector<EasingDef> easings;
+    struct TimingEntry {
+        TransitionTimingType type{ TransitionTimingType::Easing };
+        EasingDef easing{ Easing::EaseOutCubic };
+        SpringConfig spring{};
+    };
+    std::vector<TimingEntry> timings;
     for (const auto& tt : timingTokens) {
         EasingDef e;
-        if (isEasingToken(tt, e)) easings.push_back(e);
+        SpringConfig sp;
+        if (isEasingToken(tt, e)) {
+            TimingEntry entry;
+            entry.type = TransitionTimingType::Easing;
+            entry.easing = e;
+            timings.push_back(entry);
+        } else if (isSpringToken(tt, sp)) {
+            TimingEntry entry;
+            entry.type = TransitionTimingType::Spring;
+            entry.spring = sp;
+            timings.push_back(entry);
+        }
     }
-    if (easings.empty()) return;
-    if (c.transitions.empty()) c.transitions.resize(easings.size());
+    if (timings.empty()) return;
+    if (c.transitions.empty()) c.transitions.resize(timings.size());
     for (size_t i = 0; i < c.transitions.size(); ++i) {
-        c.transitions[i].easing = easings[i % easings.size()];
+        const auto& entry = timings[i % timings.size()];
+        c.transitions[i].timingType = entry.type;
+        if (entry.type == TransitionTimingType::Spring) {
+            c.transitions[i].spring = entry.spring;
+        } else {
+            c.transitions[i].easing = entry.easing;
+        }
     }
 }
 
@@ -514,6 +615,123 @@ static void applyTransitionDelay(ComputedStyle& c, const std::string& val) {
     }
 }
 
+static bool parseLinearGradient(const std::string& val, LinearGradientDef& outGrad) {
+    std::string s = val;
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.pop_back();
+
+    std::string lower = toLowerString(s);
+    if (lower.rfind("linear-gradient(", 0) != 0 || lower.back() != ')') {
+        return false;
+    }
+    std::string inner = s.substr(16, s.size() - 17);
+    auto parts = splitTopLevelCommas(inner);
+    if (parts.size() < 2) return false;
+
+    size_t colorStartIdx = 0;
+    std::string firstPartLower = toLowerString(parts[0]);
+    while (!firstPartLower.empty() && std::isspace(static_cast<unsigned char>(firstPartLower.front()))) firstPartLower.erase(firstPartLower.begin());
+    while (!firstPartLower.empty() && std::isspace(static_cast<unsigned char>(firstPartLower.back()))) firstPartLower.pop_back();
+
+    LinearGradientDef grad{};
+    grad.direction = GradientDirection::ToBottom;
+
+    if (firstPartLower == "to bottom" || firstPartLower == "bottom") {
+        grad.direction = GradientDirection::ToBottom;
+        colorStartIdx = 1;
+    } else if (firstPartLower == "to top" || firstPartLower == "top") {
+        grad.direction = GradientDirection::ToTop;
+        colorStartIdx = 1;
+    } else if (firstPartLower == "to right" || firstPartLower == "right") {
+        grad.direction = GradientDirection::ToRight;
+        colorStartIdx = 1;
+    } else if (firstPartLower == "to left" || firstPartLower == "left") {
+        grad.direction = GradientDirection::ToLeft;
+        colorStartIdx = 1;
+    }
+
+    std::vector<Color> colors;
+    for (size_t i = colorStartIdx; i < parts.size(); ++i) {
+        colors.push_back(parseColorOrToken(parts[i]));
+    }
+
+    if (colors.size() == 1) {
+        grad.startColor = colors[0];
+        grad.endColor = colors[0];
+        outGrad = grad;
+        return true;
+    } else if (colors.size() == 2) {
+        grad.startColor = colors[0];
+        grad.endColor = colors[1];
+        outGrad = grad;
+        return true;
+    } else if (colors.size() >= 3) {
+        grad.startColor = colors[0];
+        grad.midColor = colors[1];
+        grad.endColor = colors[2];
+        outGrad = grad;
+        return true;
+    }
+    return false;
+}
+
+static bool parseBorderImage(const std::string& val, std::string& outPath, Insets& outSlice) {
+    auto tokens = splitWhitespaceOutsideParens(val);
+    if (tokens.empty()) return false;
+
+    std::string rawPath = tokens[0];
+    if (rawPath.rfind("url(", 0) == 0 && rawPath.back() == ')') {
+        rawPath = rawPath.substr(4, rawPath.size() - 5);
+    }
+    while (!rawPath.empty() && (rawPath.front() == '"' || rawPath.front() == '\'')) rawPath.erase(rawPath.begin());
+    while (!rawPath.empty() && (rawPath.back() == '"' || rawPath.back() == '\'')) rawPath.pop_back();
+
+    outPath = rawPath;
+
+    std::vector<float> slices;
+    for (size_t i = 1; i < tokens.size(); ++i) {
+        slices.push_back(parseNumberOrToken(tokens[i]));
+    }
+
+    if (slices.empty()) {
+        outSlice = Insets{ 0.0f };
+    } else if (slices.size() == 1) {
+        outSlice = Insets(slices[0]);
+    } else if (slices.size() == 2) {
+        outSlice = Insets(slices[1], slices[0]);
+    } else if (slices.size() >= 4) {
+        outSlice = Insets(slices[3], slices[0], slices[1], slices[2]);
+    }
+    return true;
+}
+
+static void parseOutlineShorthand(const std::string& val, ComputedStyle& c) {
+    std::string s = toLowerString(val);
+    if (s == "none") {
+        c.outlineWidth = 0.0f;
+        c.outlineColor = Color::Transparent();
+        return;
+    }
+    auto tokens = splitWhitespaceOutsideParens(val);
+    for (const auto& tok : tokens) {
+        std::string lowerTok = toLowerString(tok);
+        if (lowerTok == "solid" || lowerTok == "dashed" || lowerTok == "dotted") {
+            continue;
+        }
+        if (lowerTok == "none") {
+            c.outlineWidth = 0.0f;
+            continue;
+        }
+        char* end = nullptr;
+        float num = std::strtof(tok.c_str(), &end);
+        if (end != tok.c_str() && (*end == '\0' || *end == 'p' || *end == 'P')) {
+            c.outlineWidth = num;
+        } else {
+            c.outlineColor = parseColorOrToken(tok);
+        }
+    }
+}
+
 static void applyPropertyToComputed(const std::string& key, const std::string& val, ComputedStyle& c) {
     std::string lower = toLowerString(key);
 
@@ -524,8 +742,53 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
         else if (val == "multiply" || val == "mult") c.blendMode = BlendMode::Multiply;
         else if (val == "screen") c.blendMode = BlendMode::Screen;
         else c.blendMode = BlendMode::Normal;
-    } else if (lower == "background" || lower == "background-color" || lower == "bg" || lower == "bg-color") {
-        c.backgroundColor = parseColorOrToken(val);
+    } else if (lower == "background" || lower == "background-color" || lower == "bg" || lower == "bg-color" || lower == "background-image") {
+        LinearGradientDef grad;
+        if (parseLinearGradient(val, grad)) {
+            c.backgroundGradient = grad;
+        } else {
+            c.backgroundColor = parseColorOrToken(val);
+        }
+    } else if (lower == "linear-gradient" || lower == "background-gradient") {
+        LinearGradientDef grad;
+        if (parseLinearGradient(val, grad)) {
+            c.backgroundGradient = grad;
+        }
+    } else if (lower == "outline") {
+        parseOutlineShorthand(val, c);
+    } else if (lower == "outline-color") {
+        c.outlineColor = parseColorOrToken(val);
+    } else if (lower == "outline-width") {
+        c.outlineWidth = parseNumberOrToken(val);
+    } else if (lower == "outline-offset") {
+        c.outlineOffset = parseNumberOrToken(val);
+    } else if (lower == "border-image") {
+        std::string path;
+        Insets slice;
+        if (parseBorderImage(val, path, slice)) {
+            c.borderImagePath = path;
+            c.bgSlice = slice;
+            c.bgCorner = slice;
+        }
+    } else if (lower == "border-image-source") {
+        std::string rawPath = val;
+        while (!rawPath.empty() && (rawPath.front() == '"' || rawPath.front() == '\'')) rawPath.erase(rawPath.begin());
+        while (!rawPath.empty() && (rawPath.back() == '"' || rawPath.back() == '\'')) rawPath.pop_back();
+        c.borderImagePath = rawPath;
+    } else if (lower == "border-image-slice") {
+        auto tokens = splitWhitespaceOutsideParens(val);
+        std::vector<float> slices;
+        for (const auto& tok : tokens) slices.push_back(parseNumberOrToken(tok));
+        if (slices.size() == 1) {
+            c.bgSlice = Insets(slices[0]);
+            c.bgCorner = Insets(slices[0]);
+        } else if (slices.size() == 2) {
+            c.bgSlice = Insets(slices[1], slices[0]);
+            c.bgCorner = Insets(slices[1], slices[0]);
+        } else if (slices.size() >= 4) {
+            c.bgSlice = Insets(slices[3], slices[0], slices[1], slices[2]);
+            c.bgCorner = Insets(slices[3], slices[0], slices[1], slices[2]);
+        }
     } else if (lower == "border") {
         std::istringstream iss(val);
         std::string token1, token2, token3;
@@ -640,11 +903,31 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
             c.transformOffsetPct = pct;
             c.hasTransformOffsetPct = hasPct;
         }
+    } else if (lower == "transform-offset-x" || lower == "transformoffsetx" || lower == "offset-x") {
+        float x = parseNumberOrToken(val);
+        Point cur = c.transformOffsetPx.value_or(Point{ 0.0f, 0.0f });
+        cur.x = x;
+        c.transformOffsetPx = cur;
+    } else if (lower == "transform-offset-y" || lower == "transformoffsety" || lower == "offset-y") {
+        float y = parseNumberOrToken(val);
+        Point cur = c.transformOffsetPx.value_or(Point{ 0.0f, 0.0f });
+        cur.y = y;
+        c.transformOffsetPx = cur;
     } else if (lower == "transform-scale" || lower == "transformscale") {
         Point scale{ 1.0f, 1.0f };
         if (parseTransformScale(val, scale)) {
             c.transformScale = scale;
         }
+    } else if (lower == "transform-scale-x" || lower == "transformscalex" || lower == "scale-x") {
+        float sx = parseNumberOrToken(val, 1.0f);
+        Point cur = c.transformScale.value_or(Point{ 1.0f, 1.0f });
+        cur.x = sx;
+        c.transformScale = cur;
+    } else if (lower == "transform-scale-y" || lower == "transformscaley" || lower == "scale-y") {
+        float sy = parseNumberOrToken(val, 1.0f);
+        Point cur = c.transformScale.value_or(Point{ 1.0f, 1.0f });
+        cur.y = sy;
+        c.transformScale = cur;
     } else if (lower == "transform-pivot" || lower == "transformpivot") {
         Point piv{ 0.5f, 0.5f };
         if (parseTransformPivot(val, piv)) {
@@ -692,6 +975,11 @@ ComputedStyle StyleSheet::computeStyle(const UIElement* element, const ComputedS
     for (const auto& [k, v] : element->inlineAttrs()) {
         std::string resolved = resolveVariables(v);
         applyPropertyToComputed(k, resolved, computed);
+    }
+
+    // 4. Resolve border-image to texture if context is available
+    if (computed.borderImagePath.has_value() && !computed.backgroundImage.has_value() && element && element->context()) {
+        computed.backgroundImage = element->context()->loadTexture(*computed.borderImagePath);
     }
 
     return computed;

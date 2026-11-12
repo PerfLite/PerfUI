@@ -22,6 +22,26 @@ public:
     float cornerRadius() const { return m_cornerRadius.value_or(0.0f); }
     Panel& cornerRadius(float radius) { m_cornerRadius = radius; return *this; }
 
+    Color outlineColor() const { return m_outlineColor.value_or(UIElement::outlineColor().value_or(Color::Transparent())); }
+    Panel& outlineColor(Color color) { m_outlineColor = color; return *this; }
+
+    float outlineWidth() const { return m_outlineWidth.value_or(UIElement::outlineWidth().value_or(0.0f)); }
+    Panel& outlineWidth(float width) { m_outlineWidth = width; return *this; }
+
+    float outlineOffset() const { return m_outlineOffset.value_or(UIElement::outlineOffset().value_or(0.0f)); }
+    Panel& outlineOffset(float offset) { m_outlineOffset = offset; return *this; }
+
+    Panel& outline(Color color, float width, float offset = 0.0f) {
+        m_outlineColor = color;
+        m_outlineWidth = width;
+        m_outlineOffset = offset;
+        return *this;
+    }
+
+    const std::optional<LinearGradientDef>& backgroundGradient() const { return m_backgroundGradient; }
+    Panel& backgroundGradient(const LinearGradientDef& grad) { m_backgroundGradient = grad; return *this; }
+    Panel& backgroundGradient(std::optional<LinearGradientDef> grad) { m_backgroundGradient = grad; return *this; }
+
     bool hasShadow() const { return m_hasShadow; }
     Panel& shadow(bool enable, Color color = Color(0, 0, 0, 160), float blur = 16.0f, Point offset = { 0.0f, 6.0f }) {
         m_hasShadow = enable;
@@ -74,6 +94,11 @@ private:
     bool m_backdropBlur{ false };
     float m_blurRadius{ 1.0f };
     bool m_liquidGlass{ false };
+
+    std::optional<Color> m_outlineColor;
+    std::optional<float> m_outlineWidth;
+    std::optional<float> m_outlineOffset;
+    std::optional<LinearGradientDef> m_backgroundGradient;
 };
 
 } // namespace PerfUI

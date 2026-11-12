@@ -43,6 +43,15 @@ struct ComputedStyle {
     std::optional<Point> bgUv1;
     std::optional<Insets> bgSlice;
     std::optional<Insets> bgCorner;
+    std::optional<std::string> borderImagePath;
+
+    // Outline (CSS Outline)
+    std::optional<Color> outlineColor;
+    std::optional<float> outlineWidth;
+    std::optional<float> outlineOffset;
+
+    // Gradient
+    std::optional<LinearGradientDef> backgroundGradient;
 
     // Text properties (inheritable)
     std::optional<Color> color;

@@ -791,6 +791,258 @@ void TestTransitionsAndInterpolation() {
     std::cout << "  -> Passed TestTransitionsAndInterpolation" << std::endl;
 }
 
+void TestOutlineAndBorderImage() {
+    std::cout << "[Test] Running TestOutlineAndBorderImage..." << std::endl;
+
+    // 1. PSS Outline shorthand and individual properties
+    StyleSheet sheet;
+    sheet.loadString(R"(
+        .card {
+            width: 200px;
+            height: 300px;
+            border-radius: 8px;
+            border: 2px solid #303a4a;
+            outline: 1.5px solid rgba(218, 175, 90, 0.4);
+            outline-offset: -4px;
+        }
+        .card-custom {
+            outline-color: #ff0000;
+            outline-width: 3px;
+            outline-offset: 5px;
+        }
+    )");
+
+    UIContext ctx;
+    ctx.styleSheet() = sheet;
+
+    Panel card("TestCard");
+    card.setContext(&ctx);
+    card.addClass("card");
+    card.updateStyleCascade();
+
+    const auto& style = card.computedStyle();
+    TEST_ASSERT(style.outlineWidth.has_value() && std::abs(*style.outlineWidth - 1.5f) < 0.001f, "Outline width parsed");
+    TEST_ASSERT(style.outlineOffset.has_value() && std::abs(*style.outlineOffset - (-4.0f)) < 0.001f, "Outline negative offset parsed");
+    TEST_ASSERT(style.outlineColor.has_value(), "Outline color parsed");
+    TEST_ASSERT(style.outlineColor->r == 218 && style.outlineColor->g == 175 && style.outlineColor->b == 90, "Outline RGB parsed");
+
+    Panel cardCustom("CustomCard");
+    cardCustom.setContext(&ctx);
+    cardCustom.addClass("card-custom");
+    cardCustom.updateStyleCascade();
+    const auto& styleCust = cardCustom.computedStyle();
+    TEST_ASSERT(styleCust.outlineWidth.has_value() && *styleCust.outlineWidth == 3.0f, "Custom outline width");
+    TEST_ASSERT(styleCust.outlineOffset.has_value() && *styleCust.outlineOffset == 5.0f, "Custom outline offset");
+    TEST_ASSERT(styleCust.outlineColor.has_value() && *styleCust.outlineColor == Color(255, 0, 0, 255), "Custom outline color");
+
+    // 2. Render Panel with Outline
+    MockRenderBackend backend;
+    card.setBounds(Rect{ 100.0f, 100.0f, 200.0f, 300.0f });
+    card.render(backend);
+
+    bool foundOutline = false;
+    for (const auto& cmd : backend.commands()) {
+        if (cmd.type == MockRenderBackend::DrawCommand::Type::RectOutline) {
+            if (std::abs(cmd.bounds.x - 104.0f) < 0.1f && std::abs(cmd.bounds.width - 192.0f) < 0.1f) {
+                foundOutline = true;
+                TEST_ASSERT(std::abs(cmd.thickness - 1.5f) < 0.01f, "Outline thickness matches 1.5px");
+                TEST_ASSERT(std::abs(cmd.radius - 4.0f) < 0.01f, "Outline radius matches (radius + offset) = 4px");
+            }
+        }
+    }
+    TEST_ASSERT(foundOutline, "Rendered inner outline via drawRectOutline with negative offset");
+
+    // 3. Border Image 9-Slice parsing
+    StyleSheet imgSheet;
+    imgSheet.loadString(R"(
+        .frame {
+            border-image: "textures/frame.png" 16px;
+        }
+        .frame-custom {
+            border-image: url("textures/complex_frame.png") 10px 12px 14px 16px;
+        }
+    )");
+    ctx.setRenderBackend(&backend);
+    ctx.styleSheet() = imgSheet;
+
+    Panel frame("FramePanel");
+    frame.setContext(&ctx);
+    frame.addClass("frame");
+    frame.updateStyleCascade();
+
+    const auto& fStyle = frame.computedStyle();
+    TEST_ASSERT(fStyle.borderImagePath.has_value() && *fStyle.borderImagePath == "textures/frame.png", "Border image path");
+    TEST_ASSERT(fStyle.bgSlice.has_value(), "bgSlice is set");
+    TEST_ASSERT(fStyle.bgSlice->left == 16.0f && fStyle.bgSlice->top == 16.0f &&
+                fStyle.bgSlice->right == 16.0f && fStyle.bgSlice->bottom == 16.0f, "16px uniform slice");
+    TEST_ASSERT(frame.backgroundImage() != 0, "Texture was resolved and loaded automatically via context");
+
+    Panel customFrame("CustomFrame");
+    customFrame.setContext(&ctx);
+    customFrame.addClass("frame-custom");
+    customFrame.updateStyleCascade();
+
+    const auto& cStyle = customFrame.computedStyle();
+    TEST_ASSERT(cStyle.borderImagePath.has_value() && *cStyle.borderImagePath == "textures/complex_frame.png", "Complex border image path");
+    TEST_ASSERT(cStyle.bgSlice.has_value(), "Complex slice is set");
+    TEST_ASSERT(cStyle.bgSlice->top == 10.0f && cStyle.bgSlice->right == 12.0f &&
+                cStyle.bgSlice->bottom == 14.0f && cStyle.bgSlice->left == 16.0f, "4-value border slice correctly mapped");
+
+    std::cout << "  -> Passed TestOutlineAndBorderImage" << std::endl;
+}
+
+void TestLinearGradients() {
+    std::cout << "[Test] Running TestLinearGradients..." << std::endl;
+
+    // 1. Two-stop gradient
+    StyleSheet sheet;
+    sheet.loadString(R"(
+        .fade-bottom {
+            background: linear-gradient(to bottom, transparent, rgba(11, 14, 20, 0.95));
+        }
+        .split-three-stop {
+            background: linear-gradient(to right, transparent, #daaf5a, transparent);
+        }
+    )");
+
+    UIContext ctx;
+    ctx.styleSheet() = sheet;
+
+    Panel fade("FadeBottom");
+    fade.setContext(&ctx);
+    fade.addClass("fade-bottom");
+    fade.updateStyleCascade();
+
+    const auto& fStyle = fade.computedStyle();
+    TEST_ASSERT(fStyle.backgroundGradient.has_value(), "Background gradient parsed");
+    TEST_ASSERT(fStyle.backgroundGradient->direction == GradientDirection::ToBottom, "To bottom direction");
+    TEST_ASSERT(fStyle.backgroundGradient->startColor == Color::Transparent(), "Start transparent");
+    TEST_ASSERT(fStyle.backgroundGradient->endColor.r == 11 && fStyle.backgroundGradient->endColor.g == 14, "End color RGB");
+
+    // 2. Render two-stop gradient
+    MockRenderBackend backend;
+    fade.setBounds(Rect{ 0.0f, 0.0f, 100.0f, 200.0f });
+    fade.render(backend);
+
+    bool foundGrad = false;
+    for (const auto& cmd : backend.commands()) {
+        if (cmd.type == MockRenderBackend::DrawCommand::Type::GradientRect) {
+            foundGrad = true;
+            TEST_ASSERT(cmd.bounds == Rect(0.0f, 0.0f, 100.0f, 200.0f), "Gradient drawn on panel bounds");
+        }
+    }
+    TEST_ASSERT(foundGrad, "Rendered 2-stop gradient via drawGradientRect");
+
+    // 3. Three-stop gradient
+    Panel split("SplitCard");
+    split.setContext(&ctx);
+    split.addClass("split-three-stop");
+    split.updateStyleCascade();
+
+    const auto& sStyle = split.computedStyle();
+    TEST_ASSERT(sStyle.backgroundGradient.has_value(), "3-stop gradient parsed");
+    TEST_ASSERT(sStyle.backgroundGradient->direction == GradientDirection::ToRight, "To right direction");
+    TEST_ASSERT(sStyle.backgroundGradient->midColor.has_value(), "Mid color parsed for 3-stop split");
+    TEST_ASSERT(sStyle.backgroundGradient->midColor->r == 218 && sStyle.backgroundGradient->midColor->g == 175, "Mid color RGB");
+
+    // Render 3-stop gradient
+    MockRenderBackend backend3;
+    split.setBounds(Rect{ 0.0f, 0.0f, 200.0f, 50.0f });
+    split.render(backend3);
+
+    int gradCalls = 0;
+    for (const auto& cmd : backend3.commands()) {
+        if (cmd.type == MockRenderBackend::DrawCommand::Type::GradientRect) {
+            gradCalls++;
+        }
+    }
+    TEST_ASSERT(gradCalls == 2, "3-stop gradient rendered as 2 half-width gradient rects");
+
+    std::cout << "  -> Passed TestLinearGradients" << std::endl;
+}
+
+void TestSpringTransitions() {
+    std::cout << "[Test] Running TestSpringTransitions..." << std::endl;
+
+    StyleSheet sheet;
+    sheet.loadString(R"(
+        .menu-card {
+            transform-offset-y: 0px;
+            transform-scale: 1.0;
+            outline: 1px solid rgba(218, 175, 90, 0.25);
+            transition: transform-offset-y 0.35s spring(stiffness: 190, damping: 18),
+                        transform-scale 0.35s spring(200, 15),
+                        outline-color 0.2s linear;
+        }
+        .menu-card:hover {
+            transform-offset-y: -22px;
+            transform-scale: 1.03;
+            outline: 1px solid rgba(218, 175, 90, 0.65);
+        }
+    )");
+
+    UIContext ctx;
+    ctx.styleSheet() = sheet;
+
+    Panel card("CardSpring");
+    card.setContext(&ctx);
+    card.addClass("menu-card");
+    card.updateStyleCascade(); // Cold mount
+
+    TEST_ASSERT(card.renderOffset().y == 0.0f, "Initial offset Y is 0");
+    TEST_ASSERT(card.renderScale().x == 1.0f, "Initial scale is 1.0");
+
+    // Hover in
+    card.onPointerEnter();
+    card.updateStyleCascade();
+
+    auto* trans = card.transitions();
+    TEST_ASSERT(trans != nullptr && trans->hasActiveTransitions(), "Transitions active on hover");
+    TEST_ASSERT(trans->trackTransformOffset.active, "Offset transition active");
+    TEST_ASSERT(trans->trackTransformOffset.timingTypeY == TransitionTimingType::Spring, "Y transition timing is Spring");
+    TEST_ASSERT(trans->trackTransformOffset.springYCfg.stiffness == 190.0f, "Stiffness parsed 190");
+    TEST_ASSERT(trans->trackTransformOffset.springYCfg.damping == 18.0f, "Damping parsed 18");
+    TEST_ASSERT(trans->trackTransformScale.timingTypeX == TransitionTimingType::Spring, "Scale transition timing is Spring");
+
+    // Tick 0.1s
+    card.update(0.1f);
+    float midY = card.renderOffset().y;
+    TEST_ASSERT(midY < -2.0f && midY > -22.0f, "Spring moving towards target (-22px)");
+
+    // Tick further to peak / overshoot
+    bool hadOvershoot = false;
+    for (int i = 0; i < 20; ++i) {
+        card.update(0.02f);
+        if (card.renderOffset().y < -22.01f) {
+            hadOvershoot = true;
+            break;
+        }
+    }
+    TEST_ASSERT(hadOvershoot, "Physical spring exhibited realistic overshoot beyond target!");
+
+    // Settle to rest
+    for (int i = 0; i < 50; ++i) {
+        card.update(0.02f);
+    }
+    TEST_ASSERT(std::abs(card.renderOffset().y - (-22.0f)) < 0.05f, "Spring settled on -22px target");
+    TEST_ASSERT(std::abs(card.renderScale().x - 1.03f) < 0.01f, "Scale settled on 1.03 target");
+
+    // Test mid-transition reversal with spring
+    card.onPointerLeave();
+    card.updateStyleCascade();
+    TEST_ASSERT(trans->trackTransformOffset.active, "Reversal active");
+    TEST_ASSERT(trans->trackTransformOffset.targetVal.y == 0.0f, "Target is back to 0");
+
+    // Tick return
+    for (int i = 0; i < 60; ++i) {
+        card.update(0.02f);
+    }
+    TEST_ASSERT(std::abs(card.renderOffset().y - 0.0f) < 0.05f, "Spring successfully settled back to 0px");
+    TEST_ASSERT(std::abs(card.renderScale().x - 1.0f) < 0.01f, "Scale back to 1.0");
+
+    std::cout << "  -> Passed TestSpringTransitions" << std::endl;
+}
+
 int main() {
     std::cout << "=== Running PerfUI Style System & Components Tests ===" << std::endl;
 
@@ -800,6 +1052,9 @@ int main() {
     TestNewComponents();
     TestMarkupIntegration();
     TestTransitionsAndInterpolation();
+    TestOutlineAndBorderImage();
+    TestLinearGradients();
+    TestSpringTransitions();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;
     return 0;

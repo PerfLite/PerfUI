@@ -140,7 +140,54 @@ void Panel::render(UIRenderBackend& backend) {
             backend.drawShadow(m_bounds, radius, applyAlpha(resolvedBox.shadow->color), resolvedBox.shadow->blur, resolvedBox.shadow->offset);
         }
 
-        if (m_backdropBlur) {
+        const auto& gradOpt = m_backgroundGradient.has_value() ? m_backgroundGradient : computedStyle().backgroundGradient;
+        if (gradOpt.has_value()) {
+            const auto& grad = *gradOpt;
+            Color startCol = applyAlpha(grad.startColor);
+            Color endCol = applyAlpha(grad.endColor);
+            if (!grad.midColor.has_value()) {
+                Color tl, tr, br, bl;
+                switch (grad.direction) {
+                    case GradientDirection::ToBottom:
+                        tl = startCol; tr = startCol; br = endCol; bl = endCol; break;
+                    case GradientDirection::ToTop:
+                        tl = endCol; tr = endCol; br = startCol; bl = startCol; break;
+                    case GradientDirection::ToRight:
+                        tl = startCol; tr = endCol; br = endCol; bl = startCol; break;
+                    case GradientDirection::ToLeft:
+                        tl = endCol; tr = startCol; br = startCol; bl = endCol; break;
+                }
+                backend.drawGradientRect(m_bounds, tl, tr, br, bl);
+            } else {
+                Color midCol = applyAlpha(*grad.midColor);
+                if (grad.direction == GradientDirection::ToRight || grad.direction == GradientDirection::ToLeft) {
+                    float halfW = m_bounds.width * 0.5f;
+                    Rect r1{ m_bounds.x, m_bounds.y, halfW, m_bounds.height };
+                    Rect r2{ m_bounds.x + halfW, m_bounds.y, m_bounds.width - halfW, m_bounds.height };
+                    if (grad.direction == GradientDirection::ToRight) {
+                        backend.drawGradientRect(r1, startCol, midCol, midCol, startCol);
+                        backend.drawGradientRect(r2, midCol, endCol, endCol, midCol);
+                    } else {
+                        backend.drawGradientRect(r1, midCol, startCol, startCol, midCol);
+                        backend.drawGradientRect(r2, endCol, midCol, midCol, endCol);
+                    }
+                } else {
+                    float halfH = m_bounds.height * 0.5f;
+                    Rect r1{ m_bounds.x, m_bounds.y, m_bounds.width, halfH };
+                    Rect r2{ m_bounds.x, m_bounds.y + halfH, m_bounds.width, m_bounds.height - halfH };
+                    if (grad.direction == GradientDirection::ToBottom) {
+                        backend.drawGradientRect(r1, startCol, startCol, midCol, midCol);
+                        backend.drawGradientRect(r2, midCol, midCol, endCol, endCol);
+                    } else {
+                        backend.drawGradientRect(r1, endCol, endCol, midCol, midCol);
+                        backend.drawGradientRect(r2, midCol, midCol, startCol, startCol);
+                    }
+                }
+            }
+            if (effBorder.a > 0 && borderW > 0.0f) {
+                backend.drawRectOutline(m_bounds, effBorder, borderW, radius);
+            }
+        } else if (m_backdropBlur) {
             backend.drawBackdropBlur(m_bounds, radius, effBg, m_blurRadius);
             if (effBorder.a > 0 && borderW > 0.0f) {
                 backend.drawRectOutline(m_bounds, effBorder, borderW, radius);
@@ -154,6 +201,29 @@ void Panel::render(UIRenderBackend& backend) {
                 borderW
             );
         }
+    }
+
+    // Outline (inner / outer border)
+    Color outColor = m_outlineColor.has_value() 
+        ? *m_outlineColor 
+        : (UIElement::outlineColor().value_or(computedStyle().outlineColor.value_or(Color::Transparent())));
+    float outWidth = m_outlineWidth.has_value() 
+        ? *m_outlineWidth 
+        : (UIElement::outlineWidth().value_or(computedStyle().outlineWidth.value_or(0.0f)));
+    float outOffset = m_outlineOffset.has_value() 
+        ? *m_outlineOffset 
+        : (UIElement::outlineOffset().value_or(computedStyle().outlineOffset.value_or(0.0f)));
+
+    if (outColor.a > 0 && outWidth > 0.0f) {
+        Color effOutlineColor = applyAlpha(outColor);
+        Rect outlineRect{
+            m_bounds.x - outOffset,
+            m_bounds.y - outOffset,
+            m_bounds.width + 2.0f * outOffset,
+            m_bounds.height + 2.0f * outOffset
+        };
+        float outRad = (std::max)(0.0f, radius + outOffset);
+        backend.drawRectOutline(outlineRect, effOutlineColor, outWidth, outRad);
     }
 
     const auto image = panelImage(this);
@@ -213,9 +283,15 @@ void Panel::render(UIRenderBackend& backend) {
 void Panel::onStyleApplied(const ComputedStyle& style) {
     if (style.backgroundImage.has_value()) {
         backgroundImage(*style.backgroundImage);
+    } else if (style.borderImagePath.has_value() && context()) {
+        backgroundImage(context()->loadTexture(*style.borderImagePath));
     }
     if (style.bgUv0.has_value() && style.bgUv1.has_value()) {
         backgroundImageUV(*style.bgUv0, *style.bgUv1);
+    }
+    if (style.bgSlice.has_value()) {
+        Insets dest = style.bgCorner.value_or(*style.bgSlice);
+        backgroundImageSlice(*style.bgSlice, dest);
     }
 }
 

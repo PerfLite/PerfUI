@@ -140,10 +140,16 @@ Text.label {
 | `gap` | `gap` | Зазор между элементами |
 | `padding` | `padding` | Внутренние отступы (1, 2 или 4 числа) |
 | `margin` | `margin` | Внешние отступы |
-| `background`, `background-color`, `bg` | `bg`, `background` | Фоновый цвет (Hex, RGBA, Named) |
+| `background`, `background-color`, `bg` | `bg`, `background` | Фоновый цвет (Hex, RGBA, Named) или `linear-gradient(...)` |
 | `border`, `border-color` | `border`, `border-color` | Составная граница (`[width] [color]` или `[color]`) |
 | `border-width` | `border-width` | Толщина рамки |
 | `border-radius`, `radius` | `radius` | Радиус скругления углов |
+| `outline` | `outline` | Сокращенная запись контура (`outline: 1.5px solid #c8a45a`) |
+| `outline-color` | `outline-color` | Цвет контура (Hex, RGBA, Named, var) |
+| `outline-width` | `outline-width` | Толщина контура (`px`) |
+| `outline-offset` | `outline-offset` | Смещение контура внутрь (`-3.5px`) или наружу (`4px`) |
+| `border-image` | `border-image` | Текстурная 9-slice рамка (`"textures/frame.png" 16px`) |
+| `border-image-slice` | `border-image-slice` | Нарезка текстуры на 9 квадов (1, 2 или 4 числа) |
 | `shadow` | `shadow` | Мягкая тень (`true`, `false`) |
 | `color` | `color` | Цвет текста |
 | `font-size` | `font-size` | Размер шрифта в пикселях |
@@ -218,10 +224,13 @@ Button {
 - `border-color` (Цвет рамки, `Color`)
 - `border-width` (Толщина рамки, `float`)
 - `corner-radius` / `radius` (Радиус скругления, `float`)
+- `outline-color` (Цвет контура, `Color`)
+- `outline-width` (Толщина контура, `float`)
+- `outline-offset` (Смещение контура, `float`)
 - `color` (Цвет текста, `Color`)
 - `opacity` (Прозрачность, `float`)
 - `transform-scale` (Масштаб, `Point`)
-- `transform-offset` (Смещение, `Point`)
+- `transform-offset` / `transform-offset-x` / `transform-offset-y` (Смещение, `Point` / `float`)
 - `width` / `height` (Размеры, `float`, с мягкой инвалидацией layout)
 - `all` (Применяется ко всем перечисленным свойствам)
 
@@ -233,6 +242,11 @@ Button {
 - `ease-in-out` — плавный старт и замедление
 - `cubic-bezier(x1, y1, x2, y2)` — произвольная кубическая кривая Безье
 - Игровые кривые PerfUI: `ease-out-bounce`, `ease-out-elastic`, `ease-in-quad`, `ease-out-quad`, `ease-in-cubic`, `ease-out-cubic`.
+- **Физические пружины `spring(...)`**:
+  - Именованные параметры: `spring(stiffness: 190, damping: 18, mass: 1)`
+  - Позиционные параметры: `spring(200, 15)`
+  - Физические пресеты: `spring(snappy)`, `spring(gentle)`, `spring(wobbly)`
+  - Пружины используют высокоточный интегратор `PerfUI::SpringFloat` с реалистичным овершутом и автоматическим сохранением физической скорости при смене направления (reversal).
 
 ### Бесшовный реверс (Seamless Mid-Transition Reversal)
 Если состояние элемента изменилось во время активного перехода (например, курсор быстро покинул кнопку при 40% завершения анимации), переключение разворачивается **от текущего визуального значения** назад к исходному. Скачков, мерцаний или телепортаций значений не происходит.
@@ -253,3 +267,90 @@ Button {
 5. **Замеры скорости**:
    - 5 000 элементов: холодный пересчёт всего дерева занимает **~4.5 мс**.
    - 5 000 элементов: пересчёт при смене класса/состояния одного элемента занимает **~0.12 мс**.
+
+---
+
+## 8. Продвинутая стилизация (Outline, Градиенты, 9-Slice)
+
+### 8.1. Вложенные и внешние контуры (`outline`, `outline-offset`)
+В отличие от `border`, свойство `outline` не занимает места в потоке flexbox-раскладки и поддерживает отрицательный `outline-offset`. Это позволяет легко создавать стильные двойные и вложенные окантовки:
+
+```css
+.card {
+    border: 1.5px solid rgba(48, 58, 74, 0.85); /* Внешняя сталь */
+    outline: 1px solid rgba(218, 175, 90, 0.25); /* Внутреннее золото */
+    outline-offset: -3.5px; /* Смещение рамки внутрь элемента */
+}
+```
+
+### 8.2. Линейные градиенты (`linear-gradient`)
+Свойство `background` поддерживает 2-stop и 3-stop линейные градиенты без шейдерных аллокаций:
+
+```css
+/* Мягкое растворение арта в темноту */
+.art-fade {
+    background: linear-gradient(to bottom, transparent, rgba(11, 14, 20, 0.95));
+}
+
+/* 3-stop градиентный разделитель (transparent -> золото -> transparent) */
+.gold-separator {
+    background: linear-gradient(to right, transparent, #daaf5a, transparent);
+}
+```
+
+Поддерживаются направления: `to bottom`, `to top`, `to right`, `to left`.
+
+### 8.3. Текстурные рамки 9-Slice (`border-image`)
+Позволяет оформлять интерфейсы через текстурные атласы рамок без единой строчки C++:
+
+```css
+.scroll-panel {
+    border-image: "textures/frame.png" 16px;
+}
+
+/* Раздельная нарезка (top, right, bottom, left) */
+.custom-panel {
+    border-image: "textures/frame.png" 10px 12px 14px 16px;
+}
+```
+
+Текстура автоматически загружается через контекст и нарезается на 9 квадов.
+
+### 8.4. Пример комплексной стилизации меню-карточки
+
+```css
+/* Базовое состояние карточки */
+.menu-card {
+    width: 235px;
+    height: 350px;
+    border-radius: 8px;
+    background-color: rgba(14, 18, 26, 0.9);
+    
+    /* Двойная рамка: внешняя сталь + вложенное золото */
+    border: 1.5px solid rgba(48, 58, 74, 0.85);
+    outline: 1px solid rgba(218, 175, 90, 0.25);
+    outline-offset: -3.5px;
+    
+    /* Тень */
+    box-shadow: true;
+    
+    /* Физика пружины для подъёма */
+    transform-offset-y: 0px;
+    transition: transform-offset-y 0.35s spring(stiffness: 190, damping: 18),
+                transform-scale 0.35s spring(stiffness: 190, damping: 18),
+                outline-color 0.2s ease;
+}
+
+/* При наведении — физический подъём и микро-зум */
+.menu-card:hover {
+    transform-offset-y: -22px;
+    transform-scale: 1.03;
+    outline: 1px solid rgba(218, 175, 90, 0.65);
+}
+
+/* Плавный градиент для растворения низа картинки в темноту */
+.card-image-fade {
+    height: 68px;
+    background: linear-gradient(to bottom, transparent, rgba(11, 14, 20, 0.95));
+}
+```

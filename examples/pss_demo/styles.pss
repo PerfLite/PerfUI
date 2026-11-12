@@ -135,3 +135,32 @@ Panel.button-row {
     gap: 10;
     justify-content: end;
 }
+
+/* AAA Nordic Menu Card (Stage 3 Outline, Gradient & Spring Transitions) */
+Panel.menu-card {
+    background: rgba(14, 18, 26, 0.9);
+    border: 1.5px solid rgba(48, 58, 74, 0.85);
+    outline: 1px solid rgba(218, 175, 90, 0.35);
+    outline-offset: -3.5px;
+    radius: 8;
+    padding: 12;
+    gap: 8;
+    shadow: true;
+    transform-offset-y: 0px;
+    transition: transform-offset-y 0.35s spring(stiffness: 190, damping: 18),
+                transform-scale 0.35s spring(stiffness: 190, damping: 18),
+                outline-color 0.25s ease;
+}
+
+Panel.menu-card:hover {
+    transform-offset-y: -6px;
+    transform-scale: 1.02;
+    outline: 1.5px solid rgba(218, 175, 90, 0.85);
+}
+
+Panel.card-image-fade {
+    background: linear-gradient(to right, transparent, rgba(218, 175, 90, 0.25), transparent);
+    padding: 4 8;
+    radius: 4;
+    justify-content: center;
+}

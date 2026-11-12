@@ -27,8 +27,8 @@ public:
 
     UIElement(const UIElement&) = delete;
     UIElement& operator=(const UIElement&) = delete;
-    UIElement(UIElement&&) noexcept = default;
-    UIElement& operator=(UIElement&&) noexcept = default;
+    UIElement(UIElement&&) noexcept;
+    UIElement& operator=(UIElement&&) noexcept;
 
     // Hierarchy
     UIElement* parent() const { return m_parent; }
@@ -158,6 +158,14 @@ public:
     float effectiveOpacity() const;
     void setOpacity(float opacity);
     UIElement& opacity(float opacity) { setOpacity(opacity); return *this; }
+
+    // Outline (CSS Outline)
+    std::optional<Color> outlineColor() const { return m_outlineColor; }
+    void setOutlineColor(std::optional<Color> c) { m_outlineColor = c; }
+    std::optional<float> outlineWidth() const { return m_outlineWidth; }
+    void setOutlineWidth(std::optional<float> w) { m_outlineWidth = w; }
+    std::optional<float> outlineOffset() const { return m_outlineOffset; }
+    void setOutlineOffset(std::optional<float> o) { m_outlineOffset = o; }
 
     enum class AnimProp {
         Position,
@@ -304,6 +312,10 @@ protected:
     bool m_childStyleDirty{ false };
     std::unique_ptr<StyleTransitionController> m_transitions;
     bool m_styleInitialized{ false };
+
+    std::optional<Color> m_outlineColor;
+    std::optional<float> m_outlineWidth;
+    std::optional<float> m_outlineOffset;
 };
 
 } // namespace PerfUI

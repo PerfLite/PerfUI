@@ -21,6 +21,14 @@
             </Panel>
         </Panel>
 
+        <!-- AAA Nordic Menu Card (Stage 3 Outline, Gradient & Spring Transitions) -->
+        <Panel class="menu-card" width="500">
+            <Panel class="card-image-fade" width="468" height="28">
+                <Text class="heading" text="Nordic Hero's Journey" font-size="16" />
+            </Panel>
+            <Text class="subtitle" text="Double frame (outline-offset), linear gradient backdrop, and physical spring bounce on hover." />
+        </Panel>
+
         <!-- Status Card -->
         <Panel id="StatusCard" class="card" width="500">
             <Text id="StatusText" class="subtitle" text="Theme: Nordic Gold | Active Stylesheet: styles.pss" />

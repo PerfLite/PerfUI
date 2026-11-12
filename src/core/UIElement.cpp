@@ -37,6 +37,9 @@ UIElement::UIElement(std::string name)
 {
 }
 
+UIElement::UIElement(UIElement&&) noexcept = default;
+UIElement& UIElement::operator=(UIElement&&) noexcept = default;
+
 UIElement::~UIElement() {
     {
         std::lock_guard<std::mutex> lock(s_xfMutex);
@@ -697,6 +700,9 @@ void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const Computed
         if (c.color.has_value()) {
             m_style.text.normal = m_style.text.normal.value_or(TextStyleOverride{}).col(*c.color);
         }
+        if (c.outlineColor.has_value()) setOutlineColor(c.outlineColor);
+        if (c.outlineWidth.has_value()) setOutlineWidth(c.outlineWidth);
+        if (c.outlineOffset.has_value()) setOutlineOffset(c.outlineOffset);
     } else {
         bool hasTransitions = !c.transitions.empty();
         if (hasTransitions) {
@@ -729,6 +735,9 @@ void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const Computed
             if (c.color.has_value()) {
                 m_style.text.normal = m_style.text.normal.value_or(TextStyleOverride{}).col(*c.color);
             }
+            if (c.outlineColor.has_value()) setOutlineColor(c.outlineColor);
+            if (c.outlineWidth.has_value()) setOutlineWidth(c.outlineWidth);
+            if (c.outlineOffset.has_value()) setOutlineOffset(c.outlineOffset);
         }
     }
 
