@@ -8,7 +8,8 @@
 </p>
 
 <p>
-  <img src="https://img.shields.io/github/v/release/PerfLite/PerfUI?style=flat-square" alt="release">
+  <img src="https://img.shields.io/badge/standard-C%2B%2B20-00599C?style=flat-square&amp;logo=c%2B%2B" alt="C++20">
+  <img src="https://img.shields.io/github/v/release/PerfLite/PerfUI?include_prereleases&amp;sort=semver&amp;style=flat-square" alt="release">
   <img src="https://img.shields.io/github/license/PerfLite/PerfUI?style=flat-square" alt="license">
   <img src="https://img.shields.io/github/languages/top/PerfLite/PerfUI?style=flat-square" alt="language">
   <img src="https://img.shields.io/github/stars/PerfLite/PerfUI?style=flat-square" alt="stars">
@@ -113,6 +114,8 @@ ctest --test-dir build -C Release --output-on-failure
 
 * **Modder Integration Guide:** [English](docs/MODDER_GUIDE_EN.md) | [Русский](docs/MODDER_GUIDE.md)
 * **Declarative XML Markup & Hot-Reload:** [English](docs/MARKUP_EN.md) | [Русский](docs/MARKUP.md)
+* **PerfUI Style Sheets (PSS) & Transitions:** [English](docs/PSS_EN.md) | [Русский](docs/pss.md)
+* **Lua 5.4 Scripting Engine:** [English](docs/LUA_EN.md) | [Русский](docs/LUA.md)
 * **Skyrim Input & Cursor Integration:** [English](docs/SKYRIM_INPUT_GUIDE_EN.md) | [Русский](docs/SKYRIM_INPUT_GUIDE.md)
 * **MapCanvas Radar & World Widget:** [English](docs/MAPCANVAS_EN.md) | [Русский](docs/MAPCANVAS.md)
 * **Architecture Overview:** [ARCHITECTURE.md](ARCHITECTURE.md)
@@ -210,6 +213,8 @@ ctest --test-dir build -C Release --output-on-failure
 
 * **Руководство интеграции для мододелов:** [Русский](docs/MODDER_GUIDE.md) | [English](docs/MODDER_GUIDE_EN.md)
 * **XML Markup и горячая перезагрузка:** [Русский](docs/MARKUP.md) | [English](docs/MARKUP_EN.md)
+* **Таблицы стилей PSS и переходы:** [Русский](docs/pss.md) | [English](docs/PSS_EN.md)
+* **Скриптовый движок Lua 5.4:** [Русский](docs/LUA.md) | [English](docs/LUA_EN.md)
 * **Ввод, мышь и синхронизация курсора:** [Русский](docs/SKYRIM_INPUT_GUIDE.md) | [English](docs/SKYRIM_INPUT_GUIDE_EN.md)
 * **Виджет радара и карты MapCanvas:** [Русский](docs/MAPCANVAS.md) | [English](docs/MAPCANVAS_EN.md)
 * **Архитектура фреймворка:** [ARCHITECTURE.md](ARCHITECTURE.md)
