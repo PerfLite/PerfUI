@@ -171,10 +171,16 @@ if(WIN32)
 
     target_link_libraries(PerfUI_Sandbox PRIVATE
         PerfUI_Backend_ImGui
+        PerfUI_Markup
         d3d11
         dxgi
         d3dcompiler
     )
+
+    if(PERFUI_ENABLE_LUA)
+        target_compile_definitions(PerfUI_Sandbox PRIVATE PERFUI_ENABLE_LUA)
+        target_link_libraries(PerfUI_Sandbox PRIVATE PerfUI_Lua)
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
