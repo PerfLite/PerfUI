@@ -153,6 +153,11 @@ Text.label {
 | `transform-scale` | `transform-scale` | Визуальный масштаб без изменения layout |
 | `transform-offset` | `transform-offset` | Визуальное смещение (`px` или `%`) |
 | `transform-pivot` | `transform-pivot` | Точка трансформации (`0.5 0.5`, `center`, `top left`, etc.) |
+| `transition` | `transition` | Сокращенная запись плавных переходов |
+| `transition-property` | `transition-property` | Список анимируемых свойств |
+| `transition-duration` | `transition-duration` | Длительность переходов (`0.2s`, `150ms`) |
+| `transition-timing-function` | `transition-timing-function` | Функция сглаживания (кривая) |
+| `transition-delay` | `transition-delay` | Задержка перед началом анимации |
 
 ---
 
@@ -167,11 +172,82 @@ Text.label {
 
 ---
 
-## 6. Производительность и ленивая инвалидация
+## 6. Плавные переходы (Transitions)
+
+PSS поддерживает полностью декларативные CSS-переходы (CSS Transitions Level 1) при смене состояний элементов (`:hover`, `:active`, `:focus`, изменение классов или мутация переменных `:root`).
+
+### Синтаксис `transition`
+
+#### Shorthand
+```css
+/* Один переход */
+Button {
+    transition: background 0.2s ease;
+}
+
+/* Несколько свойств через запятую */
+Button {
+    transition: background 0.2s ease, border-color 0.2s ease, transform-scale 0.15s ease-out;
+}
+
+/* Универсальный селектор всех свойств с кастомным cubic-bezier */
+Panel.card {
+    transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1.0);
+}
+
+/* Отключение переходов */
+Panel.instant {
+    transition: none;
+}
+```
+
+#### Longhands
+```css
+Button {
+    transition-property: background, border-color, opacity;
+    transition-duration: 0.2s, 150ms;
+    transition-timing-function: ease, linear;
+    transition-delay: 0s, 20ms;
+}
+```
+
+### Анимируемые свойства
+- `background` / `background-color` (Цвет, `Color`)
+- `border-color` (Цвет рамки, `Color`)
+- `border-width` (Толщина рамки, `float`)
+- `corner-radius` / `radius` (Радиус скругления, `float`)
+- `color` (Цвет текста, `Color`)
+- `opacity` (Прозрачность, `float`)
+- `transform-scale` (Масштаб, `Point`)
+- `transform-offset` (Смещение, `Point`)
+- `width` / `height` (Размеры, `float`, с мягкой инвалидацией layout)
+- `all` (Применяется ко всем перечисленным свойствам)
+
+### Функции сглаживания (Timing Functions)
+- `linear` — равномерное движение
+- `ease` — стандартное сглаживание CSS (`cubic-bezier(0.25, 0.1, 0.25, 1.0)`)
+- `ease-in` — медленный старт
+- `ease-out` — плавное замедление к концу
+- `ease-in-out` — плавный старт и замедление
+- `cubic-bezier(x1, y1, x2, y2)` — произвольная кубическая кривая Безье
+- Игровые кривые PerfUI: `ease-out-bounce`, `ease-out-elastic`, `ease-in-quad`, `ease-out-quad`, `ease-in-cubic`, `ease-out-cubic`.
+
+### Бесшовный реверс (Seamless Mid-Transition Reversal)
+Если состояние элемента изменилось во время активного перехода (например, курсор быстро покинул кнопку при 40% завершения анимации), переключение разворачивается **от текущего визуального значения** назад к исходному. Скачков, мерцаний или телепортаций значений не происходит.
+
+### Приоритет и доступность
+1. **Приоритет явных анимаций C++**: Если для элемента запущена анимация через `ElementAnimator` (например, `btn->animate().alpha(0.0f, 0.3f)`), PSS transitions для этого свойства автоматически подавляются.
+2. **Reduced Motion**: При включении режима доступности `isReducedMotion()` в `AnimationScheduler` все переходы завершаются мгновенно без интерполяции.
+3. **Холодный старт**: При первичной загрузке дерева элементов стили выставляются мгновенно (без ложных переходов от 0 или черного цвета).
+
+---
+
+## 7. Производительность и ленивая инвалидация
 
 1. **Dirty Subtree Marking**: При наведении мыши, нажатии или смене класса помечается `m_styleDirty = true` только на целевом элементе, а его предки получают легкий флаг `m_childStyleDirty = true`.
 2. **Индексированные селекторы**: Таблица правил индексируется по ID, классам и тегам. При наведении на элемент перебираются только релевантные кандидаты правил.
 3. **Разделение визуальных изменений и Layout**: Если вычисленный стиль изменил только цвета, прозрачность или рамку (`!hasLayoutDifferences`), пересчёт flex-раскладки не вызывается. Раскладка пересчитывается только при изменении размеров, отступов или flex-свойств.
-4. **Замеры скорости**:
+4. **Zero-overhead StyleTransitionController**: Контроллер переходов выделяется лениво в виде `std::unique_ptr` только для тех элементов, у которых в стилях задан `transition`. Для статичных элементов накладные расходы составляют ровно 1 указатель (8 байт в памяти и 0 накладных расходов в цикле обновления).
+5. **Замеры скорости**:
    - 5 000 элементов: холодный пересчёт всего дерева занимает **~4.5 мс**.
    - 5 000 элементов: пересчёт при смене класса/состояния одного элемента занимает **~0.12 мс**.

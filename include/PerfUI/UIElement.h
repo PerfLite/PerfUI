@@ -18,6 +18,7 @@ class UIContext;
 class ElementAnimator;
 class ElementSpring;
 class WeakElementRef;
+struct StyleTransitionController;
 
 class PERFUI_API UIElement {
 public:
@@ -144,6 +145,12 @@ public:
     void invalidateStyleSubtree();
     void updateStyleCascade();
     void applyComputedStyle(const ComputedStyle& style);
+    void applyComputedStyle(const ComputedStyle& oldStyle, const ComputedStyle& newStyle);
+    bool isAlphaAnimating() const;
+    bool isScaleAnimating() const;
+    bool isPositionAnimating() const;
+    StyleTransitionController* transitions() { return m_transitions.get(); }
+    const StyleTransitionController* transitions() const { return m_transitions.get(); }
     virtual void onStyleApplied(const ComputedStyle& style) { (void)style; }
 
     // Opacity
@@ -293,8 +300,10 @@ protected:
     std::string m_typeName;
     ComputedStyle m_computedStyle{};
     std::unordered_map<std::string, std::string> m_inlineAttrs;
-    bool m_styleDirty{ false };
+    bool m_styleDirty{ true };
     bool m_childStyleDirty{ false };
+    std::unique_ptr<StyleTransitionController> m_transitions;
+    bool m_styleInitialized{ false };
 };
 
 } // namespace PerfUI

@@ -282,6 +282,238 @@ std::vector<const StyleRule*> StyleSheet::matchRules(const UIElement* element, u
     return matched;
 }
 
+
+static std::vector<std::string> splitTopLevelCommas(const std::string& str) {
+    std::vector<std::string> result;
+    int parenDepth = 0;
+    std::string current;
+    for (char ch : str) {
+        if (ch == '(') {
+            parenDepth++;
+            current += ch;
+        } else if (ch == ')') {
+            if (parenDepth > 0) parenDepth--;
+            current += ch;
+        } else if (ch == ',' && parenDepth == 0) {
+            size_t start = current.find_first_not_of(" \t\r\n");
+            size_t end = current.find_last_not_of(" \t\r\n");
+            if (start != std::string::npos) {
+                result.push_back(current.substr(start, end - start + 1));
+            }
+            current.clear();
+        } else {
+            current += ch;
+        }
+    }
+    size_t start = current.find_first_not_of(" \t\r\n");
+    size_t end = current.find_last_not_of(" \t\r\n");
+    if (start != std::string::npos) {
+        result.push_back(current.substr(start, end - start + 1));
+    }
+    return result;
+}
+
+static std::vector<std::string> splitWhitespaceOutsideParens(const std::string& str) {
+    std::vector<std::string> tokens;
+    int parenDepth = 0;
+    std::string current;
+    for (char ch : str) {
+        if (ch == '(') {
+            parenDepth++;
+            current += ch;
+        } else if (ch == ')') {
+            if (parenDepth > 0) parenDepth--;
+            current += ch;
+        } else if (std::isspace(static_cast<unsigned char>(ch)) && parenDepth == 0) {
+            if (!current.empty()) {
+                tokens.push_back(current);
+                current.clear();
+            }
+        } else {
+            current += ch;
+        }
+    }
+    if (!current.empty()) {
+        tokens.push_back(current);
+    }
+    return tokens;
+}
+
+static bool isTimeToken(const std::string& tok, float& outSeconds) {
+    std::string s = toLowerString(tok);
+    if (s.empty()) return false;
+    if (s.size() > 2 && s.substr(s.size() - 2) == "ms") {
+        char* end = nullptr;
+        float val = std::strtof(s.c_str(), &end);
+        if (end == s.c_str() + s.size() - 2) {
+            outSeconds = val / 1000.0f;
+            return true;
+        }
+    } else if (s.size() > 1 && s.back() == 's') {
+        char* end = nullptr;
+        float val = std::strtof(s.c_str(), &end);
+        if (end == s.c_str() + s.size() - 1) {
+            outSeconds = val;
+            return true;
+        }
+    } else {
+        char* end = nullptr;
+        float val = std::strtof(s.c_str(), &end);
+        if (end == s.c_str() + s.size()) {
+            outSeconds = val;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool isEasingToken(const std::string& tok, EasingDef& outEasing) {
+    std::string s = toLowerString(tok);
+    if (s.rfind("cubic-bezier(", 0) == 0 && s.back() == ')') {
+        std::string inner = s.substr(13, s.size() - 14);
+        auto parts = splitTopLevelCommas(inner);
+        if (parts.size() == 4) {
+            float x1 = std::strtof(parts[0].c_str(), nullptr);
+            float y1 = std::strtof(parts[1].c_str(), nullptr);
+            float x2 = std::strtof(parts[2].c_str(), nullptr);
+            float y2 = std::strtof(parts[3].c_str(), nullptr);
+            outEasing = EasingDef::Bezier(x1, y1, x2, y2);
+            return true;
+        }
+    }
+    if (s == "linear") { outEasing = Easing::Linear; return true; }
+    if (s == "ease") { outEasing = EasingDef::Bezier(0.25f, 0.1f, 0.25f, 1.0f); return true; }
+    if (s == "ease-in") { outEasing = EasingDef::Bezier(0.42f, 0.0f, 1.0f, 1.0f); return true; }
+    if (s == "ease-out") { outEasing = EasingDef::Bezier(0.0f, 0.0f, 0.58f, 1.0f); return true; }
+    if (s == "ease-in-out") { outEasing = EasingDef::Bezier(0.42f, 0.0f, 0.58f, 1.0f); return true; }
+    if (s == "ease-in-quad") { outEasing = Easing::EaseInQuad; return true; }
+    if (s == "ease-out-quad") { outEasing = Easing::EaseOutQuad; return true; }
+    if (s == "ease-in-out-quad") { outEasing = Easing::EaseInOutQuad; return true; }
+    if (s == "ease-in-cubic") { outEasing = Easing::EaseInCubic; return true; }
+    if (s == "ease-out-cubic") { outEasing = Easing::EaseOutCubic; return true; }
+    if (s == "ease-in-out-cubic") { outEasing = Easing::EaseInOutCubic; return true; }
+    if (s == "ease-out-bounce") { outEasing = Easing::EaseOutBounce; return true; }
+    if (s == "ease-out-elastic") { outEasing = Easing::EaseOutElastic; return true; }
+    return false;
+}
+
+static TransitionProperty parseTransitionProperty(const std::string& tok) {
+    std::string s = toLowerString(tok);
+    if (s == "all") return TransitionProperty::All;
+    if (s == "background" || s == "background-color" || s == "bg" || s == "bg-color") return TransitionProperty::Background;
+    if (s == "border-color") return TransitionProperty::BorderColor;
+    if (s == "border-width") return TransitionProperty::BorderWidth;
+    if (s == "border-radius" || s == "radius" || s == "corner-radius") return TransitionProperty::CornerRadius;
+    if (s == "color" || s == "text-color") return TransitionProperty::Color;
+    if (s == "opacity" || s == "alpha") return TransitionProperty::Opacity;
+    if (s == "transform-scale" || s == "transformscale" || s == "scale") return TransitionProperty::TransformScale;
+    if (s == "transform-offset" || s == "transformoffset" || s == "offset") return TransitionProperty::TransformOffset;
+    if (s == "width") return TransitionProperty::Width;
+    if (s == "height") return TransitionProperty::Height;
+    if (s == "none") return TransitionProperty::None;
+    return TransitionProperty::None;
+}
+
+static void parseTransitionShorthand(const std::string& val, std::vector<TransitionSpec>& outSpecs) {
+    auto clauses = splitTopLevelCommas(val);
+    outSpecs.clear();
+    for (const auto& clause : clauses) {
+        if (clause == "none") {
+            outSpecs.clear();
+            return;
+        }
+        auto tokens = splitWhitespaceOutsideParens(clause);
+        if (tokens.empty()) continue;
+
+        TransitionSpec spec;
+        bool timeParsed = false;
+        bool propParsed = false;
+
+        for (const auto& tok : tokens) {
+            float sec = 0.0f;
+            EasingDef easing;
+            if (isTimeToken(tok, sec)) {
+                if (!timeParsed) {
+                    spec.duration = sec;
+                    timeParsed = true;
+                } else {
+                    spec.delay = sec;
+                }
+            } else if (isEasingToken(tok, easing)) {
+                spec.easing = easing;
+            } else {
+                TransitionProperty p = parseTransitionProperty(tok);
+                if (p != TransitionProperty::None || tok == "all") {
+                    spec.property = p;
+                    propParsed = true;
+                }
+            }
+        }
+        if (propParsed || timeParsed) {
+            outSpecs.push_back(spec);
+        }
+    }
+}
+
+static void applyTransitionProperty(ComputedStyle& c, const std::string& val) {
+    auto propTokens = splitTopLevelCommas(val);
+    if (propTokens.empty()) return;
+    if (c.transitions.empty()) {
+        c.transitions.resize(propTokens.size());
+    } else if (c.transitions.size() < propTokens.size()) {
+        size_t oldSize = c.transitions.size();
+        c.transitions.resize(propTokens.size());
+        for (size_t i = oldSize; i < propTokens.size(); ++i) {
+            c.transitions[i] = c.transitions[i % oldSize];
+        }
+    }
+    for (size_t i = 0; i < c.transitions.size(); ++i) {
+        c.transitions[i].property = parseTransitionProperty(propTokens[i % propTokens.size()]);
+    }
+}
+
+static void applyTransitionDuration(ComputedStyle& c, const std::string& val) {
+    auto durTokens = splitTopLevelCommas(val);
+    std::vector<float> durs;
+    for (const auto& dt : durTokens) {
+        float s = 0.0f;
+        if (isTimeToken(dt, s)) durs.push_back(s);
+    }
+    if (durs.empty()) return;
+    if (c.transitions.empty()) c.transitions.resize(durs.size());
+    for (size_t i = 0; i < c.transitions.size(); ++i) {
+        c.transitions[i].duration = durs[i % durs.size()];
+    }
+}
+
+static void applyTransitionTiming(ComputedStyle& c, const std::string& val) {
+    auto timingTokens = splitTopLevelCommas(val);
+    std::vector<EasingDef> easings;
+    for (const auto& tt : timingTokens) {
+        EasingDef e;
+        if (isEasingToken(tt, e)) easings.push_back(e);
+    }
+    if (easings.empty()) return;
+    if (c.transitions.empty()) c.transitions.resize(easings.size());
+    for (size_t i = 0; i < c.transitions.size(); ++i) {
+        c.transitions[i].easing = easings[i % easings.size()];
+    }
+}
+
+static void applyTransitionDelay(ComputedStyle& c, const std::string& val) {
+    auto delayTokens = splitTopLevelCommas(val);
+    std::vector<float> delays;
+    for (const auto& dt : delayTokens) {
+        float s = 0.0f;
+        if (isTimeToken(dt, s)) delays.push_back(s);
+    }
+    if (delays.empty()) return;
+    if (c.transitions.empty()) c.transitions.resize(delays.size());
+    for (size_t i = 0; i < c.transitions.size(); ++i) {
+        c.transitions[i].delay = delays[i % delays.size()];
+    }
+}
+
 static void applyPropertyToComputed(const std::string& key, const std::string& val, ComputedStyle& c) {
     std::string lower = toLowerString(key);
 
@@ -420,6 +652,16 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
         }
     } else if (lower == "tint") {
         c.tint = parseColorOrToken(val);
+    } else if (lower == "transition") {
+        parseTransitionShorthand(val, c.transitions);
+    } else if (lower == "transition-property") {
+        applyTransitionProperty(c, val);
+    } else if (lower == "transition-duration") {
+        applyTransitionDuration(c, val);
+    } else if (lower == "transition-timing-function" || lower == "transition-timing") {
+        applyTransitionTiming(c, val);
+    } else if (lower == "transition-delay") {
+        applyTransitionDelay(c, val);
     }
 }
 

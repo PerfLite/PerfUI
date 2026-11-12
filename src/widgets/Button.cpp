@@ -9,6 +9,7 @@ Button::Button(std::string label, std::string name)
     : UIElement(std::move(name))
     , m_label(std::move(label))
 {
+    setTypeName("Button");
     setFocusable(true);
 }
 
@@ -63,6 +64,13 @@ void Button::update(float deltaTime) {
 void Button::render(UIRenderBackend& backend) {
     if (!isVisible()) return;
 
+    float effAlpha = effectiveOpacity();
+    if (effAlpha <= 0.001f) return;
+
+    auto applyAlpha = [effAlpha](Color c) -> Color {
+        return Color(c.r, c.g, c.b, static_cast<uint8_t>(std::clamp(static_cast<float>(c.a) * effAlpha, 0.0f, 255.0f)));
+    };
+
     WidgetState state = currentState();
     const auto& themeBtn = Theme::Current().components.button;
     BoxStyle themeBox = themeBtn.resolveBox(state);
@@ -88,11 +96,15 @@ void Button::render(UIRenderBackend& backend) {
         }
     }
 
+    bg = applyAlpha(bg);
+    border = applyAlpha(border);
+
     if (resolvedBox.shadow.has_value()) {
-        backend.drawShadow(m_bounds, radius, resolvedBox.shadow->color, resolvedBox.shadow->blur, resolvedBox.shadow->offset);
+        Color shadowCol = applyAlpha(resolvedBox.shadow->color);
+        backend.drawShadow(m_bounds, radius, shadowCol, resolvedBox.shadow->blur, resolvedBox.shadow->offset);
     } else if (t > 0.01f) {
         Color glow = Color::FocusGlow();
-        glow.a = static_cast<uint8_t>(static_cast<float>(glow.a) * t);
+        glow.a = static_cast<uint8_t>(static_cast<float>(glow.a) * t * effAlpha);
         backend.drawShadow(m_bounds, radius, glow, 8.0f * t, { 0.0f, 2.0f * t });
     }
 
@@ -109,6 +121,8 @@ void Button::render(UIRenderBackend& backend) {
             }
             renderStyle.color = textCol;
         }
+
+        renderStyle.color = applyAlpha(renderStyle.color);
 
         Dimensions textDim = backend.measureText(m_label, renderStyle);
         float textX = m_bounds.x + (std::max)(0.0f, (m_bounds.width - textDim.width) * 0.5f);

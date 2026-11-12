@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <compare>
 #include "PerfUI/Types.h"
+#include "PerfUI/Animation.h"
 
 namespace PerfUI {
 
@@ -71,6 +72,30 @@ struct StyleRule {
     ComplexSelector selector;
     StyleDeclaration declaration;
     uint32_t sourceOrder{ 0 };
+};
+
+enum class TransitionProperty : uint8_t {
+    All,
+    Background,
+    BorderColor,
+    BorderWidth,
+    CornerRadius,
+    Color,
+    Opacity,
+    TransformScale,
+    TransformOffset,
+    Width,
+    Height,
+    None
+};
+
+struct TransitionSpec {
+    TransitionProperty property{ TransitionProperty::All };
+    float duration{ 0.0f }; // in seconds
+    EasingDef easing{ Easing::EaseOutCubic };
+    float delay{ 0.0f };    // in seconds
+
+    bool operator==(const TransitionSpec&) const = default;
 };
 
 } // namespace PerfUI

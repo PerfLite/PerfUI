@@ -27,6 +27,7 @@ namespace PerfUI {
 Panel::Panel(std::string name)
     : UIElement(std::move(name))
 {
+    setTypeName("Panel");
 }
 
 Panel::~Panel() {

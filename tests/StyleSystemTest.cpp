@@ -3,6 +3,8 @@
 #include <cmath>
 #include <string>
 #include "PerfUI/PerfUI.h"
+#include "PerfUI/Style/StyleSheet.h"
+#include "../src/style/StyleTransition.h"
 #include "PerfUI/Markup/MarkupLoader.h"
 #include "MockRenderBackend.h"
 
@@ -570,6 +572,225 @@ void TestMarkupIntegration() {
     std::cout << "  -> Passed TestMarkupIntegration" << std::endl;
 }
 
+
+void TestTransitionsAndInterpolation() {
+    std::cout << "[Test] Running TestTransitionsAndInterpolation..." << std::endl;
+
+    // 1. Shorthand Parsing
+    {
+        StyleSheet sheet;
+        sheet.loadString(R"(
+            Button {
+                background: #000000;
+                opacity: 1.0;
+                transform-scale: 1.0;
+                transition: background 0.2s ease, opacity 150ms linear 50ms, transform-scale 0.3s cubic-bezier(0.25, 0.1, 0.25, 1.0);
+            }
+        )");
+
+        UIContext ctx;
+        ctx.styleSheet() = sheet;
+
+        auto btn = std::make_unique<Button>("TestBtn");
+        btn->setContext(&ctx);
+        btn->updateStyleCascade();
+
+        const auto& c = btn->computedStyle();
+        TEST_ASSERT(c.transitions.size() == 3, "Parsed 3 transition specs");
+
+        // Spec 0: background 0.2s ease
+        TEST_ASSERT(c.transitions[0].property == TransitionProperty::Background, "Spec 0 property is Background");
+        TEST_ASSERT(std::abs(c.transitions[0].duration - 0.2f) < 0.001f, "Spec 0 duration is 0.2s");
+        TEST_ASSERT(c.transitions[0].delay == 0.0f, "Spec 0 delay is 0.0s");
+
+        // Spec 1: opacity 150ms linear 50ms
+        TEST_ASSERT(c.transitions[1].property == TransitionProperty::Opacity, "Spec 1 property is Opacity");
+        TEST_ASSERT(std::abs(c.transitions[1].duration - 0.15f) < 0.001f, "Spec 1 duration is 150ms (0.15s)");
+        TEST_ASSERT(std::abs(c.transitions[1].delay - 0.05f) < 0.001f, "Spec 1 delay is 50ms (0.05s)");
+        TEST_ASSERT(c.transitions[1].easing.type == Easing::Linear, "Spec 1 easing is Linear");
+
+        // Spec 2: transform-scale 0.3s cubic-bezier(0.25, 0.1, 0.25, 1.0)
+        TEST_ASSERT(c.transitions[2].property == TransitionProperty::TransformScale, "Spec 2 property is TransformScale");
+        TEST_ASSERT(std::abs(c.transitions[2].duration - 0.3f) < 0.001f, "Spec 2 duration is 0.3s");
+        TEST_ASSERT(c.transitions[2].easing.type == Easing::Custom, "Spec 2 easing is Custom Bezier");
+        TEST_ASSERT(std::abs(c.transitions[2].easing.bezier.x1 - 0.25f) < 0.001f, "Bezier x1 is 0.25");
+        TEST_ASSERT(std::abs(c.transitions[2].easing.bezier.y1 - 0.1f) < 0.001f, "Bezier y1 is 0.1");
+    }
+
+    // 2. Longhands Parsing and transition: none
+    {
+        StyleSheet sheet;
+        sheet.loadString(R"(
+            Panel {
+                transition-property: background, border-color;
+                transition-duration: 200ms, 400ms;
+                transition-timing-function: ease-in, ease-out;
+                transition-delay: 10ms, 20ms;
+            }
+            Panel.notrans {
+                transition: none;
+            }
+        )");
+
+        UIContext ctx;
+        ctx.styleSheet() = sheet;
+
+        auto panel = std::make_unique<Panel>();
+        panel->setContext(&ctx);
+        panel->updateStyleCascade();
+
+        const auto& c1 = panel->computedStyle();
+        TEST_ASSERT(c1.transitions.size() == 2, "Longhands created 2 transition specs");
+        TEST_ASSERT(c1.transitions[0].property == TransitionProperty::Background, "Panel spec 0 is Background");
+        TEST_ASSERT(std::abs(c1.transitions[0].duration - 0.2f) < 0.001f, "Panel spec 0 duration is 0.2s");
+        TEST_ASSERT(c1.transitions[1].property == TransitionProperty::BorderColor, "Panel spec 1 is BorderColor");
+        TEST_ASSERT(std::abs(c1.transitions[1].duration - 0.4f) < 0.001f, "Panel spec 1 duration is 0.4s");
+
+        panel->addClass("notrans");
+        panel->markStyleDirty();
+        panel->updateStyleCascade();
+        TEST_ASSERT(panel->computedStyle().transitions.empty(), "transition: none cleared transitions");
+    }
+
+    // 3. Cold mount vs Dynamic Hover Transitions
+    {
+        StyleSheet sheet;
+        sheet.loadString(R"(
+            Button {
+                background: #000000;
+                opacity: 1.0;
+                transition: background 0.2s linear, opacity 0.2s linear;
+            }
+            Button:hover {
+                background: #ff0000;
+                opacity: 0.5;
+            }
+        )");
+
+        UIContext ctx;
+        ctx.styleSheet() = sheet;
+
+        auto btn = std::make_unique<Button>("HoverBtn");
+        btn->setContext(&ctx);
+
+        // Cold mount: updateStyleCascade immediately applies resting styles
+        btn->updateStyleCascade();
+        TEST_ASSERT(btn->style().box.normal.has_value() && *btn->style().box.normal->backgroundColor == Color(0, 0, 0, 255),
+            "Cold mount establishes background immediately");
+        TEST_ASSERT(std::abs(btn->opacity() - 1.0f) < 0.001f, "Cold mount establishes opacity immediately");
+        TEST_ASSERT(btn->transitions() == nullptr || !btn->transitions()->hasActiveTransitions(),
+            "No active transitions on cold mount");
+
+        // Hover: mouse enter
+        btn->onPointerEnter();
+        btn->updateStyleCascade();
+
+        TEST_ASSERT(btn->transitions() != nullptr, "Transition controller allocated");
+        TEST_ASSERT(btn->transitions()->hasActiveTransitions(), "Transitions active on hover");
+        TEST_ASSERT(btn->transitions()->trackBackground.active, "Background transition active");
+        TEST_ASSERT(btn->transitions()->trackOpacity.active, "Opacity transition active");
+
+        // Tick 0.1s (halfway through 0.2s linear)
+        btn->update(0.1f);
+
+        Color midCol = *btn->style().box.normal->backgroundColor;
+        TEST_ASSERT(midCol.r > 100 && midCol.r < 155, "Background R lerped halfway (~127)");
+        TEST_ASSERT(std::abs(btn->opacity() - 0.75f) < 0.05f, "Opacity lerped halfway (0.75)");
+
+        // Tick remaining 0.15s (past 0.2s total)
+        btn->update(0.15f);
+
+        Color finalCol = *btn->style().box.normal->backgroundColor;
+        TEST_ASSERT(finalCol == Color(255, 0, 0, 255), "Background reached final target #ff0000");
+        TEST_ASSERT(std::abs(btn->opacity() - 0.5f) < 0.001f, "Opacity reached final target 0.5");
+        TEST_ASSERT(!btn->transitions()->hasActiveTransitions(), "All transitions finished cleanly");
+    }
+
+    // 4. Seamless Mid-Transition Reversal
+    {
+        StyleSheet sheet;
+        sheet.loadString(R"(
+            Button {
+                background: #000000;
+                transition: background 0.2s linear;
+            }
+            Button:hover {
+                background: #ff0000;
+            }
+        )");
+
+        UIContext ctx;
+        ctx.styleSheet() = sheet;
+
+        auto btn = std::make_unique<Button>("ReversalBtn");
+        btn->setContext(&ctx);
+        btn->updateStyleCascade(); // Cold mount: #000000
+
+        // Hover in
+        btn->onPointerEnter();
+        btn->updateStyleCascade();
+
+        // Tick halfway (0.1s) -> color is roughly 127
+        btn->update(0.1f);
+        uint8_t midR = btn->style().box.normal->backgroundColor->r;
+        TEST_ASSERT(midR > 115 && midR < 140, "Mid-transition R is ~127");
+
+        // Unhover immediately mid-transition!
+        btn->onPointerLeave();
+        btn->updateStyleCascade();
+
+        // Verify startVal of new reversed track is the current visual value (midR), NOT 255 and NOT 0!
+        TEST_ASSERT(btn->transitions()->trackBackground.active, "Reversed track is active");
+        Color newStart = btn->transitions()->trackBackground.startVal;
+        TEST_ASSERT(newStart.r == midR, "Seamless reversal started from current visual value without teleporting");
+        TEST_ASSERT(btn->transitions()->trackBackground.targetVal == Color(0, 0, 0, 255), "Target is base #000000");
+
+        // Tick 0.1s of the reversal
+        btn->update(0.1f);
+        uint8_t revR = btn->style().box.normal->backgroundColor->r;
+        TEST_ASSERT(revR < midR, "Seamlessly lerping backwards towards 0");
+
+        // Tick to completion
+        btn->update(0.15f);
+        TEST_ASSERT(*btn->style().box.normal->backgroundColor == Color(0, 0, 0, 255), "Smoothly returned to base color");
+    }
+
+    // 5. Explicit Animation Priority (ElementAnimator beats PSS Transition)
+    {
+        StyleSheet sheet;
+        sheet.loadString(R"(
+            Button {
+                opacity: 1.0;
+                transition: opacity 0.2s linear;
+            }
+            Button:hover {
+                opacity: 0.2;
+            }
+        )");
+
+        UIContext ctx;
+        ctx.styleSheet() = sheet;
+
+        auto btn = std::make_unique<Button>("PriorityBtn");
+        btn->setContext(&ctx);
+        btn->updateStyleCascade();
+
+        // Explicit C++ animation starts on alpha
+        btn->animate().alpha(0.8f, 1.0f);
+        TEST_ASSERT(btn->isAlphaAnimating(), "Explicit alpha animation active");
+
+        // Now button is hovered, which normally triggers opacity transition to 0.2
+        btn->onPointerEnter();
+        btn->updateStyleCascade();
+
+        // PSS opacity transition MUST be suppressed by explicit animator
+        TEST_ASSERT(btn->transitions() == nullptr || !btn->transitions()->trackOpacity.active,
+            "PSS opacity transition suppressed while explicit animator is active");
+    }
+
+    std::cout << "  -> Passed TestTransitionsAndInterpolation" << std::endl;
+}
+
 int main() {
     std::cout << "=== Running PerfUI Style System & Components Tests ===" << std::endl;
 
@@ -578,6 +799,7 @@ int main() {
     TestAnimationAndEasing();
     TestNewComponents();
     TestMarkupIntegration();
+    TestTransitionsAndInterpolation();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;
     return 0;

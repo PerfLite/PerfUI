@@ -2,8 +2,10 @@
 
 #include "PerfUI/Types.h"
 #include "PerfUI/Layout.h"
+#include "PerfUI/Style/StyleTypes.h"
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace PerfUI {
 
@@ -63,6 +65,9 @@ struct ComputedStyle {
     // Widget specific
     std::optional<Color> fillColor;
     std::optional<Color> trackColor;
+
+    // Transitions (CSS transition declarations)
+    std::vector<TransitionSpec> transitions;
 
     bool operator==(const ComputedStyle& other) const = default;
 

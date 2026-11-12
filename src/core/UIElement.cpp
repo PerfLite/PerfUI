@@ -3,6 +3,7 @@
 #include "PerfUI/LayoutEngine.h"
 #include "PerfUI/Animation.h"
 #include "PerfUI/Style/StyleSheet.h"
+#include "../style/StyleTransition.h"
 #include <atomic>
 #include <algorithm>
 #include <mutex>
@@ -313,6 +314,15 @@ float UIElement::effectiveOpacity() const {
 }
 
 void UIElement::notifyAnimStarted(AnimProp prop) {
+    if (m_transitions) {
+        switch (prop) {
+        case AnimProp::Alpha:    m_transitions->trackOpacity.active = false; break;
+        case AnimProp::Scale:    m_transitions->trackTransformScale.active = false; break;
+        case AnimProp::Position: m_transitions->trackTransformOffset.active = false; break;
+        case AnimProp::Size:     m_transitions->trackWidth.active = false; m_transitions->trackHeight.active = false; break;
+        case AnimProp::Color:    m_transitions->trackBackground.active = false; m_transitions->trackColor.active = false; break;
+        }
+    }
     if (m_spring) {
         switch (prop) {
         case AnimProp::Position: m_spring->cancelPosition(); break;
@@ -357,11 +367,26 @@ void UIElement::stopAnimations() {
     if (m_spring) {
         m_spring->stop();
     }
+    if (m_transitions) {
+        m_transitions->finishAll(this);
+    }
 }
 
 bool UIElement::isAnimating() const {
     return (m_animator && !m_animator->isFinished()) ||
            (m_spring && !m_spring->isResting());
+}
+
+bool UIElement::isAlphaAnimating() const {
+    return m_animator && m_animator->trackAlpha().active;
+}
+
+bool UIElement::isScaleAnimating() const {
+    return m_animator && m_animator->trackScale().active;
+}
+
+bool UIElement::isPositionAnimating() const {
+    return m_animator && m_animator->trackPosition().active;
 }
 
 WeakElementRef UIElement::weakRef() {
@@ -382,6 +407,9 @@ void UIElement::update(float deltaTime) {
         if (m_spring && !m_spring->isResting()) {
             m_spring->finish();
         }
+        if (m_transitions && m_transitions->hasActiveTransitions()) {
+            m_transitions->finishAll(this);
+        }
     } else {
         float effectiveDt = deltaTime;
         if (m_context) {
@@ -397,6 +425,9 @@ void UIElement::update(float deltaTime) {
             }
             if (m_spring && !m_spring->isResting()) {
                 m_spring->update(effectiveDt);
+            }
+            if (m_transitions && m_transitions->hasActiveTransitions()) {
+                m_transitions->update(effectiveDt, this);
             }
         }
     }
@@ -574,8 +605,9 @@ void UIElement::updateStyleCascade() {
             markLayoutDirty();
         }
 
+        ComputedStyle oldStyle = m_computedStyle;
         m_computedStyle = newStyle;
-        applyComputedStyle(m_computedStyle);
+        applyComputedStyle(oldStyle, m_computedStyle);
         m_styleDirty = false;
     }
 
@@ -595,22 +627,19 @@ void UIElement::updateStyleCascade() {
 }
 
 void UIElement::applyComputedStyle(const ComputedStyle& c) {
-    bool animAlpha = m_animator && m_animator->trackAlpha().active;
-    bool animScale = m_animator && m_animator->trackScale().active;
-    bool animPos = m_animator && m_animator->trackPosition().active;
+    applyComputedStyle(m_computedStyle, c);
+}
+
+void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const ComputedStyle& c) {
+    bool animAlpha = isAlphaAnimating();
+    bool animScale = isScaleAnimating();
+    bool animPos = isPositionAnimating();
 
     if (c.visible.has_value()) setVisible(*c.visible);
-    if (c.opacity.has_value() && !animAlpha) setOpacity(*c.opacity);
     if (c.blendMode.has_value()) setBlendMode(*c.blendMode);
-    if (c.transformScale.has_value() && !animScale) setRenderScale(*c.transformScale);
     if (c.transformPivot.has_value()) setPivot(*c.transformPivot);
-    if ((c.transformOffsetPx.has_value() || c.transformOffsetPct.has_value()) && !animPos) {
-        setRenderOffset(c.transformOffsetPx.value_or(Point{0, 0}), c.transformOffsetPct.value_or(Point{0, 0}));
-    }
 
     auto& props = layout();
-    if (c.width.has_value()) props.width(DimensionConstraint::Fixed(*c.width));
-    if (c.height.has_value()) props.height(DimensionConstraint::Fixed(*c.height));
     if (c.minWidth.has_value()) props.minWidth(*c.minWidth);
     if (c.maxWidth.has_value()) props.maxWidth(*c.maxWidth);
     if (c.minHeight.has_value()) props.minHeight(*c.minHeight);
@@ -629,22 +658,8 @@ void UIElement::applyComputedStyle(const ComputedStyle& c) {
     if (c.bottom.has_value()) props.bottom(*c.bottom);
     if (c.centerX.has_value()) props.centerX(*c.centerX);
 
-    if (c.backgroundColor.has_value()) {
-        m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).bg(*c.backgroundColor);
-    }
-    if (c.borderColor.has_value() || c.borderWidth.has_value()) {
-        Color bc = c.borderColor.value_or(Color::White());
-        float bw = c.borderWidth.value_or(1.0f);
-        m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).border(bc, bw);
-    }
-    if (c.cornerRadius.has_value()) {
-        m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).radius(*c.cornerRadius);
-    }
     if (c.shadow.has_value() && *c.shadow) {
         m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).dropShadow(Color(0, 0, 0, 180));
-    }
-    if (c.color.has_value()) {
-        m_style.text.normal = m_style.text.normal.value_or(TextStyleOverride{}).col(*c.color);
     }
     if (c.fontSize.has_value()) {
         m_style.text.normal = m_style.text.normal.value_or(TextStyleOverride{}).size(*c.fontSize);
@@ -657,6 +672,64 @@ void UIElement::applyComputedStyle(const ComputedStyle& c) {
     }
     if (c.wrap.has_value()) {
         m_style.text.normal = m_style.text.normal.value_or(TextStyleOverride{}).wrap(*c.wrap);
+    }
+
+    if (!m_styleInitialized) {
+        m_styleInitialized = true;
+        if (c.opacity.has_value() && !animAlpha) setOpacity(*c.opacity);
+        if (c.transformScale.has_value() && !animScale) setRenderScale(*c.transformScale);
+        if ((c.transformOffsetPx.has_value() || c.transformOffsetPct.has_value()) && !animPos) {
+            setRenderOffset(c.transformOffsetPx.value_or(Point{0, 0}), c.transformOffsetPct.value_or(Point{0, 0}));
+        }
+        if (c.width.has_value()) props.width(DimensionConstraint::Fixed(*c.width));
+        if (c.height.has_value()) props.height(DimensionConstraint::Fixed(*c.height));
+        if (c.backgroundColor.has_value()) {
+            m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).bg(*c.backgroundColor);
+        }
+        if (c.borderColor.has_value() || c.borderWidth.has_value()) {
+            Color bc = c.borderColor.value_or(Color::White());
+            float bw = c.borderWidth.value_or(1.0f);
+            m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).border(bc, bw);
+        }
+        if (c.cornerRadius.has_value()) {
+            m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).radius(*c.cornerRadius);
+        }
+        if (c.color.has_value()) {
+            m_style.text.normal = m_style.text.normal.value_or(TextStyleOverride{}).col(*c.color);
+        }
+    } else {
+        bool hasTransitions = !c.transitions.empty();
+        if (hasTransitions) {
+            if (!m_transitions) {
+                m_transitions = std::make_unique<StyleTransitionController>();
+            }
+            m_transitions->applyTransitions(this, oldStyle, c);
+        } else {
+            if (m_transitions && m_transitions->hasActiveTransitions()) {
+                m_transitions->finishAll(this);
+            }
+            if (c.opacity.has_value() && !animAlpha) setOpacity(*c.opacity);
+            if (c.transformScale.has_value() && !animScale) setRenderScale(*c.transformScale);
+            if ((c.transformOffsetPx.has_value() || c.transformOffsetPct.has_value()) && !animPos) {
+                setRenderOffset(c.transformOffsetPx.value_or(Point{0, 0}), c.transformOffsetPct.value_or(Point{0, 0}));
+            }
+            if (c.width.has_value()) props.width(DimensionConstraint::Fixed(*c.width));
+            if (c.height.has_value()) props.height(DimensionConstraint::Fixed(*c.height));
+            if (c.backgroundColor.has_value()) {
+                m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).bg(*c.backgroundColor);
+            }
+            if (c.borderColor.has_value() || c.borderWidth.has_value()) {
+                Color bc = c.borderColor.value_or(Color::White());
+                float bw = c.borderWidth.value_or(1.0f);
+                m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).border(bc, bw);
+            }
+            if (c.cornerRadius.has_value()) {
+                m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).radius(*c.cornerRadius);
+            }
+            if (c.color.has_value()) {
+                m_style.text.normal = m_style.text.normal.value_or(TextStyleOverride{}).col(*c.color);
+            }
+        }
     }
 
     onStyleApplied(c);
