@@ -130,7 +130,7 @@ private:
     bool m_enableGlassBlur{ true };
     float m_blurScale{ 1.0f };
     uint32_t m_toggleHotkey{ 0x76 };
-    std::string m_templatePath{ "SKSE/Plugins/PerfUI/ui/diagnostics.xml" };
+    std::string m_templatePath{ "Interface/PerfUI/diagnostics.xml" };
 };
 
 } // namespace PerfUI

@@ -232,7 +232,7 @@ void Diagnostics::loadIni(const std::string& baseDir) {
         char buf[256]{};
         m_enableGlassBlur = GetPrivateProfileIntA("Diagnostics", "bEnableGlassBlur", 1, foundIni.c_str()) != 0;
 
-        GetPrivateProfileStringA("Diagnostics", "sTemplatePath", "SKSE/Plugins/PerfUI/ui/diagnostics.xml", buf, sizeof(buf), foundIni.c_str());
+        GetPrivateProfileStringA("Diagnostics", "sTemplatePath", "Interface/PerfUI/diagnostics.xml", buf, sizeof(buf), foundIni.c_str());
         m_templatePath = buf;
 
         char keyBuf[32]{};
@@ -256,6 +256,9 @@ void Diagnostics::ensureMarkup(UIContext* context) {
         m_templatePath,
         "Data/" + m_templatePath,
         baseDir + m_templatePath,
+        "Data/Interface/PerfUI/diagnostics.xml",
+        "Interface/PerfUI/diagnostics.xml",
+        baseDir + "Interface/PerfUI/diagnostics.xml",
         baseDir + "ui/diagnostics.xml",
         baseDir + "PerfUI/ui/diagnostics.xml",
         "Data/SKSE/Plugins/PerfUI/ui/diagnostics.xml",

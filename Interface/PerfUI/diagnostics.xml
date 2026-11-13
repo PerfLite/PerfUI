@@ -8,15 +8,15 @@
            padding="12"
            gap="3"
            radius="10"
-           backdrop-blur="true"
-           blur="1.0"
-           bg="#0e121a73"
-           border="#a0c8f55f"
+           liquid-glass="true"
+           blur="1.5"
+           bg="#0a0e16a0"
+           border="#82afdcc8"
            border-width="1"
            direction="column">
 
         <!-- Top Header: Title and Hotkey hint -->
-        <Panel direction="row" justify="space-between" width="100%" height="22">
+        <Panel direction="row" justify="space-between" width="100%" height="22" bg="transparent" border-width="0">
             <Text name="Title" text="PerfUI diagnostics" font-size="15" bold="true" color="#f0f5ff" />
             <Text name="KeyHint" text="F7" font-size="13" bold="true" color="#9bb4d2" />
         </Panel>
@@ -31,27 +31,27 @@
         <Text name="OverlayHeader" text="Overlays:" font-size="13" bold="true" color="#aabae2" margin-top="4" />
 
         <!-- Overlay execution timings (up to 6 rows) -->
-        <Panel name="OverlayRow0" direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow0" direction="row" justify="space-between" width="100%" height="18" bg="transparent" border-width="0">
             <Text name="OverlayName0" text="  none" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime0" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>
-        <Panel name="OverlayRow1" direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow1" direction="row" justify="space-between" width="100%" height="18" bg="transparent" border-width="0">
             <Text name="OverlayName1" text="" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime1" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>
-        <Panel name="OverlayRow2" direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow2" direction="row" justify="space-between" width="100%" height="18" bg="transparent" border-width="0">
             <Text name="OverlayName2" text="" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime2" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>
-        <Panel name="OverlayRow3" direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow3" direction="row" justify="space-between" width="100%" height="18" bg="transparent" border-width="0">
             <Text name="OverlayName3" text="" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime3" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>
-        <Panel name="OverlayRow4" direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow4" direction="row" justify="space-between" width="100%" height="18" bg="transparent" border-width="0">
             <Text name="OverlayName4" text="" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime4" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>
-        <Panel name="OverlayRow5" direction="row" justify="space-between" width="100%" height="18">
+        <Panel name="OverlayRow5" direction="row" justify="space-between" width="100%" height="18" bg="transparent" border-width="0">
             <Text name="OverlayName5" text="" font-size="13" bold="true" color="#d2e1f2" />
             <Text name="OverlayTime5" text="" font-size="13" bold="true" color="#8cdc96" />
         </Panel>
