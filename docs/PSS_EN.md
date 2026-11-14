@@ -358,7 +358,7 @@ Enables AAA texture frame borders without C++ code:
 
 ## 9. Viewport Units (`vw`, `vh`, `vmin`, `vmax`)
 
-PSS and XML markup support responsive viewport units calculated dynamically from current renderer dimensions (`UIContext::viewportSize()`):
+PSS and XML markup support responsive viewport units calculated dynamically from the current renderer window dimensions (`UIContext::viewportSize()`):
 
 | Unit | Description | Example |
 | :--- | :--- | :--- |
@@ -370,6 +370,9 @@ PSS and XML markup support responsive viewport units calculated dynamically from
 ### Supported Properties
 - Dimensions: `width`, `height`, `min-width`, `max-width`, `min-height`, `max-height`.
 - Absolute positioning & anchors: `left`, `right`, `top`, `bottom`.
+
+> [!NOTE]
+> `padding`, `margin`, `gap`, `border-radius`, and `font-size` take pixel values or theme tokens ($spacing, $radius). `transform-offset` accepts pixels and percentages (`px`, `%`). When the display resolution changes or when running on ultrawide monitors (21:9 `3440×1440`, 32:9 `5120×1440`), all `vw/vh/vmin/vmax` units automatically adapt dynamically without UI reloads.
 
 ```css
 .modal-window {
@@ -384,7 +387,7 @@ PSS and XML markup support responsive viewport units calculated dynamically from
 
 ## 10. Keyframe Animations (`@keyframes` & `animation`)
 
-For multi-step, cyclical visual effects (pulsing indicators, quest markers, floating badges), PSS supports `@keyframes` declarations and the `animation` property.
+For multi-step, cyclical visual effects (pulsing indicators, quest markers, floating badges), PSS supports `@keyframes` declarations and the `animation` property conforming to CSS standards.
 
 ### 10.1. Defining `@keyframes`
 
@@ -393,10 +396,12 @@ For multi-step, cyclical visual effects (pulsing indicators, quest markers, floa
     0% {
         opacity: 0.4;
         transform-scale: 1.0;
+        animation-timing-function: ease-out;
     }
     50% {
         opacity: 1.0;
         transform-scale: 1.08;
+        animation-timing-function: ease-in;
     }
     100% {
         opacity: 0.4;
@@ -405,10 +410,6 @@ For multi-step, cyclical visual effects (pulsing indicators, quest markers, floa
 }
 
 @keyframes slideInFromLeft {
-    from {
-        transform-offset-x: -100px;
-        opacity: 0;
-    }
     to {
         transform-offset-x: 0px;
         opacity: 1;
@@ -416,16 +417,17 @@ For multi-step, cyclical visual effects (pulsing indicators, quest markers, floa
 }
 ```
 
-Supported features:
+Parser features:
 - Keywords `from` (`0%`) and `to` (`100%`).
-- Arbitrary percentage stops (`0%`..`100%`).
-- Grouped selector stops: `0%, 100% { opacity: 0.5; }`.
+- Arbitrary percentage stops (`0%`..`100%`) in any order (steps are automatically sorted by ascending `offset`).
+- Duplicate offsets: multiple declarations at the same offset are merged, with later declarations winning on property collisions.
+- Non-animatable properties produce parser warnings with `file:line:col`.
 
 ### 10.2. The `animation` Property
 
 Shorthand syntax:
 ```css
-/* name duration timing-function delay iteration-count direction fill-mode */
+/* name duration timing-function delay iteration-count direction fill-mode play-state */
 .pulsing-badge {
     animation: pulseGlow 1.8s ease-in-out infinite alternate both;
 }
@@ -436,13 +438,33 @@ Longhand properties:
 - `animation-duration`: cycle duration (`1.5s`, `300ms`).
 - `animation-timing-function`: easing curve (`linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`, `cubic-bezier(...)`, `spring(...)`).
 - `animation-delay`: delay prior to execution (`0.5s`).
-- `animation-iteration-count`: numeric cycle count (`3`) or `infinite`.
+- `animation-iteration-count`: numeric cycle count (integers or fractions like `1.5`) or `infinite`.
 - `animation-direction`: `normal`, `reverse`, `alternate`, `alternate-reverse`.
 - `animation-fill-mode`: `none`, `forwards` (freezes final state), `backwards`, `both`.
 - `animation-play-state`: `running`, `paused`.
 
-### 10.3. Runtime Architecture
-- **Zero-allocation tick**: `StyleKeyframeAnimationController` operates without heap allocations in the update loop.
-- **Smooth interpolation**: Colors, opacity, scale, offset, and dimensions smoothly interpolate between keyframe steps.
-- **Accessibility**: Automatic freezing when `isReducedMotion()` is enabled.
+### 10.3. Runtime Architecture & CSS Compliance
+
+1. **Base Style Restoration**:
+   - When finite animations finish without `fill-mode: forwards` or `both`, elements cleanly restore their base cascade styles.
+   - Removing an animation class or cancelling an animation immediately restores base styles.
+   - Runtime C++/Lua calls and explicit `ElementAnimator` retain highest priority.
+
+2. **Implicit Keyframes**:
+   - Missing `from` (`0%`) or `to` (`100%`) stops are automatically synthesized from the element's computed base style.
+
+3. **Independent Property Tracks**:
+   - Properties omitted in intermediate stops interpolate continuously between their nearest defined stops without interruption.
+
+4. **Per-Segment Easing**:
+   - Easing functions are evaluated strictly within each segment (`segT`) between keyframe stops. Keyframe-level `animation-timing-function` overrides the global animation easing for that segment, avoiding double smoothing.
+
+5. **Fractional Iterations**:
+   - Fractional counts (e.g. `1.5` with `forwards`) freeze accurately at the corresponding fractional point of the final cycle.
+
+6. **Reduced Motion Accessibility**:
+   - When `reducedMotion` is active, animations finish immediately (applying the final frame for forwards/both or restoring base styles), and infinite animations freeze at their initial frame.
+
+7. **Dimension Animations**:
+   - Animating `width` / `height` restores original `DimensionConstraint` modes (Percent, Auto) after completion. Use `transform-scale` when possible for optimal 60+ FPS layout performance.
 
