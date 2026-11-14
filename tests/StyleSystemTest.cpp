@@ -1110,6 +1110,29 @@ void TestViewportUnits() {
     TEST_ASSERT(std::abs(card.desiredSize().width - 640.0f) < 0.1f, "25vw desired width dynamically updates to 640px on 1440p");
     TEST_ASSERT(std::abs(card.desiredSize().height - 720.0f) < 0.1f, "50vh desired height dynamically updates to 720px on 1440p");
 
+    // 6. Ultrawide screen tests: 21:9 (3440x1440) and 32:9 (5120x1440)
+    Dimensions vp21_9{ 3440.0f, 1440.0f };
+    TEST_ASSERT(std::abs(dcW.resolve(0.0f, vp21_9) - 1720.0f) < 0.001f, "50vw on 3440x1440 is 1720px");
+    TEST_ASSERT(std::abs(dcH.resolve(0.0f, vp21_9) - 360.0f) < 0.001f, "25vh on 3440x1440 is 360px");
+    TEST_ASSERT(std::abs(dcMin.resolve(0.0f, vp21_9) - 144.0f) < 0.001f, "10vmin on 3440x1440 is 144px (min is 1440)");
+    TEST_ASSERT(std::abs(dcMax.resolve(0.0f, vp21_9) - 344.0f) < 0.001f, "10vmax on 3440x1440 is 344px (max is 3440)");
+
+    ctx.setViewportSize(vp21_9);
+    card.measure(vp21_9);
+    TEST_ASSERT(std::abs(card.desiredSize().width - 860.0f) < 0.1f, "25vw desired width on 21:9 (3440x1440) is 860px");
+    TEST_ASSERT(std::abs(card.desiredSize().height - 720.0f) < 0.1f, "50vh desired height on 21:9 (3440x1440) is 720px");
+
+    Dimensions vp32_9{ 5120.0f, 1440.0f };
+    TEST_ASSERT(std::abs(dcW.resolve(0.0f, vp32_9) - 2560.0f) < 0.001f, "50vw on 5120x1440 is 2560px");
+    TEST_ASSERT(std::abs(dcH.resolve(0.0f, vp32_9) - 360.0f) < 0.001f, "25vh on 5120x1440 is 360px");
+    TEST_ASSERT(std::abs(dcMin.resolve(0.0f, vp32_9) - 144.0f) < 0.001f, "10vmin on 32:9 is 144px (min is 1440)");
+    TEST_ASSERT(std::abs(dcMax.resolve(0.0f, vp32_9) - 512.0f) < 0.001f, "10vmax on 32:9 is 512px (max is 5120)");
+
+    ctx.setViewportSize(vp32_9);
+    card.measure(vp32_9);
+    TEST_ASSERT(std::abs(card.desiredSize().width - 1280.0f) < 0.1f, "25vw desired width on 32:9 (5120x1440) is 1280px");
+    TEST_ASSERT(std::abs(card.desiredSize().height - 720.0f) < 0.1f, "50vh desired height on 32:9 (5120x1440) is 720px");
+
     std::cout << "  -> Passed TestViewportUnits" << std::endl;
 }
 
@@ -1495,6 +1518,67 @@ void TestKeyframeAnimations() {
     std::cout << "  -> Passed TestKeyframeAnimations" << std::endl;
 }
 
+void TestKeyframeAnimationBenchmark() {
+    std::cout << "[Benchmark] Running Keyframe Animation Benchmark (100 elements, 1000 frames)..." << std::endl;
+
+    StyleSheet sheet;
+    sheet.loadString(R"(
+        @keyframes complexPulse {
+            0% {
+                opacity: 0.2;
+                transform-scale: 0.8;
+                background-color: #ff0000;
+            }
+            50% {
+                opacity: 1.0;
+                transform-scale: 1.2;
+                background-color: #00ff00;
+            }
+            100% {
+                opacity: 0.2;
+                transform-scale: 0.8;
+                background-color: #ff0000;
+            }
+        }
+        .bench-box {
+            animation: complexPulse 1.0s linear infinite;
+        }
+    )");
+
+    constexpr int kElementCount = 100;
+    constexpr int kFrameCount = 1000;
+    constexpr float kDt = 0.016f; // ~60 FPS
+
+    std::vector<std::unique_ptr<Panel>> elements;
+    elements.reserve(kElementCount);
+    for (int i = 0; i < kElementCount; ++i) {
+        auto p = std::make_unique<Panel>("BenchPanel" + std::to_string(i));
+        p->addClass("bench-box");
+        p->applyStyle(sheet);
+        elements.push_back(std::move(p));
+    }
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    for (int frame = 0; frame < kFrameCount; ++frame) {
+        for (auto& el : elements) {
+            el->update(kDt);
+        }
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    double totalUs = std::chrono::duration<double, std::micro>(end - start).count();
+    double perFrameUs = totalUs / kFrameCount;
+    double perElementPerFrameUs = perFrameUs / kElementCount;
+
+    std::cout << "  * Total Time (1000 frames): " << (totalUs / 1000.0) << " ms" << std::endl;
+    std::cout << "  * Cost per frame (100 elements): " << perFrameUs << " us (" << (perFrameUs / 1000.0) << " ms)" << std::endl;
+    std::cout << "  * Cost per element per frame: " << perElementPerFrameUs << " us" << std::endl;
+
+    TEST_ASSERT(perFrameUs < 500.0, "100 animated elements update cost under 500 us (0.5 ms) per frame");
+    std::cout << "  -> Passed TestKeyframeAnimationBenchmark" << std::endl;
+}
+
 int main() {
     std::cout << "=== Running PerfUI Style System & Components Tests ===" << std::endl;
 
@@ -1509,6 +1593,7 @@ int main() {
     TestSpringTransitions();
     TestViewportUnits();
     TestKeyframeAnimations();
+    TestKeyframeAnimationBenchmark();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;
     return 0;
