@@ -187,6 +187,7 @@ struct KeyframeStep {
     std::optional<float> outlineWidth;
     std::optional<float> outlineOffset;
     std::optional<Color> color;
+    std::optional<float> fontSize;
     std::optional<float> width;
     std::optional<float> height;
     std::optional<EasingDef> timingFunction;

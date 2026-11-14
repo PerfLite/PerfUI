@@ -198,7 +198,8 @@ enum class LengthUnit : uint8_t {
     Vw,
     Vh,
     Vmin,
-    Vmax
+    Vmax,
+    Rem
 };
 
 struct Length {
@@ -214,8 +215,9 @@ struct Length {
     static constexpr Length Vh(float vh) { return { vh, LengthUnit::Vh }; }
     static constexpr Length Vmin(float vmin) { return { vmin, LengthUnit::Vmin }; }
     static constexpr Length Vmax(float vmax) { return { vmax, LengthUnit::Vmax }; }
+    static constexpr Length Rem(float rem) { return { rem, LengthUnit::Rem }; }
 
-    constexpr float resolve(float parentSize, const Dimensions& viewport) const {
+    constexpr float resolve(float parentSize, const Dimensions& viewport, float remBase = 16.0f) const {
         switch (unit) {
         case LengthUnit::Px: return value;
         case LengthUnit::Percent: return parentSize * (value / 100.0f);
@@ -223,11 +225,45 @@ struct Length {
         case LengthUnit::Vh: return viewport.height * (value / 100.0f);
         case LengthUnit::Vmin: return (viewport.width < viewport.height ? viewport.width : viewport.height) * (value / 100.0f);
         case LengthUnit::Vmax: return (viewport.width > viewport.height ? viewport.width : viewport.height) * (value / 100.0f);
+        case LengthUnit::Rem: return value * remBase;
         default: return value;
         }
     }
 
+    constexpr bool isViewportDependent() const {
+        return unit == LengthUnit::Vw || unit == LengthUnit::Vh ||
+               unit == LengthUnit::Vmin || unit == LengthUnit::Vmax;
+    }
+
     constexpr bool operator==(const Length&) const = default;
+};
+
+struct LengthInsets {
+    Length left{};
+    Length top{};
+    Length right{};
+    Length bottom{};
+
+    constexpr LengthInsets() = default;
+    constexpr LengthInsets(Length uniform) : left(uniform), top(uniform), right(uniform), bottom(uniform) {}
+    constexpr LengthInsets(Length horizontal, Length vertical) : left(horizontal), top(vertical), right(horizontal), bottom(vertical) {}
+    constexpr LengthInsets(Length l, Length t, Length r, Length b) : left(l), top(t), right(r), bottom(b) {}
+
+    constexpr Insets resolve(float parentWidth, float parentHeight, const Dimensions& viewport, float remBase = 16.0f) const {
+        return Insets{
+            left.resolve(parentWidth, viewport, remBase),
+            top.resolve(parentHeight, viewport, remBase),
+            right.resolve(parentWidth, viewport, remBase),
+            bottom.resolve(parentHeight, viewport, remBase)
+        };
+    }
+
+    constexpr bool isViewportDependent() const {
+        return left.isViewportDependent() || top.isViewportDependent() ||
+               right.isViewportDependent() || bottom.isViewportDependent();
+    }
+
+    constexpr bool operator==(const LengthInsets&) const = default;
 };
 
 struct SizeConstraint {

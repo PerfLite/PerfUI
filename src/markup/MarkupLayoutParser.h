@@ -13,8 +13,11 @@ float parseNumberOrToken(std::string_view val, float defaultValue = 0.0f);
 Color parseColorOrToken(std::string_view val, Color defaultColor = Color::White());
 bool parseBool(std::string_view val, bool defaultValue = false);
 DimensionConstraint parseDimension(std::string_view val);
+bool tryParseLength(std::string_view val, Length& outLength);
 Length parseLength(std::string_view val, Length defaultLen = Length::Px(0.0f));
+bool tryParseLengthInsets(std::string_view val, LengthInsets& outInsets);
 void parsePaddingOrMargin(std::string_view val, LayoutProps& props, bool isPadding);
+bool hasUnknownUnit(std::string_view val, std::string* outUnknownUnit = nullptr);
 std::string resolveLocalizedText(std::string_view val);
 
 bool parseTransformOffset(std::string_view val, Point& pxOffset, Point& pctOffset, bool& hasPct);

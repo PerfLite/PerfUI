@@ -148,6 +148,7 @@ public:
     void applyStyle(const class StyleSheet& sheet);
     void applyComputedStyle(const ComputedStyle& style);
     void applyComputedStyle(const ComputedStyle& oldStyle, const ComputedStyle& newStyle, const class StyleSheet* sheet = nullptr);
+    void recomputeViewportUnits(const Dimensions& viewport, float rootFontSize);
     bool isAlphaAnimating() const;
     bool isScaleAnimating() const;
     bool isPositionAnimating() const;

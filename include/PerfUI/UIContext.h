@@ -37,6 +37,7 @@ public:
     // Viewport & Root
     void setViewportSize(Dimensions size);
     Dimensions viewportSize() const { return m_viewportSize; }
+    void updateViewportUnits();
 
     UIElement* root() const { return m_root.get(); }
 

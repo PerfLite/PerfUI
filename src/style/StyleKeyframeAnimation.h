@@ -68,6 +68,7 @@ struct ElementBaseStyleSnapshot {
     float outlineWidth{ 0.0f };
     float outlineOffset{ 0.0f };
     std::optional<Color> color;
+    std::optional<float> fontSize;
     DimensionConstraint width{ DimensionConstraint::Auto() };
     DimensionConstraint height{ DimensionConstraint::Auto() };
     bool captured{ false };
@@ -89,6 +90,7 @@ struct ElementBaseStyleSnapshot {
         outlineOffset = el->outlineOffset().value_or(0.0f);
         if (el->style().text.normal.has_value()) {
             color = el->style().text.normal->color;
+            fontSize = el->style().text.normal->fontSize;
         }
         width = el->layout().width();
         height = el->layout().height();
@@ -111,6 +113,7 @@ struct ElementBaseStyleSnapshot {
         if (c.outlineWidth.has_value()) outlineWidth = *c.outlineWidth;
         if (c.outlineOffset.has_value()) outlineOffset = *c.outlineOffset;
         if (c.color.has_value()) color = *c.color;
+        if (c.fontSize.has_value()) fontSize = *c.fontSize;
         if (c.widthConstraint.has_value()) width = *c.widthConstraint;
         else if (c.width.has_value()) width = DimensionConstraint::Fixed(*c.width);
         if (c.heightConstraint.has_value()) height = *c.heightConstraint;
@@ -164,6 +167,14 @@ struct ElementBaseStyleSnapshot {
             if (color.has_value()) {
                 TextStyleOverride text = el->style().text.normal.value_or(TextStyleOverride{});
                 text.color = color;
+                el->style().text.normal = text;
+            }
+        }
+
+        if (propsMask & (1 << 11)) {
+            if (fontSize.has_value()) {
+                TextStyleOverride text = el->style().text.normal.value_or(TextStyleOverride{});
+                text.fontSize = fontSize;
                 el->style().text.normal = text;
             }
         }
@@ -297,6 +308,7 @@ struct AnimationTracks {
     PropertyTrack<float> outlineWidth;
     PropertyTrack<float> outlineOffset;
     PropertyTrack<Color> color;
+    PropertyTrack<float> fontSize;
     PropertyTrack<float> width;
     PropertyTrack<float> height;
 
@@ -349,6 +361,9 @@ struct AnimationTracks {
         Color defaultTextCol = (el && el->computedStyle().color.has_value()) ? *el->computedStyle().color : Theme::Current().colors.textPrimary;
         color.buildFromSteps(def.steps, base.color.value_or(defaultTextCol), [](const KeyframeStep& s) { return s.color; });
 
+        float baseFs = base.fontSize.value_or(16.0f);
+        fontSize.buildFromSteps(def.steps, baseFs, [](const KeyframeStep& s) { return s.fontSize; });
+
         float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (el ? el->bounds().width : 0.0f);
         float baseH = (base.height.mode == SizeMode::Fixed) ? base.height.value : (el ? el->bounds().height : 0.0f);
         width.buildFromSteps(def.steps, baseW, [](const KeyframeStep& s) { return s.width; });
@@ -379,6 +394,9 @@ struct AnimationTracks {
         if (outlineOffset.active) outlineOffset.updateImplicitStops(base.outlineOffset);
         if (color.active && base.color.has_value()) {
             color.updateImplicitStops(*base.color);
+        }
+        if (fontSize.active && base.fontSize.has_value()) {
+            fontSize.updateImplicitStops(*base.fontSize);
         }
 
         float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (el ? el->bounds().width : 0.0f);
@@ -457,6 +475,11 @@ struct AnimationTracks {
             element->style().text.normal = element->style().text.normal.value_or(TextStyleOverride{}).col(tc);
         }
 
+        float fsVal = 0.0f;
+        if (fontSize.evaluate(progress, defaultEasing, fsVal)) {
+            element->style().text.normal = element->style().text.normal.value_or(TextStyleOverride{}).size(fsVal);
+        }
+
         float wVal = 0.0f;
         if (width.evaluate(progress, defaultEasing, wVal)) {
             element->layout().width(DimensionConstraint::Fixed(wVal));
@@ -497,6 +520,7 @@ public:
         if (t.color.active) mask |= (1 << 8);
         if (t.width.active) mask |= (1 << 9);
         if (t.height.active) mask |= (1 << 10);
+        if (t.fontSize.active) mask |= (1 << 11);
         return mask;
     }
 

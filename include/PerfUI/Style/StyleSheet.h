@@ -66,6 +66,10 @@ public:
     void addWarning(std::string warning) { m_warnings.push_back(std::move(warning)); }
     void addError(std::string error) { m_errors.push_back(std::move(error)); }
 
+    /// Root font size for rem resolution (default 16.0px)
+    float rootFontSize() const { return m_rootFontSize; }
+    void setRootFontSize(float size) { m_rootFontSize = size; }
+
 private:
     void rebuildIndex();
 
@@ -74,6 +78,7 @@ private:
     std::unordered_map<std::string, KeyframesDefinition> m_keyframes;
     std::vector<std::string> m_warnings;
     std::vector<std::string> m_errors;
+    float m_rootFontSize{ 16.0f };
 
     // Fast rule lookup indices
     std::unordered_map<std::string, std::vector<size_t>> m_idIndex;

@@ -928,9 +928,17 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
     } else if (lower == "outline-color") {
         c.outlineColor = parseColorOrToken(val);
     } else if (lower == "outline-width") {
-        c.outlineWidth = parseNumberOrToken(val);
+        Length l;
+        if (tryParseLength(val, l)) {
+            c.outlineWidthLength = l;
+            c.outlineWidth = l.resolve(0.0f, Dimensions{ 1920.0f, 1080.0f });
+        }
     } else if (lower == "outline-offset") {
-        c.outlineOffset = parseNumberOrToken(val);
+        Length l;
+        if (tryParseLength(val, l)) {
+            c.outlineOffsetLength = l;
+            c.outlineOffset = l.resolve(0.0f, Dimensions{ 1920.0f, 1080.0f });
+        }
     } else if (lower == "border-image") {
         std::string path;
         Insets slice;
@@ -985,9 +993,17 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
     } else if (lower == "border-color") {
         c.borderColor = parseColorOrToken(val);
     } else if (lower == "border-width") {
-        c.borderWidth = parseNumberOrToken(val);
+        Length l;
+        if (tryParseLength(val, l)) {
+            c.borderWidthLength = l;
+            c.borderWidth = l.resolve(0.0f, Dimensions{ 1920.0f, 1080.0f });
+        }
     } else if (lower == "border-radius" || lower == "radius" || lower == "corner-radius") {
-        c.cornerRadius = parseNumberOrToken(val);
+        Length l;
+        if (tryParseLength(val, l)) {
+            c.cornerRadiusLength = l;
+            c.cornerRadius = l.resolve(0.0f, Dimensions{ 1920.0f, 1080.0f });
+        }
     } else if (lower == "shadow" || lower == "box-shadow") {
         c.shadow = parseBool(val, true);
     } else if (lower == "color") {
@@ -995,7 +1011,21 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
     } else if (lower == "font") {
         c.font = val;
     } else if (lower == "font-size" || lower == "fontsize") {
-        c.fontSize = parseNumberOrToken(val);
+        Length l;
+        if (tryParseLength(val, l)) {
+            c.fontSizeLength = l;
+            c.fontSize = l.resolve(0.0f, Dimensions{ 1920.0f, 1080.0f });
+        }
+    } else if (lower == "min-font-size" || lower == "min-fontsize") {
+        Length l;
+        if (tryParseLength(val, l)) {
+            c.minFontSizeLength = l;
+        }
+    } else if (lower == "max-font-size" || lower == "max-fontsize") {
+        Length l;
+        if (tryParseLength(val, l)) {
+            c.maxFontSizeLength = l;
+        }
     } else if (lower == "bold" || lower == "font-weight") {
         c.bold = (val == "bold" || val == "700" || parseBool(val, false));
     } else if (lower == "italic" || lower == "font-style") {
@@ -1040,15 +1070,31 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
         else if (j == "space-between") c.justify = JustifyContent::SpaceBetween;
         else if (j == "space-around") c.justify = JustifyContent::SpaceAround;
     } else if (lower == "gap") {
-        c.gap = parseNumberOrToken(val);
+        Length l;
+        if (tryParseLength(val, l)) {
+            c.gapLength = l;
+            c.gap = l.resolve(0.0f, Dimensions{ 1920.0f, 1080.0f });
+        }
     } else if (lower == "padding") {
-        LayoutProps temp;
-        parsePaddingOrMargin(val, temp, true);
-        c.padding = temp.padding();
+        LengthInsets li;
+        if (tryParseLengthInsets(val, li)) {
+            c.paddingLength = li;
+            c.padding = li.resolve(0.0f, 0.0f, Dimensions{ 1920.0f, 1080.0f });
+        } else {
+            LayoutProps temp;
+            parsePaddingOrMargin(val, temp, true);
+            c.padding = temp.padding();
+        }
     } else if (lower == "margin") {
-        LayoutProps temp;
-        parsePaddingOrMargin(val, temp, false);
-        c.margin = temp.margin();
+        LengthInsets li;
+        if (tryParseLengthInsets(val, li)) {
+            c.marginLength = li;
+            c.margin = li.resolve(0.0f, 0.0f, Dimensions{ 1920.0f, 1080.0f });
+        } else {
+            LayoutProps temp;
+            parsePaddingOrMargin(val, temp, false);
+            c.margin = temp.margin();
+        }
     } else if (lower == "position") {
         std::string p = toLowerString(val);
         c.isAbsolute = (p == "absolute");
@@ -1195,6 +1241,65 @@ ComputedStyle StyleSheet::computeStyle(const UIElement* element, const ComputedS
     // 4. Resolve border-image to texture if context is available
     if (computed.borderImagePath.has_value() && !computed.backgroundImage.has_value() && element && element->context()) {
         computed.backgroundImage = element->context()->loadTexture(*computed.borderImagePath);
+    }
+
+    // 5. Resolve lengths against actual viewport and rootFontSize
+    Dimensions viewport{ 1920.0f, 1080.0f };
+    if (element && element->context()) {
+        viewport = element->context()->viewportSize();
+    }
+    float rootFs = m_rootFontSize;
+
+    if (computed.fontSizeLength.has_value()) {
+        computed.fontSize = computed.fontSizeLength->resolve(0.0f, viewport, rootFs);
+    }
+    if (computed.fontSize.has_value()) {
+        if (computed.minFontSizeLength.has_value()) {
+            float minVal = computed.minFontSizeLength->resolve(0.0f, viewport, rootFs);
+            if (*computed.fontSize < minVal) {
+                computed.fontSize = minVal;
+            }
+        }
+        if (computed.maxFontSizeLength.has_value()) {
+            float maxVal = computed.maxFontSizeLength->resolve(0.0f, viewport, rootFs);
+            if (*computed.fontSize > maxVal) {
+                computed.fontSize = maxVal;
+            }
+        }
+    }
+
+    if (computed.gapLength.has_value()) {
+        computed.gap = computed.gapLength->resolve(0.0f, viewport, rootFs);
+    }
+    if (computed.paddingLength.has_value()) {
+        computed.padding = computed.paddingLength->resolve(0.0f, 0.0f, viewport, rootFs);
+    }
+    if (computed.marginLength.has_value()) {
+        computed.margin = computed.marginLength->resolve(0.0f, 0.0f, viewport, rootFs);
+    }
+    if (computed.borderWidthLength.has_value()) {
+        computed.borderWidth = computed.borderWidthLength->resolve(0.0f, viewport, rootFs);
+    }
+    if (computed.cornerRadiusLength.has_value()) {
+        computed.cornerRadius = computed.cornerRadiusLength->resolve(0.0f, viewport, rootFs);
+    }
+    if (computed.outlineWidthLength.has_value()) {
+        computed.outlineWidth = computed.outlineWidthLength->resolve(0.0f, viewport, rootFs);
+    }
+    if (computed.outlineOffsetLength.has_value()) {
+        computed.outlineOffset = computed.outlineOffsetLength->resolve(0.0f, viewport, rootFs);
+    }
+    if (computed.leftLength.has_value()) {
+        computed.left = computed.leftLength->resolve(0.0f, viewport, rootFs);
+    }
+    if (computed.rightLength.has_value()) {
+        computed.right = computed.rightLength->resolve(0.0f, viewport, rootFs);
+    }
+    if (computed.topLength.has_value()) {
+        computed.top = computed.topLength->resolve(0.0f, viewport, rootFs);
+    }
+    if (computed.bottomLength.has_value()) {
+        computed.bottom = computed.bottomLength->resolve(0.0f, viewport, rootFs);
     }
 
     return computed;

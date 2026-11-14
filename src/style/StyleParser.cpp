@@ -240,21 +240,23 @@ void StyleParser::parseKeyframesBlock() {
                 } else if (k == "border-color") {
                     step.borderColor = parseColorOrToken(v);
                 } else if (k == "border-width") {
-                    step.borderWidth = parseNumberOrToken(v);
+                    step.borderWidth = parseLength(v).resolve(0.0f, Dimensions{ 1920.0f, 1080.0f }, m_sheet.rootFontSize());
                 } else if (k == "border-radius" || k == "radius" || k == "corner-radius") {
-                    step.cornerRadius = parseNumberOrToken(v);
+                    step.cornerRadius = parseLength(v).resolve(0.0f, Dimensions{ 1920.0f, 1080.0f }, m_sheet.rootFontSize());
                 } else if (k == "outline-color") {
                     step.outlineColor = parseColorOrToken(v);
                 } else if (k == "outline-width") {
-                    step.outlineWidth = parseNumberOrToken(v);
+                    step.outlineWidth = parseLength(v).resolve(0.0f, Dimensions{ 1920.0f, 1080.0f }, m_sheet.rootFontSize());
                 } else if (k == "outline-offset") {
-                    step.outlineOffset = parseNumberOrToken(v);
+                    step.outlineOffset = parseLength(v).resolve(0.0f, Dimensions{ 1920.0f, 1080.0f }, m_sheet.rootFontSize());
                 } else if (k == "color" || k == "text-color") {
                     step.color = parseColorOrToken(v);
+                } else if (k == "font-size" || k == "fontsize") {
+                    step.fontSize = parseLength(v).resolve(0.0f, Dimensions{ 1920.0f, 1080.0f }, m_sheet.rootFontSize());
                 } else if (k == "width") {
-                    step.width = parseNumberOrToken(v);
+                    step.width = parseLength(v).resolve(0.0f, Dimensions{ 1920.0f, 1080.0f }, m_sheet.rootFontSize());
                 } else if (k == "height") {
-                    step.height = parseNumberOrToken(v);
+                    step.height = parseLength(v).resolve(0.0f, Dimensions{ 1920.0f, 1080.0f }, m_sheet.rootFontSize());
                 } else if (k == "animation-timing-function" || k == "animation-timing") {
                     EasingDef edef{ Easing::Linear };
                     if (parseEasingToken(v, edef)) step.timingFunction = edef;
@@ -293,6 +295,7 @@ void StyleParser::parseKeyframesBlock() {
             if (step.outlineWidth.has_value()) prev.outlineWidth = step.outlineWidth;
             if (step.outlineOffset.has_value()) prev.outlineOffset = step.outlineOffset;
             if (step.color.has_value()) prev.color = step.color;
+            if (step.fontSize.has_value()) prev.fontSize = step.fontSize;
             if (step.width.has_value()) prev.width = step.width;
             if (step.height.has_value()) prev.height = step.height;
             if (step.timingFunction.has_value()) prev.timingFunction = step.timingFunction;
@@ -357,6 +360,13 @@ void StyleParser::parseRootBlock() {
 
         varValue = trimString(varValue);
         if (!varName.empty() && !varValue.empty()) {
+            std::string lowerVar = toLower(varName);
+            if (lowerVar == "font-size" || lowerVar == "fontsize" || lowerVar == "--root-font-size") {
+                Length l;
+                if (tryParseLength(varValue, l)) {
+                    m_sheet.setRootFontSize(l.resolve(0.0f, Dimensions{ 1920.0f, 1080.0f }, 16.0f));
+                }
+            }
             m_sheet.setVariable(varName, varValue);
         }
     }
@@ -518,6 +528,11 @@ bool StyleParser::parseDeclarationBlock(StyleDeclaration& outDecl) {
 
         propVal = trimString(propVal);
         if (!propName.empty()) {
+            std::string badUnit;
+            if (hasUnknownUnit(propVal, &badUnit)) {
+                warning("Unknown unit '" + badUnit + "' in property '" + propName + "'", propLine, propCol);
+                continue;
+            }
             outDecl.properties[propName] = propVal;
             outDecl.propertyLocations[propName] = { propLine, propCol };
         }

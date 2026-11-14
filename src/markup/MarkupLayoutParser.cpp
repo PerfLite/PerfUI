@@ -53,10 +53,19 @@ float parseNumberOrToken(std::string_view val, float defaultValue) {
     if (s == "$fontTitle" || s == "title") return curTheme.typography.fontTitle;
     if (s == "$fontHeader" || s == "header") return curTheme.typography.fontHeader;
 
+    const char* start = s.c_str();
     char* endPtr = nullptr;
-    float res = std::strtof(s.c_str(), &endPtr);
-    if (endPtr != s.c_str()) {
-        return res;
+    float res = std::strtof(start, &endPtr);
+    if (endPtr != start) {
+        while (*endPtr == ' ' || *endPtr == '\t') ++endPtr;
+        if (*endPtr == '\0') {
+            return res;
+        }
+        std::string suffix = toLower(endPtr);
+        if (suffix == "px") {
+            return res;
+        }
+        return defaultValue;
     }
     return defaultValue;
 }
@@ -222,44 +231,243 @@ DimensionConstraint parseDimension(std::string_view val) {
     return DimensionConstraint::Fixed(px);
 }
 
-Length parseLength(std::string_view val, Length defaultLen) {
+bool tryParseLength(std::string_view val, Length& outLength) {
     std::string s = trim(val);
-    if (s.empty()) return defaultLen;
+    if (s.empty()) return false;
+
+    if (s[0] == '$') {
+        float f = parseNumberOrToken(s, 0.0f);
+        outLength = Length::Px(f);
+        return true;
+    }
+
     if (s.back() == '%') {
-        float pct = parseNumberOrToken(s.substr(0, s.size() - 1), 0.0f);
-        return Length::Percent(pct);
+        const char* start = s.c_str();
+        char* end = nullptr;
+        float pct = std::strtof(start, &end);
+        while (end && (*end == ' ' || *end == '\t')) ++end;
+        if (end && *end == '%') {
+            outLength = Length::Percent(pct);
+            return true;
+        }
+        return false;
     }
-    if (s.size() > 2) {
-        std::string suffix2 = toLower(s.substr(s.size() - 2));
-        if (suffix2 == "vw") {
-            float v = parseNumberOrToken(s.substr(0, s.size() - 2), 0.0f);
-            return Length::Vw(v);
-        }
-        if (suffix2 == "vh") {
-            float v = parseNumberOrToken(s.substr(0, s.size() - 2), 0.0f);
-            return Length::Vh(v);
-        }
-        if (suffix2 == "px") {
-            float v = parseNumberOrToken(s.substr(0, s.size() - 2), 0.0f);
-            return Length::Px(v);
-        }
-    }
+
     if (s.size() > 4) {
         std::string suffix4 = toLower(s.substr(s.size() - 4));
         if (suffix4 == "vmin") {
-            float v = parseNumberOrToken(s.substr(0, s.size() - 4), 0.0f);
-            return Length::Vmin(v);
+            const char* start = s.c_str();
+            char* end = nullptr;
+            float v = std::strtof(start, &end);
+            while (end && (*end == ' ' || *end == '\t')) ++end;
+            if (end && toLower(end) == "vmin") {
+                outLength = Length::Vmin(v);
+                return true;
+            }
+            return false;
         }
         if (suffix4 == "vmax") {
-            float v = parseNumberOrToken(s.substr(0, s.size() - 4), 0.0f);
-            return Length::Vmax(v);
+            const char* start = s.c_str();
+            char* end = nullptr;
+            float v = std::strtof(start, &end);
+            while (end && (*end == ' ' || *end == '\t')) ++end;
+            if (end && toLower(end) == "vmax") {
+                outLength = Length::Vmax(v);
+                return true;
+            }
+            return false;
         }
     }
-    float v = parseNumberOrToken(s, 0.0f);
-    return Length::Px(v);
+
+    if (s.size() > 3) {
+        std::string suffix3 = toLower(s.substr(s.size() - 3));
+        if (suffix3 == "rem") {
+            const char* start = s.c_str();
+            char* end = nullptr;
+            float v = std::strtof(start, &end);
+            while (end && (*end == ' ' || *end == '\t')) ++end;
+            if (end && toLower(end) == "rem") {
+                outLength = Length::Rem(v);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    if (s.size() > 2) {
+        std::string suffix2 = toLower(s.substr(s.size() - 2));
+        if (suffix2 == "vw") {
+            const char* start = s.c_str();
+            char* end = nullptr;
+            float v = std::strtof(start, &end);
+            while (end && (*end == ' ' || *end == '\t')) ++end;
+            if (end && toLower(end) == "vw") {
+                outLength = Length::Vw(v);
+                return true;
+            }
+            return false;
+        }
+        if (suffix2 == "vh") {
+            const char* start = s.c_str();
+            char* end = nullptr;
+            float v = std::strtof(start, &end);
+            while (end && (*end == ' ' || *end == '\t')) ++end;
+            if (end && toLower(end) == "vh") {
+                outLength = Length::Vh(v);
+                return true;
+            }
+            return false;
+        }
+        if (suffix2 == "px") {
+            const char* start = s.c_str();
+            char* end = nullptr;
+            float v = std::strtof(start, &end);
+            while (end && (*end == ' ' || *end == '\t')) ++end;
+            if (end && toLower(end) == "px") {
+                outLength = Length::Px(v);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    const char* start = s.c_str();
+    char* end = nullptr;
+    float v = std::strtof(start, &end);
+    if (end != start) {
+        while (end && (*end == ' ' || *end == '\t')) ++end;
+        if (end && *end == '\0') {
+            outLength = Length::Px(v);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+Length parseLength(std::string_view val, Length defaultLen) {
+    Length out;
+    if (tryParseLength(val, out)) {
+        return out;
+    }
+    return defaultLen;
+}
+
+bool tryParseLengthInsets(std::string_view val, LengthInsets& outInsets) {
+    std::string s = trim(val);
+    if (s.empty()) return false;
+    std::replace(s.begin(), s.end(), ',', ' ');
+    std::stringstream ss(s);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (ss >> token) {
+        tokens.push_back(token);
+    }
+    if (tokens.empty()) return false;
+
+    std::vector<Length> lengths;
+    for (const auto& t : tokens) {
+        Length l;
+        if (!tryParseLength(t, l)) {
+            return false;
+        }
+        lengths.push_back(l);
+    }
+
+    if (lengths.size() == 1) {
+        outInsets = LengthInsets(lengths[0]);
+        return true;
+    } else if (lengths.size() == 2) {
+        outInsets = LengthInsets(lengths[0], lengths[1]);
+        return true;
+    } else if (lengths.size() == 3) {
+        outInsets = LengthInsets(lengths[0], lengths[1], lengths[0], lengths[2]);
+        return true;
+    } else if (lengths.size() >= 4) {
+        outInsets = LengthInsets(lengths[0], lengths[1], lengths[2], lengths[3]);
+        return true;
+    }
+    return false;
+}
+
+bool hasUnknownUnit(std::string_view val, std::string* outUnknownUnit) {
+    std::string s = trim(val);
+    if (s.empty()) return false;
+
+    std::vector<std::string> tokens;
+    std::string cur;
+    int parenDepth = 0;
+    for (char c : s) {
+        if (c == '(') {
+            parenDepth++;
+            cur += c;
+        } else if (c == ')') {
+            if (parenDepth > 0) parenDepth--;
+            cur += c;
+        } else if (parenDepth == 0 && (c == ' ' || c == '\t' || c == ',' || c == '\r' || c == '\n')) {
+            if (!cur.empty()) {
+                tokens.push_back(cur);
+                cur.clear();
+            }
+        } else {
+            cur += c;
+        }
+    }
+    if (!cur.empty()) tokens.push_back(cur);
+
+    for (const auto& tok : tokens) {
+        if (tok.empty()) continue;
+        if (tok[0] == '#' || tok[0] == '$') continue;
+        if (tok.front() == '"' || tok.front() == '\'') continue;
+        if (tok.rfind("url(", 0) == 0 || tok.rfind("rgb", 0) == 0 || tok.rfind("var(", 0) == 0) continue;
+
+        // A unit token must begin with a numeric literal (+, -, or digit/dot)
+        size_t idx = 0;
+        if (idx < tok.size() && (tok[idx] == '+' || tok[idx] == '-')) idx++;
+        if (idx >= tok.size()) continue;
+        if (tok[idx] == '.') {
+            idx++;
+            if (idx >= tok.size() || !std::isdigit(static_cast<unsigned char>(tok[idx]))) {
+                continue;
+            }
+        } else if (!std::isdigit(static_cast<unsigned char>(tok[idx]))) {
+            continue; // Not a number (prevents "infinite", "auto", "none" from being parsed by strtof)
+        }
+
+        const char* start = tok.c_str();
+        char* end = nullptr;
+        std::strtof(start, &end);
+        if (end != start) {
+            std::string suffix = toLower(end);
+            while (!suffix.empty() && (suffix.back() == ';' || suffix.back() == ',')) {
+                suffix.pop_back();
+            }
+            if (suffix.empty()) continue;
+            if (suffix == "%" || suffix == "px" || suffix == "vw" || suffix == "vh" ||
+                suffix == "vmin" || suffix == "vmax" || suffix == "rem" ||
+                suffix == "s" || suffix == "ms" || suffix == "deg" || suffix == "rad" ||
+                suffix == "turn" || suffix == "fr") {
+                continue;
+            }
+            if (outUnknownUnit) {
+                *outUnknownUnit = suffix;
+            }
+            return true;
+        }
+    }
+    return false;
 }
 
 void parsePaddingOrMargin(std::string_view val, LayoutProps& props, bool isPadding) {
+    LengthInsets insets;
+    if (tryParseLengthInsets(val, insets)) {
+        // Resolve with default 1080p
+        Insets ins = insets.resolve(0.0f, 0.0f, Dimensions{ 1920.0f, 1080.0f });
+        if (isPadding) props.padding(ins.left, ins.top, ins.right, ins.bottom);
+        else props.margin(ins.left, ins.top, ins.right, ins.bottom);
+        return;
+    }
+
     std::string s = trim(val);
     std::replace(s.begin(), s.end(), ',', ' ');
     std::stringstream ss(s);

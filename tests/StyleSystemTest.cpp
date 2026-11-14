@@ -1703,6 +1703,209 @@ void TestKeyframeBaseRestorationAndTracks() {
     std::cout << "  -> Passed TestKeyframeBaseRestorationAndTracks" << std::endl;
 }
 
+void TestViewportUnitsExtended() {
+    std::cout << "[Test] Running TestViewportUnitsExtended..." << std::endl;
+
+    // 1. Multi-resolution scaling across 1080p, 21:9 (3440x1440), 32:9 (5120x1440), 4K (3840x2160)
+    UIContext ctx;
+    ctx.setViewportSize(Dimensions{ 1920.0f, 1080.0f });
+    StyleSheet& sheet = ctx.styleSheet();
+    sheet.loadString(R"(
+        :root {
+            font-size: 16px;
+        }
+        .scaled-box {
+            font-size: 2vh;
+            padding: 1vmin;
+            gap: 1vw;
+            border-radius: 0.5vh;
+            border-width: 0.2vw;
+            margin: 1.5rem;
+        }
+    )");
+
+    Panel* p = ctx.root()->add<Panel>("ScaledBox");
+    p->addClass("scaled-box");
+    p->applyStyle(sheet);
+
+    // 1080p (1920x1080)
+    ctx.setViewportSize(Dimensions{ 1920.0f, 1080.0f });
+    float fs1080 = p->style().text.normal->fontSize.value_or(0.0f);
+    TEST_ASSERT(std::abs(fs1080 - 21.6f) < 0.2f, "1080p: font-size 2vh is 21.6px");
+    TEST_ASSERT(std::abs(p->layout().padding().left - 10.8f) < 0.2f, "1080p: padding 1vmin is 10.8px");
+    TEST_ASSERT(std::abs(p->layout().gap() - 19.2f) < 0.2f, "1080p: gap 1vw is 19.2px");
+    TEST_ASSERT(std::abs(p->style().box.normal->cornerRadius.value_or(0.0f) - 5.4f) < 0.2f, "1080p: border-radius 0.5vh is 5.4px");
+    TEST_ASSERT(std::abs(p->style().box.normal->borderWidth.value_or(0.0f) - 3.84f) < 0.2f, "1080p: border-width 0.2vw is 3.84px");
+    TEST_ASSERT(std::abs(p->layout().margin().left - 24.0f) < 0.2f, "1080p: margin 1.5rem (16px base) is 24px");
+
+    // 21:9 Ultrawide (3440x1440)
+    ctx.setViewportSize(Dimensions{ 3440.0f, 1440.0f });
+    float fs21_9 = p->style().text.normal->fontSize.value_or(0.0f);
+    TEST_ASSERT(std::abs(fs21_9 - 28.8f) < 0.2f, "21:9: font-size 2vh is 28.8px");
+    TEST_ASSERT(std::abs(p->layout().padding().left - 14.4f) < 0.2f, "21:9: padding 1vmin is 14.4px (min is 1440)");
+    TEST_ASSERT(std::abs(p->layout().gap() - 34.4f) < 0.2f, "21:9: gap 1vw is 34.4px");
+    TEST_ASSERT(std::abs(p->style().box.normal->cornerRadius.value_or(0.0f) - 7.2f) < 0.2f, "21:9: border-radius 0.5vh is 7.2px");
+
+    // 32:9 Super Ultrawide (5120x1440)
+    ctx.setViewportSize(Dimensions{ 5120.0f, 1440.0f });
+    float fs32_9 = p->style().text.normal->fontSize.value_or(0.0f);
+    TEST_ASSERT(std::abs(fs32_9 - 28.8f) < 0.2f, "32:9: font-size 2vh is 28.8px (height unchanged from 21:9)");
+    TEST_ASSERT(std::abs(p->layout().padding().left - 14.4f) < 0.2f, "32:9: padding 1vmin is 14.4px");
+    TEST_ASSERT(std::abs(p->layout().gap() - 51.2f) < 0.2f, "32:9: gap 1vw is 51.2px (width scales with 5120)");
+    TEST_ASSERT(std::abs(p->style().box.normal->cornerRadius.value_or(0.0f) - 7.2f) < 0.2f, "32:9: border-radius 0.5vh is 7.2px");
+
+    // 4K UHD (3840x2160)
+    ctx.setViewportSize(Dimensions{ 3840.0f, 2160.0f });
+    float fs4k = p->style().text.normal->fontSize.value_or(0.0f);
+    TEST_ASSERT(std::abs(fs4k - 43.2f) < 0.2f, "4K: font-size 2vh is 43.2px");
+    TEST_ASSERT(std::abs(p->layout().padding().left - 21.6f) < 0.2f, "4K: padding 1vmin is 21.6px");
+    TEST_ASSERT(std::abs(p->layout().gap() - 38.4f) < 0.2f, "4K: gap 1vw is 38.4px");
+    TEST_ASSERT(std::abs(p->style().box.normal->cornerRadius.value_or(0.0f) - 10.8f) < 0.2f, "4K: border-radius 0.5vh is 10.8px");
+
+    // 2. Font size clamping: min-font-size and max-font-size (B2)
+    StyleSheet clampSheet;
+    clampSheet.loadString(R"(
+        .clamp-box {
+            font-size: 2vh;
+            min-font-size: 14px;
+            max-font-size: 32px;
+        }
+    )");
+
+    Panel pClamp;
+    pClamp.addClass("clamp-box");
+
+    // 1080p: 2vh = 21.6px (in [14, 32])
+    UIContext ctx1080;
+    ctx1080.setViewportSize(Dimensions{ 1920.0f, 1080.0f });
+    pClamp.setContext(&ctx1080);
+    pClamp.applyStyle(clampSheet);
+    TEST_ASSERT(std::abs(pClamp.style().text.normal->fontSize.value_or(0.0f) - 21.6f) < 0.2f, "1080p: font size within clamp bounds (21.6px)");
+
+    // 4K (2160p): 2vh = 43.2px -> clamped to 32px
+    UIContext ctxClamp4k;
+    ctxClamp4k.setViewportSize(Dimensions{ 3840.0f, 2160.0f });
+    pClamp.setContext(&ctxClamp4k);
+    pClamp.applyStyle(clampSheet);
+    TEST_ASSERT(std::abs(pClamp.style().text.normal->fontSize.value_or(0.0f) - 32.0f) < 0.2f, "4K: font size 43.2px clamped to max-font-size 32px");
+
+    // 600p: 2vh = 12px -> clamped to 14px
+    UIContext ctxClamp600;
+    ctxClamp600.setViewportSize(Dimensions{ 800.0f, 600.0f });
+    pClamp.setContext(&ctxClamp600);
+    pClamp.applyStyle(clampSheet);
+    TEST_ASSERT(std::abs(pClamp.style().text.normal->fontSize.value_or(0.0f) - 14.0f) < 0.2f, "600p: font size 12.0px clamped to min-font-size 14px");
+
+    // 3. Custom :root { font-size: 20px; } with rem units
+    StyleSheet rootSheet;
+    rootSheet.loadString(R"(
+        :root {
+            font-size: 20px;
+        }
+        .rem-box {
+            font-size: 1.5rem;
+            margin: 2rem;
+        }
+    )");
+    Panel pRem;
+    pRem.addClass("rem-box");
+    pRem.applyStyle(rootSheet);
+    TEST_ASSERT(std::abs(pRem.style().text.normal->fontSize.value_or(0.0f) - 30.0f) < 0.2f, "Custom root font-size 20px: 1.5rem is 30px");
+    TEST_ASSERT(std::abs(pRem.layout().margin().left - 40.0f) < 0.2f, "Custom root font-size 20px: 2rem margin is 40px");
+
+    // 4. Diagnostics for unknown units: 12vwx and 20bad (B3)
+    StyleSheet typoSheet;
+    typoSheet.loadString(R"(
+        .typo-box {
+            font-size: 12vwx;
+            padding: 10px 20bad;
+        }
+    )", "my_styles.pss");
+
+    bool foundVwx = false;
+    bool foundBad = false;
+    for (const auto& w : typoSheet.warnings()) {
+        if (w.find("my_styles.pss:") != std::string::npos) {
+            if (w.find("vwx") != std::string::npos) foundVwx = true;
+            if (w.find("bad") != std::string::npos) foundBad = true;
+        }
+    }
+    TEST_ASSERT(foundVwx, "Diagnostic warning with file:line:col produced for unknown unit 12vwx");
+    TEST_ASSERT(foundBad, "Diagnostic warning with file:line:col produced for unknown unit 20bad");
+
+    Panel pTypo;
+    pTypo.addClass("typo-box");
+    pTypo.applyStyle(typoSheet);
+    TEST_ASSERT(!pTypo.style().text.normal.has_value() || !pTypo.style().text.normal->fontSize.has_value(), "Property with 12vwx was ignored (not parsed as 12)");
+    TEST_ASSERT(pTypo.layout().padding().left == 0.0f, "Property with 20bad was ignored");
+
+    // 5. Keyframes animating viewport units (font-size 2vh -> 4vh)
+    StyleSheet kfVpSheet;
+    kfVpSheet.loadString(R"(
+        @keyframes animTextVp {
+            from { font-size: 2vh; }
+            to   { font-size: 4vh; }
+        }
+        .anim-text-vp {
+            animation: animTextVp 1.0s linear 1 forwards;
+        }
+    )");
+    Panel pAnimText;
+    pAnimText.addClass("anim-text-vp");
+    pAnimText.applyStyle(kfVpSheet);
+
+    pAnimText.update(0.0f); // start: 2vh = 21.6px
+    TEST_ASSERT(std::abs(pAnimText.style().text.normal->fontSize.value_or(0.0f) - 21.6f) < 0.5f, "Keyframe at t=0 evaluates 2vh = 21.6px");
+    pAnimText.update(0.5f); // mid: midway to 4vh (43.2px) -> 32.4px
+    TEST_ASSERT(std::abs(pAnimText.style().text.normal->fontSize.value_or(0.0f) - 32.4f) < 0.5f, "Keyframe at t=0.5 evaluates ~32.4px");
+    pAnimText.update(0.5f); // end: 4vh = 43.2px
+    TEST_ASSERT(std::abs(pAnimText.style().text.normal->fontSize.value_or(0.0f) - 43.2f) < 0.5f, "Keyframe at t=1.0 evaluates 4vh = 43.2px");
+
+    // 6. Edge cases: zero viewport dimensions and fractional units
+    UIContext zeroCtx;
+    zeroCtx.setViewportSize(Dimensions{ 0.0f, 0.0f });
+    Panel pZero;
+    pZero.setContext(&zeroCtx);
+    pZero.addClass("scaled-box");
+    pZero.applyStyle(sheet);
+    float zeroFs = pZero.style().text.normal->fontSize.value_or(-1.0f);
+    TEST_ASSERT(!std::isnan(zeroFs) && zeroFs == 0.0f, "Zero viewport size resolves viewport units to 0.0f without crash or NaN");
+
+    // 7. Benchmark: cost of viewport unit recalculation across 1000 elements on resolution change
+    std::cout << "[Benchmark] Viewport Units Recalculation Benchmark (1000 elements)..." << std::endl;
+    UIContext benchVpCtx;
+    benchVpCtx.setViewportSize(Dimensions{ 1920.0f, 1080.0f });
+    StyleSheet& bSheet = benchVpCtx.styleSheet();
+    bSheet.loadString(R"(
+        .vp-item {
+            font-size: 2vh;
+            padding: 1vmin;
+            gap: 1vw;
+            border-radius: 0.5vh;
+            border-width: 0.1vw;
+        }
+    )");
+
+    constexpr int kElements = 1000;
+    for (int i = 0; i < kElements; ++i) {
+        Panel* item = benchVpCtx.root()->add<Panel>("Item" + std::to_string(i));
+        item->addClass("vp-item");
+        item->applyStyle(bSheet);
+    }
+
+    auto bStart = std::chrono::high_resolution_clock::now();
+    benchVpCtx.setViewportSize(Dimensions{ 3840.0f, 2160.0f });
+    auto bEnd = std::chrono::high_resolution_clock::now();
+
+    double elapsedUs = std::chrono::duration<double, std::micro>(bEnd - bStart).count();
+    std::cout << "  * Recalculation time for 1000 elements: " << (elapsedUs / 1000.0) << " ms (" << elapsedUs << " us)" << std::endl;
+    std::cout << "  * Cost per element: " << (elapsedUs / kElements) << " us" << std::endl;
+    TEST_ASSERT(elapsedUs < 10000.0, "Viewport recalculation on 1000 elements under 10 ms");
+
+    std::cout << "  -> Passed TestViewportUnitsExtended" << std::endl;
+}
+
+
 int main() {
     std::cout << "=== Running PerfUI Style System & Components Tests ===" << std::endl;
 
@@ -1718,6 +1921,7 @@ int main() {
     TestViewportUnits();
     TestKeyframeAnimations();
     TestKeyframeBaseRestorationAndTracks();
+    TestViewportUnitsExtended();
     TestKeyframeAnimationBenchmark();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;

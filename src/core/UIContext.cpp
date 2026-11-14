@@ -21,7 +21,23 @@ UIContext::~UIContext() = default;
 void UIContext::setViewportSize(Dimensions size) {
     if (m_viewportSize.width != size.width || m_viewportSize.height != size.height) {
         m_viewportSize = size;
+        updateViewportUnits();
         requestLayout();
+    }
+}
+
+void UIContext::updateViewportUnits() {
+    float rootFs = m_styleSheet ? m_styleSheet->rootFontSize() : 16.0f;
+    auto recurse = [&](auto self, UIElement* el) -> void {
+        if (!el) return;
+        el->recomputeViewportUnits(m_viewportSize, rootFs);
+        for (const auto& child : el->children()) {
+            self(self, child.get());
+        }
+    };
+    recurse(recurse, m_root.get());
+    if (m_activeModal) {
+        recurse(recurse, m_activeModal.get());
     }
 }
 

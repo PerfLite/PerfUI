@@ -795,4 +795,103 @@ void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const Computed
     onStyleApplied(c);
 }
 
+void UIElement::recomputeViewportUnits(const Dimensions& viewport, float rootFontSize) {
+    if (!m_computedStyle.isViewportDependent()) {
+        return;
+    }
+    bool layoutChanged = false;
+
+    if (m_computedStyle.gapLength.has_value() && m_computedStyle.gapLength->isViewportDependent()) {
+        float newGap = m_computedStyle.gapLength->resolve(0.0f, viewport, rootFontSize);
+        if (!m_computedStyle.gap.has_value() || *m_computedStyle.gap != newGap) {
+            m_computedStyle.gap = newGap;
+            m_layout.gap(newGap);
+            layoutChanged = true;
+        }
+    }
+    if (m_computedStyle.paddingLength.has_value() && m_computedStyle.paddingLength->isViewportDependent()) {
+        Insets newPad = m_computedStyle.paddingLength->resolve(0.0f, 0.0f, viewport, rootFontSize);
+        if (!m_computedStyle.padding.has_value() || *m_computedStyle.padding != newPad) {
+            m_computedStyle.padding = newPad;
+            m_layout.padding(newPad.left, newPad.top, newPad.right, newPad.bottom);
+            layoutChanged = true;
+        }
+    }
+    if (m_computedStyle.marginLength.has_value() && m_computedStyle.marginLength->isViewportDependent()) {
+        Insets newMar = m_computedStyle.marginLength->resolve(0.0f, 0.0f, viewport, rootFontSize);
+        if (!m_computedStyle.margin.has_value() || *m_computedStyle.margin != newMar) {
+            m_computedStyle.margin = newMar;
+            m_layout.margin(newMar.left, newMar.top, newMar.right, newMar.bottom);
+            layoutChanged = true;
+        }
+    }
+    if (m_computedStyle.fontSizeLength.has_value() && (m_computedStyle.fontSizeLength->isViewportDependent() ||
+        (m_computedStyle.minFontSizeLength.has_value() && m_computedStyle.minFontSizeLength->isViewportDependent()) ||
+        (m_computedStyle.maxFontSizeLength.has_value() && m_computedStyle.maxFontSizeLength->isViewportDependent()))) {
+        float fs = m_computedStyle.fontSizeLength->resolve(0.0f, viewport, rootFontSize);
+        if (m_computedStyle.minFontSizeLength.has_value()) {
+            float minVal = m_computedStyle.minFontSizeLength->resolve(0.0f, viewport, rootFontSize);
+            if (fs < minVal) fs = minVal;
+        }
+        if (m_computedStyle.maxFontSizeLength.has_value()) {
+            float maxVal = m_computedStyle.maxFontSizeLength->resolve(0.0f, viewport, rootFontSize);
+            if (fs > maxVal) fs = maxVal;
+        }
+        if (!m_computedStyle.fontSize.has_value() || *m_computedStyle.fontSize != fs) {
+            m_computedStyle.fontSize = fs;
+            m_style.text.normal = m_style.text.normal.value_or(TextStyleOverride{}).size(fs);
+            layoutChanged = true;
+        }
+    }
+    if (m_computedStyle.borderWidthLength.has_value() && m_computedStyle.borderWidthLength->isViewportDependent()) {
+        float bw = m_computedStyle.borderWidthLength->resolve(0.0f, viewport, rootFontSize);
+        if (!m_computedStyle.borderWidth.has_value() || *m_computedStyle.borderWidth != bw) {
+            m_computedStyle.borderWidth = bw;
+            Color bc = m_computedStyle.borderColor.value_or(Color::White());
+            m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).border(bc, bw);
+        }
+    }
+    if (m_computedStyle.cornerRadiusLength.has_value() && m_computedStyle.cornerRadiusLength->isViewportDependent()) {
+        float cr = m_computedStyle.cornerRadiusLength->resolve(0.0f, viewport, rootFontSize);
+        if (!m_computedStyle.cornerRadius.has_value() || *m_computedStyle.cornerRadius != cr) {
+            m_computedStyle.cornerRadius = cr;
+            m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).radius(cr);
+        }
+    }
+    if (m_computedStyle.outlineWidthLength.has_value() && m_computedStyle.outlineWidthLength->isViewportDependent()) {
+        float ow = m_computedStyle.outlineWidthLength->resolve(0.0f, viewport, rootFontSize);
+        if (!m_computedStyle.outlineWidth.has_value() || *m_computedStyle.outlineWidth != ow) {
+            m_computedStyle.outlineWidth = ow;
+            setOutlineWidth(ow);
+        }
+    }
+    if (m_computedStyle.outlineOffsetLength.has_value() && m_computedStyle.outlineOffsetLength->isViewportDependent()) {
+        float oo = m_computedStyle.outlineOffsetLength->resolve(0.0f, viewport, rootFontSize);
+        if (!m_computedStyle.outlineOffset.has_value() || *m_computedStyle.outlineOffset != oo) {
+            m_computedStyle.outlineOffset = oo;
+            setOutlineOffset(oo);
+        }
+    }
+    if (m_computedStyle.leftLength.has_value() && m_computedStyle.leftLength->isViewportDependent()) {
+        m_layout.left(*m_computedStyle.leftLength);
+        layoutChanged = true;
+    }
+    if (m_computedStyle.rightLength.has_value() && m_computedStyle.rightLength->isViewportDependent()) {
+        m_layout.right(*m_computedStyle.rightLength);
+        layoutChanged = true;
+    }
+    if (m_computedStyle.topLength.has_value() && m_computedStyle.topLength->isViewportDependent()) {
+        m_layout.top(*m_computedStyle.topLength);
+        layoutChanged = true;
+    }
+    if (m_computedStyle.bottomLength.has_value() && m_computedStyle.bottomLength->isViewportDependent()) {
+        m_layout.bottom(*m_computedStyle.bottomLength);
+        layoutChanged = true;
+    }
+
+    if (layoutChanged) {
+        markLayoutDirty();
+    }
+}
+
 } // namespace PerfUI
