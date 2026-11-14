@@ -1316,6 +1316,41 @@ void TestKeyframeAnimations() {
     TEST_ASSERT(std::abs(gapPanel.opacity() - 0.5f) < 0.05f, "Continuous opacity is ~0.5 at 50%");
     TEST_ASSERT(std::abs(gapPanel.renderScale().x - 1.2f) < 0.05f, "Scale peak at 50% is 1.2");
 
+    // 12. Test per-segment easing (Point 4): midpoint 0.5 hits 50% keyframe exactly with ease-in-out
+    StyleSheet easingSheet;
+    easingSheet.loadString(R"(
+        @keyframes customTiming {
+            0% {
+                opacity: 0.0;
+                animation-timing-function: linear;
+            }
+            50% {
+                opacity: 0.8;
+                animation-timing-function: ease-in-out;
+            }
+            100% {
+                opacity: 1.0;
+            }
+        }
+        .timing-box {
+            animation: customTiming 1.0s ease-in-out 1 forwards;
+        }
+    )");
+
+    Panel timingPanel;
+    timingPanel.addClass("timing-box");
+    timingPanel.applyStyle(easingSheet);
+
+    // At t = 0.25s (midway between 0% and 50% where timing-function is linear):
+    // Opacity goes from 0.0 to 0.8 with linear -> at segT = 0.5 it should be exactly 0.4!
+    timingPanel.update(0.25f);
+    TEST_ASSERT(std::abs(timingPanel.opacity() - 0.4f) < 0.02f, "Linear segment easing at 25% gives exactly 0.4 (half of 0.8)");
+
+    // At t = 0.5s (exact 50% stop):
+    // Even with ease-in-out on the animation, 50% time hits 50% keyframe value 0.8!
+    timingPanel.update(0.25f); // now 0.5s
+    TEST_ASSERT(std::abs(timingPanel.opacity() - 0.8f) < 0.02f, "Exact 50% keyframe reached at progress 0.5 (opacity 0.8)");
+
     std::cout << "  -> Passed TestKeyframeAnimations" << std::endl;
 }
 
