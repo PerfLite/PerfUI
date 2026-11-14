@@ -1215,6 +1215,42 @@ void TestKeyframeAnimations() {
     TEST_ASSERT(std::abs(slidePanel.renderOffset().y - 0.0f) < 0.05f, "Forwards fill mode holds offset Y 0.0");
     TEST_ASSERT(!slidePanel.keyframeAnimations()->hasActiveAnimations(), "Finished non-infinite animation stopped");
 
+    // 9. Test animation without fill-mode: must restore base style upon completion
+    StyleSheet testSheet1;
+    testSheet1.loadString(R"(
+        @keyframes fadeOutIn {
+            0% { opacity: 0.1; transform-scale: 0.5; background-color: #ff0000; }
+            100% { opacity: 0.9; transform-scale: 1.5; background-color: #00ff00; }
+        }
+        .base-box {
+            opacity: 0.75;
+            transform-scale: 1.0;
+            background-color: #0000ff;
+            animation: fadeOutIn 1.0s linear 1 none;
+        }
+    )");
+    Panel basePanel;
+    basePanel.addClass("base-box");
+    basePanel.applyStyle(testSheet1);
+    basePanel.update(0.0f);
+    TEST_ASSERT(std::abs(basePanel.opacity() - 0.1f) < 0.05f, "Start frame applied opacity 0.1");
+    TEST_ASSERT(std::abs(basePanel.renderScale().x - 0.5f) < 0.05f, "Start frame applied scale 0.5");
+    basePanel.update(1.1f); // finished
+    TEST_ASSERT(!basePanel.keyframeAnimations()->hasActiveAnimations(), "Animation finished");
+    TEST_ASSERT(std::abs(basePanel.opacity() - 0.75f) < 0.05f, "Without fill-forwards, restored to base opacity 0.75");
+    TEST_ASSERT(std::abs(basePanel.renderScale().x - 1.0f) < 0.05f, "Without fill-forwards, restored to base scale 1.0");
+    TEST_ASSERT(basePanel.resolveBoxStyle(WidgetState::Normal).backgroundColor == Color(0, 0, 255, 255), "Without fill-forwards, restored to base blue bg");
+
+    // 10. Test class removal / animation cancellation midway returns to base style
+    Panel cancelPanel;
+    cancelPanel.addClass("base-box");
+    cancelPanel.applyStyle(testSheet1);
+    cancelPanel.update(0.5f); // midway
+    TEST_ASSERT(std::abs(cancelPanel.opacity() - 0.5f) < 0.05f, "Midway opacity is ~0.5");
+    cancelPanel.removeClass("base-box");
+    cancelPanel.applyStyle(testSheet1); // re-compute without animation
+    TEST_ASSERT(std::abs(cancelPanel.opacity() - 1.0f) < 0.05f || std::abs(cancelPanel.opacity() - 0.75f) < 0.05f, "After class removal, opacity restored from base");
+
     std::cout << "  -> Passed TestKeyframeAnimations" << std::endl;
 }
 

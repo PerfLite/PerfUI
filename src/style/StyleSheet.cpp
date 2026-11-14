@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <sstream>
 #include <unordered_set>
+#include <iostream>
 
 namespace PerfUI {
 
@@ -375,13 +376,6 @@ static bool isTimeToken(const std::string& tok, float& outSeconds) {
             outSeconds = val;
             return true;
         }
-    } else {
-        char* end = nullptr;
-        float val = std::strtof(s.c_str(), &end);
-        if (end == s.c_str() + s.size()) {
-            outSeconds = val;
-            return true;
-        }
     }
     return false;
 }
@@ -677,6 +671,8 @@ static void parseAnimationShorthand(const std::string& val, std::vector<Animatio
                 spec.fillMode = AnimationFillMode::Backwards;
             } else if (lowerTok == "both") {
                 spec.fillMode = AnimationFillMode::Both;
+            } else if (lowerTok == "none") {
+                spec.fillMode = AnimationFillMode::None;
             } else if (lowerTok == "running") {
                 spec.playState = AnimationPlayState::Running;
             } else if (lowerTok == "paused") {

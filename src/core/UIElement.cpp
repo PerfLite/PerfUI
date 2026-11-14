@@ -781,7 +781,7 @@ void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const Computed
             m_keyframeAnimations->applyAnimations(this, c.animations, *activeSheet);
         }
     } else if (m_keyframeAnimations) {
-        m_keyframeAnimations->clear();
+        m_keyframeAnimations->clear(this);
     }
 
     onStyleApplied(c);

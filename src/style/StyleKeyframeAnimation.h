@@ -8,6 +8,7 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <iostream>
 
 namespace PerfUI {
 
@@ -30,6 +31,74 @@ inline Point LerpValue<Point>(const Point& a, const Point& b, float t) {
 
 } // namespace detail
 
+struct ElementBaseStyleSnapshot {
+    float opacity{ 1.0f };
+    Point transformScale{ 1.0f, 1.0f };
+    Point transformOffsetPx{ 0.0f, 0.0f };
+    Point transformOffsetPct{ 0.0f, 0.0f };
+    std::optional<Color> backgroundColor;
+    std::optional<Color> borderColor;
+    std::optional<float> borderWidth;
+    std::optional<float> cornerRadius;
+    std::optional<Color> outlineColor;
+    float outlineWidth{ 0.0f };
+    float outlineOffset{ 0.0f };
+    std::optional<Color> color;
+    DimensionConstraint width{ DimensionConstraint::Auto() };
+    DimensionConstraint height{ DimensionConstraint::Auto() };
+    bool captured{ false };
+
+    void capture(const UIElement* el) {
+        if (!el) return;
+        opacity = el->opacity();
+        transformScale = el->renderScale();
+        transformOffsetPx = el->renderOffset();
+        transformOffsetPct = el->renderOffsetPercent();
+        if (el->style().box.normal.has_value()) {
+            backgroundColor = el->style().box.normal->backgroundColor;
+            borderColor = el->style().box.normal->borderColor;
+            borderWidth = el->style().box.normal->borderWidth;
+            cornerRadius = el->style().box.normal->cornerRadius;
+        }
+        outlineColor = el->outlineColor();
+        outlineWidth = el->outlineWidth().value_or(0.0f);
+        outlineOffset = el->outlineOffset().value_or(0.0f);
+        if (el->style().text.normal.has_value()) {
+            color = el->style().text.normal->color;
+        }
+        width = el->layout().width();
+        height = el->layout().height();
+        captured = true;
+    }
+
+    void restore(UIElement* el) const {
+        if (!el || !captured) return;
+        if (!el->isAlphaAnimating()) el->setOpacity(opacity);
+        if (!el->isScaleAnimating()) el->setRenderScale(transformScale);
+        if (!el->isPositionAnimating()) el->setRenderOffset(transformOffsetPx, transformOffsetPct);
+        if (el->style().box.normal.has_value() || backgroundColor || borderColor || borderWidth || cornerRadius) {
+            BoxStyle box = el->style().box.normal.value_or(BoxStyle{});
+            box.backgroundColor = backgroundColor;
+            box.borderColor = borderColor;
+            box.borderWidth = borderWidth;
+            box.cornerRadius = cornerRadius;
+            el->style().box.normal = box;
+        }
+        if (outlineColor.has_value()) el->setOutlineColor(*outlineColor);
+        else el->setOutlineColor(Color{ 0, 0, 0, 0 });
+        el->setOutlineWidth(outlineWidth);
+        el->setOutlineOffset(outlineOffset);
+        if (color.has_value()) {
+            TextStyleOverride text = el->style().text.normal.value_or(TextStyleOverride{});
+            text.color = color;
+            el->style().text.normal = text;
+        }
+        el->layout().width(width);
+        el->layout().height(height);
+        el->markLayoutDirty();
+    }
+};
+
 struct ActiveKeyframeAnimation {
     AnimationSpec spec;
     const KeyframesDefinition* def{ nullptr };
@@ -44,7 +113,10 @@ struct ActiveKeyframeAnimation {
 class StyleKeyframeAnimationController {
 public:
     void applyAnimations(UIElement* element, const std::vector<AnimationSpec>& specs, const StyleSheet& sheet) {
-        (void)element;
+        if (element && !m_baseSnapshot.captured) {
+            m_baseSnapshot.capture(element);
+        }
+
         std::vector<ActiveKeyframeAnimation> newInstances;
         newInstances.reserve(specs.size());
 
@@ -87,8 +159,16 @@ public:
         return false;
     }
 
-    void clear() {
+    void clear(UIElement* element = nullptr) {
+        if (element && m_baseSnapshot.captured) {
+            m_baseSnapshot.restore(element);
+            m_baseSnapshot.captured = false;
+        }
         m_instances.clear();
+    }
+
+    const ElementBaseStyleSnapshot& baseSnapshot() const {
+        return m_baseSnapshot;
     }
 
     void update(float dt, UIElement* element) {
@@ -126,6 +206,8 @@ public:
                         if (finalCycle % 2 != 0) finalP = 0.0f;
                     }
                     applyStepAtProgress(finalP, inst, element);
+                } else {
+                    m_baseSnapshot.restore(element);
                 }
                 continue;
             }
@@ -271,6 +353,7 @@ private:
     }
 
     std::vector<ActiveKeyframeAnimation> m_instances;
+    ElementBaseStyleSnapshot m_baseSnapshot;
 };
 
 } // namespace PerfUI
