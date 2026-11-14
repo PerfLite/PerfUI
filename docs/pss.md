@@ -348,9 +348,103 @@ Button {
     outline: 1px solid rgba(218, 175, 90, 0.65);
 }
 
-/* Плавный градиент для растворения низа картинки в темноту */
+/* Soft gradient fade for banner */
 .card-image-fade {
     height: 68px;
     background: linear-gradient(to bottom, transparent, rgba(11, 14, 20, 0.95));
 }
 ```
+
+---
+
+## 9. Единицы измерения экрана (Viewport Units: `vw`, `vh`, `vmin`, `vmax`)
+
+PSS и разметка XML поддерживают адаптивные единицы экрана, автоматически рассчитываемые от текущего разрешения рендера (`UIContext::viewportSize()`):
+
+| Единица | Описание | Пример |
+| :--- | :--- | :--- |
+| `vw` | Процент от ширины экрана (1vw = 1%) | `width: 50vw;` (половина ширины экрана) |
+| `vh` | Процент от высоты экрана (1vh = 1%) | `height: 80vh;` (80% высоты экрана) |
+| `vmin` | Процент от наименьшей стороны экрана | `width: 25vmin;` |
+| `vmax` | Процент от наибольшей стороны экрана | `max-width: 90vmax;` |
+
+### Применение в свойствах
+Viewport units поддерживаются для:
+- Размеров: `width`, `height`, `min-width`, `max-width`, `min-height`, `max-height`.
+- Абсолютного позиционирования и якорей: `left`, `right`, `top`, `bottom`.
+
+```css
+.modal-window {
+    width: 60vw;
+    height: 70vh;
+    left: 20vw;
+    top: 15vh;
+}
+```
+
+---
+
+## 10. Ключевые кадры и анимации (`@keyframes` и `animation`)
+
+Для сложных циклических и многошаговых визуальных эффектов (пульсация, вращение, мигание маркеров, свечение) PSS поддерживает директиву `@keyframes` и свойство `animation`.
+
+### 10.1. Объявление `@keyframes`
+
+```css
+@keyframes pulseGlow {
+    0% {
+        opacity: 0.4;
+        transform-scale: 1.0;
+    }
+    50% {
+        opacity: 1.0;
+        transform-scale: 1.08;
+    }
+    100% {
+        opacity: 0.4;
+        transform-scale: 1.0;
+    }
+}
+
+@keyframes slideInFromLeft {
+    from {
+        transform-offset-x: -100px;
+        opacity: 0;
+    }
+    to {
+        transform-offset-x: 0px;
+        opacity: 1;
+    }
+}
+```
+
+Поддерживаются:
+- Ключевые слова `from` (эквивалентно `0%`) и `to` (эквивалентно `100%`).
+- Любые промежуточные точки (`0%`..`100%`).
+- Группировка кадров через запятую: `0%, 100% { opacity: 0.5; }`.
+
+### 10.2. Свойство `animation`
+
+Сокращённый синтаксис (shorthand):
+```css
+/* name duration timing-function delay iteration-count direction fill-mode */
+.pulsing-badge {
+    animation: pulseGlow 1.8s ease-in-out infinite alternate both;
+}
+```
+
+Отдельные свойства (longhands):
+- `animation-name`: имя правила `@keyframes`.
+- `animation-duration`: длительность цикла (`1.5s`, `300ms`).
+- `animation-timing-function`: кривая плавности (`linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`, `cubic-bezier(...)`, `spring(...)`).
+- `animation-delay`: задержка перед стартом (`0.5s`).
+- `animation-iteration-count`: число повторов (`3`) или `infinite` (бесконечно).
+- `animation-direction`: `normal`, `reverse`, `alternate`, `alternate-reverse`.
+- `animation-fill-mode`: `none`, `forwards` (сохраняет конечный кадр), `backwards`, `both`.
+- `animation-play-state`: `running`, `paused`.
+
+### 10.3. Runtime архитектура контроллера
+- **Zero-allocation**: `StyleKeyframeAnimationController` инициализируется лениво только при наличии анимаций.
+- **Гладкая интерполяция**: Все свойства (цвета, прозрачность, scale, offset, размеры) плавно интерполируются между шагами.
+- **Режим Reduced Motion**: При включении режима доступности циклические анимации автоматически останавливаются.
+

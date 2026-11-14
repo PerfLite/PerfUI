@@ -353,3 +353,96 @@ Enables AAA texture frame borders without C++ code:
     background: linear-gradient(to bottom, transparent, rgba(11, 14, 20, 0.95));
 }
 ```
+
+---
+
+## 9. Viewport Units (`vw`, `vh`, `vmin`, `vmax`)
+
+PSS and XML markup support responsive viewport units calculated dynamically from current renderer dimensions (`UIContext::viewportSize()`):
+
+| Unit | Description | Example |
+| :--- | :--- | :--- |
+| `vw` | Percentage of viewport width (1vw = 1%) | `width: 50vw;` (half screen width) |
+| `vh` | Percentage of viewport height (1vh = 1%) | `height: 80vh;` (80% screen height) |
+| `vmin` | Percentage of minimum viewport dimension | `width: 25vmin;` |
+| `vmax` | Percentage of maximum viewport dimension | `max-width: 90vmax;` |
+
+### Supported Properties
+- Dimensions: `width`, `height`, `min-width`, `max-width`, `min-height`, `max-height`.
+- Absolute positioning & anchors: `left`, `right`, `top`, `bottom`.
+
+```css
+.modal-window {
+    width: 60vw;
+    height: 70vh;
+    left: 20vw;
+    top: 15vh;
+}
+```
+
+---
+
+## 10. Keyframe Animations (`@keyframes` & `animation`)
+
+For multi-step, cyclical visual effects (pulsing indicators, quest markers, floating badges), PSS supports `@keyframes` declarations and the `animation` property.
+
+### 10.1. Defining `@keyframes`
+
+```css
+@keyframes pulseGlow {
+    0% {
+        opacity: 0.4;
+        transform-scale: 1.0;
+    }
+    50% {
+        opacity: 1.0;
+        transform-scale: 1.08;
+    }
+    100% {
+        opacity: 0.4;
+        transform-scale: 1.0;
+    }
+}
+
+@keyframes slideInFromLeft {
+    from {
+        transform-offset-x: -100px;
+        opacity: 0;
+    }
+    to {
+        transform-offset-x: 0px;
+        opacity: 1;
+    }
+}
+```
+
+Supported features:
+- Keywords `from` (`0%`) and `to` (`100%`).
+- Arbitrary percentage stops (`0%`..`100%`).
+- Grouped selector stops: `0%, 100% { opacity: 0.5; }`.
+
+### 10.2. The `animation` Property
+
+Shorthand syntax:
+```css
+/* name duration timing-function delay iteration-count direction fill-mode */
+.pulsing-badge {
+    animation: pulseGlow 1.8s ease-in-out infinite alternate both;
+}
+```
+
+Longhand properties:
+- `animation-name`: `@keyframes` identifier.
+- `animation-duration`: cycle duration (`1.5s`, `300ms`).
+- `animation-timing-function`: easing curve (`linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`, `cubic-bezier(...)`, `spring(...)`).
+- `animation-delay`: delay prior to execution (`0.5s`).
+- `animation-iteration-count`: numeric cycle count (`3`) or `infinite`.
+- `animation-direction`: `normal`, `reverse`, `alternate`, `alternate-reverse`.
+- `animation-fill-mode`: `none`, `forwards` (freezes final state), `backwards`, `both`.
+- `animation-play-state`: `running`, `paused`.
+
+### 10.3. Runtime Architecture
+- **Zero-allocation tick**: `StyleKeyframeAnimationController` operates without heap allocations in the update loop.
+- **Smooth interpolation**: Colors, opacity, scale, offset, and dimensions smoothly interpolate between keyframe steps.
+- **Accessibility**: Automatic freezing when `isReducedMotion()` is enabled.
+
