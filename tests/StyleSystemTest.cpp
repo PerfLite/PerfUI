@@ -1905,6 +1905,127 @@ void TestViewportUnitsExtended() {
     std::cout << "  -> Passed TestViewportUnitsExtended" << std::endl;
 }
 
+void TestBug1SimultaneousAnimationRemoval() {
+    std::cout << "[Test] Running TestBug1SimultaneousAnimationRemoval..." << std::endl;
+
+    StyleSheet sheet;
+    sheet.loadString(R"(
+        @keyframes animPulse {
+            0%   { opacity: 1.0; }
+            50%  { opacity: 0.2; }
+            100% { opacity: 1.0; }
+        }
+        @keyframes animGlow {
+            0%   { opacity: 1.0; }
+            50%  { opacity: 0.5; }
+            100% { opacity: 1.0; }
+        }
+        @keyframes animColor {
+            0%   { color: #ffffff; }
+            100% { color: #ff0000; }
+        }
+        @keyframes animScale {
+            0%   { scale: 1.0; }
+            50%  { scale: 2.0; }
+            100% { scale: 1.0; }
+        }
+        @keyframes animPulseForwards {
+            0%   { opacity: 1.0; }
+            100% { opacity: 0.3; }
+        }
+        .multi-anim {
+            animation: animPulse 1.0s linear infinite, animGlow 1.0s linear infinite, animColor 1.0s linear infinite;
+        }
+        .retained-anim {
+            animation: animColor 1.0s linear infinite;
+        }
+
+        .three-anims {
+            animation: animPulse 1.0s linear infinite, animScale 1.0s linear infinite, animGlow 1.0s linear infinite;
+        }
+        .retained-opacity {
+            animation: animGlow 1.0s linear infinite;
+        }
+
+        .forwards-and-normal {
+            animation: animPulseForwards 1.0s linear 1 forwards, animScale 1.0s linear 1;
+        }
+        .dummy-retained {
+            animation: animColor 1.0s linear infinite;
+        }
+
+        .timer-two-anims {
+            animation: animPulse 0.5s linear 1, animGlow 1.0s linear 1;
+        }
+    )");
+
+    // Case 1: Two animations with common opacity removed simultaneously (retaining animColor)
+    Panel p1;
+    p1.setOpacity(1.0f);
+    p1.addClass("multi-anim");
+    p1.applyStyle(sheet);
+
+    p1.update(0.5f);
+    TEST_ASSERT(p1.opacity() < 0.6f, "Case 1: Opacity is animated at 50%");
+
+    p1.removeClass("multi-anim");
+    p1.addClass("retained-anim");
+    p1.applyStyle(sheet);
+
+    TEST_ASSERT(std::abs(p1.opacity() - 1.0f) < 0.01f, "Case 1: Opacity restored to base 1.0f when both pulse and glow removed simultaneously");
+
+    // Case 2: Three animations: two removed (animPulse with opacity, animScale with scale), one retained (animGlow with opacity)
+    Panel p2;
+    p2.setOpacity(1.0f);
+    p2.setRenderScale(Point{ 1.0f, 1.0f });
+    p2.addClass("three-anims");
+    p2.applyStyle(sheet);
+
+    p2.update(0.5f);
+    TEST_ASSERT(p2.renderScale().x > 1.5f, "Case 2: Scale is animated at 50%");
+    TEST_ASSERT(p2.opacity() < 0.6f, "Case 2: Opacity is animated at 50%");
+
+    p2.removeClass("three-anims");
+    p2.addClass("retained-opacity");
+    p2.applyStyle(sheet);
+
+    // Scale must be restored to base 1.0, but opacity must NOT be restored (still running in animGlow)
+    TEST_ASSERT(std::abs(p2.renderScale().x - 1.0f) < 0.01f, "Case 2: Scale restored to base 1.0");
+    TEST_ASSERT(p2.opacity() < 0.6f, "Case 2: Opacity remains animated by retained animGlow");
+
+    // Case 3: Removed animation with fill-mode: forwards does not restore its property, but allows other removed animation to restore
+    Panel p3;
+    p3.setOpacity(1.0f);
+    p3.setRenderScale(Point{ 1.0f, 1.0f });
+    p3.addClass("forwards-and-normal");
+    p3.applyStyle(sheet);
+
+    p3.update(1.0f); // finishes forwards animation
+    TEST_ASSERT(std::abs(p3.opacity() - 0.3f) < 0.05f, "Case 3: Opacity reached forwards value 0.3");
+
+    p3.removeClass("forwards-and-normal");
+    p3.addClass("dummy-retained");
+    p3.applyStyle(sheet);
+
+    // animPulseForwards had fill-mode: forwards -> opacity remains 0.3
+    // animScale had fill-mode: none -> scale restored to base 1.0
+    TEST_ASSERT(std::abs(p3.opacity() - 0.3f) < 0.05f, "Case 3: Forwards opacity preserved on removal");
+    TEST_ASSERT(std::abs(p3.renderScale().x - 1.0f) < 0.01f, "Case 3: Normal scale restored on removal");
+
+    // Case 4: Timer-based finish in update(): animPulse (0.5s) finishes, but animGlow (1.0s) still runs
+    Panel p4;
+    p4.setOpacity(1.0f);
+    p4.addClass("timer-two-anims");
+    p4.applyStyle(sheet);
+
+    p4.update(0.6f); // 0.6s: animPulse is finished, animGlow still running (total duration 1.0s)
+    // animGlow is still actively running on opacity, so opacity must NOT be restored to base 1.0
+    TEST_ASSERT(p4.opacity() < 0.95f, "Case 4: Property animated by still-running animGlow is not touched when animPulse finishes");
+
+    std::cout << "  -> Passed TestBug1SimultaneousAnimationRemoval" << std::endl;
+}
+
+
 
 int main() {
     std::cout << "=== Running PerfUI Style System & Components Tests ===" << std::endl;
@@ -1922,6 +2043,7 @@ int main() {
     TestKeyframeAnimations();
     TestKeyframeBaseRestorationAndTracks();
     TestViewportUnitsExtended();
+    TestBug1SimultaneousAnimationRemoval();
     TestKeyframeAnimationBenchmark();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;

@@ -550,19 +550,30 @@ public:
 
         // Restore properties for animations that were removed and not filled forwards
         if (element) {
+            uint16_t removedMask = 0;
+            uint16_t retainedRunningMask = 0;
+
             for (const auto& prev : m_instances) {
                 bool retained = false;
                 for (const auto& sp : specs) {
                     if (sp.name == prev.spec.name) {
                         retained = true;
+                        if (sp.playState == AnimationPlayState::Running && !prev.finished) {
+                            retainedRunningMask |= getActiveProperties(prev.tracks);
+                        }
                         break;
                     }
                 }
                 if (!retained) {
                     if (prev.spec.fillMode != AnimationFillMode::Forwards && prev.spec.fillMode != AnimationFillMode::Both) {
-                        restoreInstanceProperties(prev, element);
+                        removedMask |= getActiveProperties(prev.tracks);
                     }
                 }
+            }
+
+            uint16_t restoreMask = removedMask & ~retainedRunningMask;
+            if (restoreMask != 0) {
+                m_baseSnapshot.restoreProperties(restoreMask, element);
             }
         }
 
