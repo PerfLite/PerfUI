@@ -338,9 +338,15 @@ target("PerfUI_Test_Settings")
     if is_plat("windows") then
         add_cxflags("/utf-8", { force = true })
     end
-    add_includedirs("include", "src", "src/settings")
+    add_includedirs("include", "src", "src/settings", "src/backends/mock", "src/markup", "third_party/pugixml")
     add_files(
+        "src/core/*.cpp",
+        "src/layout/*.cpp",
+        "src/widgets/*.cpp",
+        "src/markup/*.cpp",
+        "src/style/*.cpp",
         "src/settings/*.cpp",
+        "third_party/pugixml/pugixml.cpp",
         "tests/SettingsTest.cpp"
     )
 

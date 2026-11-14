@@ -1,4 +1,6 @@
 #include "PerfUI/SettingsStore.h"
+#include "PerfUI/SettingsView.h"
+#include "MockRenderBackend.h"
 #include <iostream>
 #include <cassert>
 #include <thread>
@@ -328,6 +330,147 @@ void TestConcurrency() {
     std::cout << "  -> Passed TestConcurrency" << std::endl;
 }
 
+void TestWidgetBindingAndTwoWaySync() {
+    std::cout << "[Test] Running TestWidgetBindingAndTwoWaySync..." << std::endl;
+
+    auto& store = SettingsStore::GetSingleton();
+    store.clearAll();
+
+    // Register test definitions
+    store.registerSetting("BindingMod", SettingDef{ "enableShadows", SettingType::Bool, true });
+    store.registerSetting("BindingMod", SettingDef{ "shadowQuality", SettingType::Float, 50.0f, 0.0f, 100.0f, 1.0f });
+    store.registerSetting("BindingMod", SettingDef{ "preset", SettingType::String, std::string("high"), std::nullopt, std::nullopt, std::nullopt, "", { { "low", "Low" }, { "high", "High" } } });
+    store.registerSetting("BindingMod", SettingDef{ "profile", SettingType::String, std::string("DefaultUser") });
+    store.registerSetting("BindingMod", SettingDef{ "rebindKey", SettingType::KeyCode, static_cast<uint32_t>(0x46) }); // F key
+    store.registerSetting("BindingMod", SettingDef{ "accentColor", SettingType::Color, Color(255, 128, 0, 255) });
+
+    // Create SettingsView
+    SettingsView view("TestSettingsView", "BindingMod");
+    TEST_ASSERT(view.hasClass("settings-page"), "SettingsView has 'settings-page' class");
+
+    auto* sec = view.addSection("Graphics Settings");
+    TEST_ASSERT(sec->hasClass("settings-section"), "SettingsSection has 'settings-section' class");
+
+    auto* cb = sec->addToggle("Enable Shadows", "enableShadows", "Toggle shadow rendering");
+    auto* sl = sec->addSlider("Shadow Quality", "shadowQuality", "Adjust shadow map resolution");
+    auto* combo = sec->addChoice("Preset", "preset", "Select graphics preset");
+    auto* input = sec->addTextInput("Profile", "profile", "Enter profile name");
+    auto* keyBtn = sec->addKeybind("Menu Key", "rebindKey", "Open menu key");
+    auto* colorBtn = sec->addColor("Accent Color", "accentColor", "UI accent color");
+
+    auto* hdr = sec->addHeader("Advanced Options");
+    TEST_ASSERT(hdr->hasClass("settings-header"), "Header has 'settings-header' class");
+
+    auto* txt = sec->addText("Note: Restart may be required for some settings.");
+    TEST_ASSERT(txt->hasClass("settings-help"), "Text has 'settings-help' class");
+
+    auto* sep = sec->addSeparator();
+    TEST_ASSERT(sep != nullptr, "Separator added");
+
+    // 1. Check initial values from store
+    TEST_ASSERT(cb->isChecked() == true, "Checkbox matches store default true");
+    TEST_ASSERT(std::abs(sl->value() - 50.0f) < 1e-4f, "Slider matches store default 50.0");
+    TEST_ASSERT(combo->selectedIndex() == 1, "ComboBox selected index 1 ('high')");
+    TEST_ASSERT(input->text() == "DefaultUser", "TextInput matches store string");
+
+    // Check PSS classes on controls
+    TEST_ASSERT(cb->hasClass("settings-control"), "Checkbox has 'settings-control'");
+    TEST_ASSERT(sl->hasClass("settings-control"), "Slider has 'settings-control'");
+    TEST_ASSERT(combo->hasClass("settings-control"), "ComboBox has 'settings-control'");
+    TEST_ASSERT(input->hasClass("settings-control"), "TextInput has 'settings-control'");
+    TEST_ASSERT(keyBtn->hasClass("settings-control"), "KeybindButton has 'settings-control'");
+    TEST_ASSERT(colorBtn->hasClass("settings-control"), "ColorButton has 'settings-control'");
+
+    // Check modified status before changes
+    TEST_ASSERT(store.isDefault("BindingMod", "enableShadows"), "Initially default");
+
+    // 2. UI -> Store mutation
+    // Toggle checkbox in UI
+    cb->onAction(NavDirection::Up); // triggers onToggle
+    TEST_ASSERT(store.getBool("BindingMod", "enableShadows") == false, "Store updated from UI checkbox toggle");
+    TEST_ASSERT(!store.isDefault("BindingMod", "enableShadows"), "Setting marked as modified");
+
+    // 3. Store -> UI mutation
+    store.setFloat("BindingMod", "shadowQuality", 80.0f);
+    TEST_ASSERT(std::abs(sl->value() - 80.0f) < 1e-4f, "Slider UI updated from store set");
+
+    // 4. Conditional logic: visibleIf and enabledIf
+    sec->setRowVisibleIf("shadowQuality", SettingCondition("enableShadows"));
+    sec->setRowEnabledIf("preset", SettingCondition("enableShadows"));
+
+    // When enableShadows is false:
+    // shadowQuality row must be hidden
+    // preset control must be disabled
+    sec->updateConditions();
+
+    auto hasSlider = [](UIElement* el) -> bool {
+        for (const auto& c1 : el->children()) {
+            if (dynamic_cast<Slider*>(c1.get())) return true;
+            for (const auto& c2 : c1->children()) {
+                if (dynamic_cast<Slider*>(c2.get())) return true;
+            }
+        }
+        return false;
+    };
+    auto hasCombo = [](UIElement* el) -> bool {
+        for (const auto& c1 : el->children()) {
+            if (dynamic_cast<ComboBox*>(c1.get())) return true;
+            for (const auto& c2 : c1->children()) {
+                if (dynamic_cast<ComboBox*>(c2.get())) return true;
+            }
+        }
+        return false;
+    };
+
+    // Verify row for shadowQuality is hidden
+    bool foundQualityRow = false;
+    bool foundPresetRow = false;
+    for (const auto& rowChild : sec->itemsContainer()->children()) {
+        if (!rowChild) continue;
+        if (hasSlider(rowChild.get())) {
+            foundQualityRow = true;
+            TEST_ASSERT(rowChild->isVisible() == false, "Shadow quality row hidden when enableShadows is false");
+        }
+        if (hasCombo(rowChild.get())) {
+            foundPresetRow = true;
+            TEST_ASSERT(rowChild->hasClass("settings-disabled"), "Preset row has 'settings-disabled' when condition false");
+            TEST_ASSERT(combo->isEnabled() == false, "Preset ComboBox disabled when condition false");
+        }
+    }
+    TEST_ASSERT(foundQualityRow, "Found shadow quality row");
+    TEST_ASSERT(foundPresetRow, "Found preset row");
+
+    // Turn shadows back on in store
+    store.setBool("BindingMod", "enableShadows", true);
+    // UI checkbox updates, conditions recalculate
+    TEST_ASSERT(cb->isChecked() == true, "Checkbox updated to true");
+    for (const auto& rowChild : sec->itemsContainer()->children()) {
+        if (!rowChild) continue;
+        if (hasSlider(rowChild.get())) {
+            TEST_ASSERT(rowChild->isVisible() == true, "Shadow quality row visible when enableShadows is true");
+        }
+        if (hasCombo(rowChild.get())) {
+            TEST_ASSERT(!rowChild->hasClass("settings-disabled"), "Preset row no longer disabled");
+            TEST_ASSERT(combo->isEnabled() == true, "Preset ComboBox enabled");
+        }
+    }
+
+    // 5. Reset to defaults
+    // Reset section
+    sec->resetAllToDefaults();
+    TEST_ASSERT(store.isDefault("BindingMod", "enableShadows"), "Reset section restored shadows default");
+    TEST_ASSERT(store.isDefault("BindingMod", "shadowQuality"), "Reset section restored quality default");
+    TEST_ASSERT(std::abs(sl->value() - 50.0f) < 1e-4f, "Slider restored to 50.0");
+
+    // 6. Keybind Conflict Detection
+    sec->setKeybindConflict("rebindKey", true);
+    TEST_ASSERT(keyBtn->hasClass("settings-conflict"), "Keybind button has 'settings-conflict' class");
+    sec->setKeybindConflict("rebindKey", false);
+    TEST_ASSERT(!keyBtn->hasClass("settings-conflict"), "Keybind button removed 'settings-conflict' class");
+
+    std::cout << "  -> Passed TestWidgetBindingAndTwoWaySync" << std::endl;
+}
+
 int main() {
     std::cout << "=== Running PerfUI SettingsStore Tests ===" << std::endl;
 
@@ -338,6 +481,7 @@ int main() {
     TestPersistenceAndCorruptFile();
     TestDebounceSave();
     TestConcurrency();
+    TestWidgetBindingAndTwoWaySync();
 
     std::cout << "=== ALL SETTINGS TESTS PASSED ===" << std::endl;
     return 0;
