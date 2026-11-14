@@ -1031,7 +1031,7 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
     } else if (lower == "italic" || lower == "font-style") {
         c.italic = (val == "italic" || parseBool(val, false));
     } else if (lower == "wrap") {
-        c.wrap = parseNumberOrToken(val);
+        c.wrap = (val == "wrap" || val == "true" || val == "1" || parseBool(val, true));
     } else if (lower == "width") {
         c.widthConstraint = parseDimension(val);
         if (c.widthConstraint->mode == SizeMode::Fixed) c.width = c.widthConstraint->value;

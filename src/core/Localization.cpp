@@ -3,6 +3,11 @@
 #include <sstream>
 #include <algorithm>
 #include <cctype>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 namespace PerfUI {
 
@@ -61,8 +66,28 @@ LocalizationService& LocalizationService::instance() {
 }
 
 LocalizationService::LocalizationService() {
-    // Default language is English ("en")
-    m_currentLanguage = "en";
+    m_currentLanguage = detectSystemLanguage();
+}
+
+std::string LocalizationService::detectSystemLanguage() const {
+#ifdef _WIN32
+    LANGID langId = GetUserDefaultUILanguage();
+    WORD primary = PRIMARYLANGID(langId);
+    switch (primary) {
+    case LANG_RUSSIAN:    return "ru";
+    case LANG_FRENCH:     return "fr";
+    case LANG_GERMAN:     return "de";
+    case LANG_SPANISH:    return "es";
+    case LANG_POLISH:     return "pl";
+    case LANG_ITALIAN:    return "it";
+    case LANG_JAPANESE:   return "ja";
+    case LANG_CHINESE:    return "zh";
+    case LANG_UKRAINIAN:  return "ru";
+    default:              return "en";
+    }
+#else
+    return "en";
+#endif
 }
 
 void LocalizationService::setLanguage(std::string lang) {
@@ -105,6 +130,31 @@ bool LocalizationService::loadDictionary(const std::string& lang, const std::fil
 
 bool LocalizationService::loadDictionaryContent(const std::string& lang, std::string_view content) {
     std::string normLang = ToLower(lang);
+    if (content.empty()) return true;
+
+    // Detect and decode UTF-16 LE with BOM (\xFF\xFE)
+    std::string utf8Decoded;
+    if (content.size() >= 2 &&
+        static_cast<uint8_t>(content[0]) == 0xFF &&
+        static_cast<uint8_t>(content[1]) == 0xFE) {
+        const wchar_t* widePtr = reinterpret_cast<const wchar_t*>(content.data() + 2);
+        int wideChars = static_cast<int>((content.size() - 2) / sizeof(wchar_t));
+#ifdef _WIN32
+        int needed = WideCharToMultiByte(CP_UTF8, 0, widePtr, wideChars, nullptr, 0, nullptr, nullptr);
+        if (needed > 0) {
+            utf8Decoded.resize(needed);
+            WideCharToMultiByte(CP_UTF8, 0, widePtr, wideChars, utf8Decoded.data(), needed, nullptr, nullptr);
+            content = utf8Decoded;
+        }
+#endif
+    } else if (content.size() >= 3 &&
+               static_cast<uint8_t>(content[0]) == 0xEF &&
+               static_cast<uint8_t>(content[1]) == 0xBB &&
+               static_cast<uint8_t>(content[2]) == 0xBF) {
+        // Strip UTF-8 BOM
+        content.remove_prefix(3);
+    }
+
     std::string trimmed = Trim(content);
     if (trimmed.empty()) return true;
 
@@ -246,6 +296,72 @@ std::string LocalizationService::expandText(std::string_view text) const {
         return trans;
     }
     return std::string(text);
+}
+
+void LocalizationService::loadTranslationsFromFolder(const std::filesystem::path& folder) {
+    std::error_code ec;
+    if (!std::filesystem::exists(folder, ec) || !std::filesystem::is_directory(folder, ec)) {
+        return;
+    }
+
+    for (const auto& entry : std::filesystem::directory_iterator(folder, ec)) {
+        if (!entry.is_regular_file(ec)) continue;
+
+        std::string ext = entry.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (ext != ".json" && ext != ".txt" && ext != ".ini") continue;
+
+        std::string stem = entry.path().stem().string();
+        std::string lowerStem = ToLower(stem);
+
+        std::string targetLang = "en";
+
+        if (lowerStem == "ru" || lowerStem == "russian") targetLang = "ru";
+        else if (lowerStem == "en" || lowerStem == "english") targetLang = "en";
+        else if (lowerStem == "fr" || lowerStem == "french") targetLang = "fr";
+        else if (lowerStem == "de" || lowerStem == "german") targetLang = "de";
+        else if (lowerStem == "es" || lowerStem == "spanish") targetLang = "es";
+        else if (lowerStem == "pl" || lowerStem == "polish") targetLang = "pl";
+        else if (lowerStem == "it" || lowerStem == "italian") targetLang = "it";
+        else if (lowerStem == "ja" || lowerStem == "japanese") targetLang = "ja";
+        else if (lowerStem == "zh" || lowerStem == "chinese") targetLang = "zh";
+        else {
+            size_t underscore = lowerStem.rfind('_');
+            if (underscore != std::string::npos && underscore + 1 < lowerStem.size()) {
+                std::string suffix = lowerStem.substr(underscore + 1);
+                if (suffix == "ru" || suffix == "russian") targetLang = "ru";
+                else if (suffix == "en" || suffix == "english") targetLang = "en";
+                else if (suffix == "fr" || suffix == "french") targetLang = "fr";
+                else if (suffix == "de" || suffix == "german") targetLang = "de";
+                else if (suffix == "es" || suffix == "spanish") targetLang = "es";
+                else if (suffix == "pl" || suffix == "polish") targetLang = "pl";
+                else if (suffix == "it" || suffix == "italian") targetLang = "it";
+                else if (suffix == "ja" || suffix == "japanese") targetLang = "ja";
+                else if (suffix == "zh" || suffix == "chinese") targetLang = "zh";
+                else targetLang = suffix;
+            }
+        }
+
+        loadDictionary(targetLang, entry.path());
+    }
+}
+
+std::vector<std::string> LocalizationService::availableLanguages() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::vector<std::string> langs;
+    for (const auto& [lang, dict] : m_dictionaries) {
+        if (!dict.empty()) {
+            langs.push_back(lang);
+        }
+    }
+    if (std::find(langs.begin(), langs.end(), "en") == langs.end()) {
+        langs.push_back("en");
+    }
+    if (std::find(langs.begin(), langs.end(), "ru") == langs.end()) {
+        langs.push_back("ru");
+    }
+    std::sort(langs.begin(), langs.end());
+    return langs;
 }
 
 } // namespace PerfUI

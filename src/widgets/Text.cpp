@@ -46,8 +46,18 @@ void Text::measure(Dimensions availableSize) {
     Dimensions measured{ 0.0f, 0.0f };
 
     TextStyle measureStyle = m_style;
-    if (m_wrap && availableSize.width > 0.0f && availableSize.width < 50000.0f) {
-        measureStyle.wrapWidth = availableSize.width;
+    float wrapW = 0.0f;
+    if (m_wrap) {
+        if (availableSize.width > 0.0f && availableSize.width < 50000.0f) {
+            wrapW = availableSize.width;
+        } else if (layout().width().mode == SizeMode::Fixed && layout().width().value > 0.0f) {
+            wrapW = layout().width().value;
+        } else if (parent() && parent()->bounds().width > 0.0f) {
+            wrapW = parent()->bounds().width - parent()->layout().padding().horizontal();
+        }
+    }
+    if (wrapW > 0.0f) {
+        measureStyle.wrapWidth = wrapW;
     }
 
     if (m_context && m_context->renderBackend() && !m_text.empty()) {
@@ -84,8 +94,18 @@ void Text::render(UIRenderBackend& backend) {
     TextStyle renderStyle = m_style;
     renderStyle.color = Color(renderStyle.color.r, renderStyle.color.g, renderStyle.color.b,
                               static_cast<uint8_t>(std::clamp(static_cast<float>(renderStyle.color.a) * effAlpha, 0.0f, 255.0f)));
-    if (m_wrap && m_bounds.width > 0.0f) {
-        renderStyle.wrapWidth = m_bounds.width;
+    float effWrapW = 0.0f;
+    if (m_wrap) {
+        if (m_bounds.width > 0.0f) {
+            effWrapW = m_bounds.width;
+        } else if (layout().width().mode == SizeMode::Fixed && layout().width().value > 0.0f) {
+            effWrapW = layout().width().value;
+        } else if (parent() && parent()->bounds().width > 0.0f) {
+            effWrapW = parent()->bounds().width - parent()->layout().padding().horizontal();
+        }
+    }
+    if (effWrapW > 0.0f) {
+        renderStyle.wrapWidth = effWrapW;
     }
 
     // In case measure was done before backend was attached
