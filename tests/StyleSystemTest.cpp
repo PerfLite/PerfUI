@@ -2322,6 +2322,65 @@ void TestFix01EmptyStylesPreservation() {
     std::cout << "  -> Passed TestFix01EmptyStylesPreservation" << std::endl;
 }
 
+void TestFix02AutoDimensionFirstFrameAnimation() {
+    std::cout << "[Test] Running TestFix02AutoDimensionFirstFrameAnimation..." << std::endl;
+
+    StyleSheet sheet;
+    sheet.loadString(R"(
+        @keyframes expand-to-200 {
+            to { width: 200px; }
+        }
+        .anim-expand-auto {
+            animation: expand-to-200 1.0s linear;
+        }
+    )");
+
+    UIContext ctx;
+    ctx.styleSheet() = sheet;
+    MockRenderBackend mock;
+
+    auto* parent = ctx.root()->add<Panel>("AutoParent");
+    parent->layout()
+        .direction(LayoutDirection::Vertical)
+        .alignment(Alignment::Start)
+        .width(DimensionConstraint::Auto())
+        .height(DimensionConstraint::Fixed(50.0f))
+        .padding(0.0f)
+        .gap(0.0f);
+
+    // Child gives parent content-measured width of 100px
+    auto* child = parent->add<Panel>("AutoChild");
+    child->layout().width(DimensionConstraint::Fixed(100.0f)).height(DimensionConstraint::Fixed(50.0f));
+
+    // CRITICAL: apply animation at loading time BEFORE any render / layout has occurred!
+    TEST_ASSERT(parent->bounds().width == 0.0f, "Parent has 0 bounds before initial layout");
+    parent->addClass("anim-expand-auto");
+    parent->applyStyle(sheet);
+
+    // Verify parent width constraint is NOT clobbered to Fixed(0) before layout!
+    TEST_ASSERT(parent->layout().width().mode == SizeMode::Auto, "Width mode remains Auto before layout");
+
+    // First layout/render occurs
+    ctx.render(mock);
+    TEST_ASSERT(std::abs(parent->bounds().width - 100.0f) < 0.5f, "First layout correctly measures content width (100px)");
+
+    // Advance 50% through animation (t = 0.5s of 1.0s)
+    // Animation must interpolate between natural content size (100px) and 200px -> 150px!
+    // (If bug was present, it started from 0px and would be at 100px at 50%)
+    ctx.update(0.5f);
+    ctx.render(mock);
+    std::cout << "AutoParent width at 50% progress: " << parent->bounds().width << std::endl;
+    TEST_ASSERT(std::abs(parent->bounds().width - 150.0f) < 1.0f, "Parent width at 50% is 150px (starts from 100px, not 0px)");
+
+    // Run to completion (total 1.1s > 1.0s)
+    ctx.update(0.6f);
+    ctx.render(mock);
+    TEST_ASSERT(parent->layout().width().mode == SizeMode::Auto, "Width mode restored to Auto after completion");
+    TEST_ASSERT(std::abs(parent->bounds().width - 100.0f) < 0.5f, "Parent bounds restored to 100px content width");
+
+    std::cout << "  -> Passed TestFix02AutoDimensionFirstFrameAnimation" << std::endl;
+}
+
 
 
 
@@ -2348,6 +2407,7 @@ int main() {
     TestBug3BaseStyleClearing();
     TestBug4ImplicitAutoDimensionEscaping();
     TestFix01EmptyStylesPreservation();
+    TestFix02AutoDimensionFirstFrameAnimation();
     TestKeyframeAnimationBenchmark();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;

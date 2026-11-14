@@ -469,6 +469,8 @@ struct AnimationTracks {
     PropertyTrack<float> fontSize;
     PropertyTrack<float> width;
     PropertyTrack<float> height;
+    bool widthAutoMeasured{ false };
+    bool heightAutoMeasured{ false };
 
     void build(const KeyframesDefinition& def, const ElementBaseStyleSnapshot& base, const UIElement* el) {
         opacity.buildFromSteps(def.steps, base.opacity, [](const KeyframeStep& s) { return s.opacity; });
@@ -522,6 +524,8 @@ struct AnimationTracks {
         float baseFs = base.fontSize.value_or(16.0f);
         fontSize.buildFromSteps(def.steps, baseFs, [](const KeyframeStep& s) { return s.fontSize; });
 
+        widthAutoMeasured = (base.width.mode != SizeMode::Fixed);
+        heightAutoMeasured = (base.height.mode != SizeMode::Fixed);
         float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (base.measuredWidth > 0.0f ? base.measuredWidth : (el ? el->bounds().width : 0.0f));
         float baseH = (base.height.mode == SizeMode::Fixed) ? base.height.value : (base.measuredHeight > 0.0f ? base.measuredHeight : (el ? el->bounds().height : 0.0f));
         width.buildFromSteps(def.steps, baseW, [](const KeyframeStep& s) { return s.width; });
@@ -579,6 +583,8 @@ struct AnimationTracks {
             fontSize.updateImplicitStops(base.fontSize.value_or(16.0f));
         }
 
+        widthAutoMeasured = (base.width.mode != SizeMode::Fixed);
+        heightAutoMeasured = (base.height.mode != SizeMode::Fixed);
         float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (base.measuredWidth > 0.0f ? base.measuredWidth : (el ? el->bounds().width : 0.0f));
         float baseH = (base.height.mode == SizeMode::Fixed) ? base.height.value : (base.measuredHeight > 0.0f ? base.measuredHeight : (el ? el->bounds().height : 0.0f));
         if (width.active) width.updateImplicitStops(baseW);
@@ -662,13 +668,17 @@ struct AnimationTracks {
 
         float wVal = 0.0f;
         if (width.evaluate(progress, defaultEasing, wVal)) {
-            element->layout().width(DimensionConstraint::Fixed(wVal));
-            element->markLayoutDirty();
+            if (!(width.hasImplicitStart && widthAutoMeasured && element->bounds().width == 0.0f)) {
+                element->layout().width(DimensionConstraint::Fixed(wVal));
+                element->markLayoutDirty();
+            }
         }
         float hVal = 0.0f;
         if (height.evaluate(progress, defaultEasing, hVal)) {
-            element->layout().height(DimensionConstraint::Fixed(hVal));
-            element->markLayoutDirty();
+            if (!(height.hasImplicitStart && heightAutoMeasured && element->bounds().height == 0.0f)) {
+                element->layout().height(DimensionConstraint::Fixed(hVal));
+                element->markLayoutDirty();
+            }
         }
     }
 };
@@ -886,6 +896,7 @@ public:
 
     void update(float dt, UIElement* element) {
         if (!element || m_instances.empty()) return;
+        syncMeasuredDimensions(element);
 
         bool reducedMotion = element && element->context() && element->context()->reducedMotion();
         if (reducedMotion) {
@@ -961,8 +972,29 @@ public:
     }
 
 private:
+    void syncMeasuredDimensions(UIElement* element) {
+        if (!element) return;
+        if (m_baseSnapshot.width.mode != SizeMode::Fixed && element->bounds().width > 0.0f && m_baseSnapshot.measuredWidth == 0.0f) {
+            m_baseSnapshot.measuredWidth = element->bounds().width;
+            for (auto& inst : m_instances) {
+                if (inst.tracks.width.active && inst.tracks.width.hasImplicitStart) {
+                    inst.tracks.width.updateImplicitStops(m_baseSnapshot.measuredWidth);
+                }
+            }
+        }
+        if (m_baseSnapshot.height.mode != SizeMode::Fixed && element->bounds().height > 0.0f && m_baseSnapshot.measuredHeight == 0.0f) {
+            m_baseSnapshot.measuredHeight = element->bounds().height;
+            for (auto& inst : m_instances) {
+                if (inst.tracks.height.active && inst.tracks.height.hasImplicitStart) {
+                    inst.tracks.height.updateImplicitStops(m_baseSnapshot.measuredHeight);
+                }
+            }
+        }
+    }
+
     void applyStepAtProgress(float rawProgress, const ActiveKeyframeAnimation& inst, UIElement* element) {
         if (!inst.def || !element) return;
+        syncMeasuredDimensions(element);
         inst.tracks.apply(rawProgress, inst.spec.easing, element);
     }
 
