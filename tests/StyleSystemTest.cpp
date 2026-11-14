@@ -2025,6 +2025,59 @@ void TestBug1SimultaneousAnimationRemoval() {
     std::cout << "  -> Passed TestBug1SimultaneousAnimationRemoval" << std::endl;
 }
 
+void TestBug2ColorFontSizeRestoration() {
+    std::cout << "[Test] Running TestBug2ColorFontSizeRestoration..." << std::endl;
+
+    StyleSheet sheet;
+    sheet.loadString(R"(
+        @keyframes animTextProps {
+            from { color: #ff0000; font-size: 32px; }
+            to   { color: #0000ff; font-size: 40px; }
+        }
+        .anim-text {
+            animation: animTextProps 0.5s linear 1;
+        }
+
+        .base-green {
+            color: #00ff00;
+        }
+    )");
+
+    // Case 1: Element without initial color/fontSize (inherits from theme/parent)
+    Panel pNoBase;
+    pNoBase.addClass("anim-text");
+    pNoBase.applyStyle(sheet);
+
+    pNoBase.update(0.25f); // 50%: animating
+    TEST_ASSERT(pNoBase.style().text.normal.has_value() && pNoBase.style().text.normal->color.has_value(), "Animating color is set during animation");
+    TEST_ASSERT(pNoBase.style().text.normal.has_value() && pNoBase.style().text.normal->fontSize.has_value(), "Animating fontSize is set during animation");
+
+    pNoBase.update(0.35f); // Total elapsed = 0.6s >= 0.5s (finished, fill: none)
+    std::cout << "pNoBase has text.normal: " << (pNoBase.style().text.normal.has_value() ? "yes" : "no") << std::endl;
+    if (pNoBase.style().text.normal.has_value()) {
+        std::cout << "pNoBase color has_value: " << (pNoBase.style().text.normal->color.has_value() ? "yes" : "no") << std::endl;
+        std::cout << "pNoBase fontSize has_value: " << (pNoBase.style().text.normal->fontSize.has_value() ? "yes" : "no") << std::endl;
+    }
+    bool colorCleared = !pNoBase.style().text.normal.has_value() || !pNoBase.style().text.normal->color.has_value();
+    bool fontCleared = !pNoBase.style().text.normal.has_value() || !pNoBase.style().text.normal->fontSize.has_value();
+    TEST_ASSERT(colorCleared, "After animation ends, color override is cleared (nullopt) for inherited styling");
+    TEST_ASSERT(fontCleared, "After animation ends, fontSize override is cleared (nullopt) for inherited styling");
+
+    // Case 2: Element with initial color defined in PSS
+    Panel pWithBase;
+    pWithBase.addClass("base-green");
+    pWithBase.addClass("anim-text");
+    pWithBase.applyStyle(sheet);
+
+    pWithBase.update(0.25f);
+    pWithBase.update(0.35f); // finished, fill: none
+    TEST_ASSERT(pWithBase.style().text.normal.has_value() && pWithBase.style().text.normal->color.has_value(), "Base color is restored");
+    TEST_ASSERT(pWithBase.style().text.normal->color.value() == Color(0, 255, 0), "Color restored to PSS base (#00ff00)");
+
+    std::cout << "  -> Passed TestBug2ColorFontSizeRestoration" << std::endl;
+}
+
+
 
 
 int main() {
@@ -2044,6 +2097,7 @@ int main() {
     TestKeyframeBaseRestorationAndTracks();
     TestViewportUnitsExtended();
     TestBug1SimultaneousAnimationRemoval();
+    TestBug2ColorFontSizeRestoration();
     TestKeyframeAnimationBenchmark();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;

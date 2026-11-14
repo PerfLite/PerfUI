@@ -153,7 +153,14 @@ struct ElementBaseStyleSnapshot {
             restoreBox = true;
         }
         if (restoreBox) {
-            el->style().box.normal = box;
+            if (!box.backgroundColor.has_value() && !box.borderColor.has_value() &&
+                !box.borderWidth.has_value() && !box.cornerRadius.has_value() &&
+                !box.shadow.has_value() && !box.opacity.has_value() &&
+                !box.liquidGlass.has_value() && box.backgroundTexture == 0) {
+                el->style().box.normal.reset();
+            } else {
+                el->style().box.normal = box;
+            }
         }
 
         if (propsMask & (1 << 7)) {
@@ -164,18 +171,31 @@ struct ElementBaseStyleSnapshot {
         }
 
         if (propsMask & (1 << 8)) {
-            if (color.has_value()) {
-                TextStyleOverride text = el->style().text.normal.value_or(TextStyleOverride{});
+            if (el->style().text.normal.has_value()) {
+                el->style().text.normal->color = color;
+            } else if (color.has_value()) {
+                TextStyleOverride text;
                 text.color = color;
                 el->style().text.normal = text;
             }
         }
 
         if (propsMask & (1 << 11)) {
-            if (fontSize.has_value()) {
-                TextStyleOverride text = el->style().text.normal.value_or(TextStyleOverride{});
+            if (el->style().text.normal.has_value()) {
+                el->style().text.normal->fontSize = fontSize;
+            } else if (fontSize.has_value()) {
+                TextStyleOverride text;
                 text.fontSize = fontSize;
                 el->style().text.normal = text;
+            }
+        }
+
+        if (el->style().text.normal.has_value()) {
+            const auto& t = *el->style().text.normal;
+            if (!t.color.has_value() && !t.fontSize.has_value() && !t.bold.has_value() &&
+                !t.italic.has_value() && !t.wrapWidth.has_value() && !t.shadowColor.has_value() &&
+                !t.shadowOffset.has_value()) {
+                el->style().text.normal.reset();
             }
         }
 
