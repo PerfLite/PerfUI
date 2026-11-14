@@ -192,7 +192,20 @@ flowchart LR
 ### Base Snapshot Freshness & Selective Restoration
 - The source of base values for implicit stops (`from`/`to`) and restoration is the computed style (`ComputedStyle`) **excluding keyframe animation contributions**.
 - When base styles change during or after animation (`:hover`, class toggle, `ui.setVar`, `reloadStyles()`), the snapshot `ElementBaseStyleSnapshot` updates dynamically and implicit tracks track the new base.
-- **Selective Restoration**: on animation finish, **only properties that had active tracks** in the finishing animation are restored. Properties still animated by other concurrent keyframe instances or C++/Lua runtime are preserved.
+- **Separation of Cascade and Runtime Values**:
+  - The base snapshot tracks which properties are managed by the PSS cascade via a `cascadeMask` bitfield. When a rule or class is removed from the cascade, the snapshot property is reset to `std::nullopt` (or scalar default).
+  - Values explicitly set directly from C++/Lua runtime (`element->setOpacity(0.4f)`) without cascade rules are **never overwritten** by cascade updates.
+- **Selective & Batch Restoration**:
+  - On animation finish, **only properties that had active tracks** in the finishing animation are restored. Properties still animated by other concurrent keyframe instances or C++/Lua runtime are preserved.
+  - When multiple animations are removed simultaneously (e.g. on class removal), removed instances are unified into a single removal mask, subtracting tracks of remaining running animations. Shared properties restore cleanly without mutually blocking each other.
+- **Restoration of Properties Without Base Values**:
+  - If an element does not define a property in PSS or XML (e.g., inherited text color), on animation finish the override is reset to `std::nullopt` (`reset()`), cleanly restoring theme/parent inheritance. Empty `TextStyleOverride` and `BoxStyle` structures are automatically cleaned up.
+- **Implicit Dimension Bounds for `Auto`**:
+  - For elements with `width: auto` / `height: auto`, implicit start stops (`from`) anchor to the pre-animation measured content size (`measuredWidth`/`measuredHeight`).
+  - While geometry tracks are active, intermediate animated bounds are not re-read during `updateBaseFromComputed()` calls (hover, CSS variable mutation, reloadStyles), preventing escaping progression and jumpy resizing.
+  - Upon animation finish, `SizeMode::Auto` is restored and the element readapts to its child content.
+- **Transitions Arbitration**:
+  - Box property restorations (`backgroundColor`, `borderColor`, `borderWidth`, `cornerRadius`) yield precedence to `StyleTransitionController` and do not overwrite values if an active CSS transition is currently running for that property.
 - **Layout Conservation**: `markLayoutDirty()` is triggered upon animation completion **only if geometry properties** (`width` or `height`) were restored. Visual properties (opacity, scale, colors) do not cause layout recalculation.
 - **Implicit Stops & Color Blending**:
   - Missing border width defaults to `0.0px` (borders do not pop in at 1px).
