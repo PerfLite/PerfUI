@@ -743,32 +743,87 @@ void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const Computed
             if (m_transitions && m_transitions->hasActiveTransitions()) {
                 m_transitions->finishAll(this);
             }
-            if (c.opacity.has_value() && !animAlpha) setOpacity(*c.opacity);
-            if (c.transformScale.has_value() && !animScale) setRenderScale(*c.transformScale);
+            if (c.opacity.has_value() && !animAlpha) {
+                setOpacity(*c.opacity);
+            } else if (oldStyle.opacity.has_value() && !c.opacity.has_value() && !animAlpha) {
+                setOpacity(1.0f);
+            }
+
+            if (c.transformScale.has_value() && !animScale) {
+                setRenderScale(*c.transformScale);
+            } else if (oldStyle.transformScale.has_value() && !c.transformScale.has_value() && !animScale) {
+                setRenderScale(Point{ 1.0f, 1.0f });
+            }
+
             if ((c.transformOffsetPx.has_value() || c.transformOffsetPct.has_value()) && !animPos) {
                 setRenderOffset(c.transformOffsetPx.value_or(Point{0, 0}), c.transformOffsetPct.value_or(Point{0, 0}));
+            } else if ((oldStyle.transformOffsetPx.has_value() || oldStyle.transformOffsetPct.has_value()) &&
+                       !c.transformOffsetPx.has_value() && !c.transformOffsetPct.has_value() && !animPos) {
+                setRenderOffset(Point{ 0.0f, 0.0f }, Point{ 0.0f, 0.0f });
             }
+
             if (c.widthConstraint.has_value()) props.width(*c.widthConstraint);
             else if (c.width.has_value()) props.width(DimensionConstraint::Fixed(*c.width));
+            else if (oldStyle.widthConstraint.has_value() || oldStyle.width.has_value()) props.width(DimensionConstraint::Auto());
+
             if (c.heightConstraint.has_value()) props.height(*c.heightConstraint);
             else if (c.height.has_value()) props.height(DimensionConstraint::Fixed(*c.height));
+            else if (oldStyle.heightConstraint.has_value() || oldStyle.height.has_value()) props.height(DimensionConstraint::Auto());
+
             if (c.backgroundColor.has_value()) {
                 m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).bg(*c.backgroundColor);
+            } else if (oldStyle.backgroundColor.has_value() && m_style.box.normal.has_value()) {
+                m_style.box.normal->backgroundColor.reset();
             }
+
             if (c.borderColor.has_value() || c.borderWidth.has_value()) {
                 Color bc = c.borderColor.value_or(Color::White());
                 float bw = c.borderWidth.value_or(1.0f);
                 m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).border(bc, bw);
+            } else if ((oldStyle.borderColor.has_value() || oldStyle.borderWidth.has_value()) && m_style.box.normal.has_value()) {
+                m_style.box.normal->borderColor.reset();
+                m_style.box.normal->borderWidth.reset();
             }
+
             if (c.cornerRadius.has_value()) {
                 m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).radius(*c.cornerRadius);
+            } else if (oldStyle.cornerRadius.has_value() && m_style.box.normal.has_value()) {
+                m_style.box.normal->cornerRadius.reset();
             }
+
+            if (m_style.box.normal.has_value()) {
+                const auto& b = *m_style.box.normal;
+                if (!b.backgroundColor.has_value() && !b.borderColor.has_value() &&
+                    !b.borderWidth.has_value() && !b.cornerRadius.has_value() &&
+                    !b.shadow.has_value() && !b.opacity.has_value() &&
+                    !b.liquidGlass.has_value() && b.backgroundTexture == 0) {
+                    m_style.box.normal.reset();
+                }
+            }
+
             if (c.color.has_value()) {
                 m_style.text.normal = m_style.text.normal.value_or(TextStyleOverride{}).col(*c.color);
+            } else if (oldStyle.color.has_value() && m_style.text.normal.has_value()) {
+                m_style.text.normal->color.reset();
             }
+
+            if (m_style.text.normal.has_value()) {
+                const auto& t = *m_style.text.normal;
+                if (!t.color.has_value() && !t.fontSize.has_value() && !t.bold.has_value() &&
+                    !t.italic.has_value() && !t.wrapWidth.has_value() && !t.shadowColor.has_value() &&
+                    !t.shadowOffset.has_value()) {
+                    m_style.text.normal.reset();
+                }
+            }
+
             if (c.outlineColor.has_value()) setOutlineColor(c.outlineColor);
+            else if (oldStyle.outlineColor.has_value()) setOutlineColor(std::nullopt);
+
             if (c.outlineWidth.has_value()) setOutlineWidth(c.outlineWidth);
+            else if (oldStyle.outlineWidth.has_value()) setOutlineWidth(std::nullopt);
+
             if (c.outlineOffset.has_value()) setOutlineOffset(c.outlineOffset);
+            else if (oldStyle.outlineOffset.has_value()) setOutlineOffset(std::nullopt);
         }
     }
 

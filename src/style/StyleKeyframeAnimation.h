@@ -71,7 +71,25 @@ struct ElementBaseStyleSnapshot {
     std::optional<float> fontSize;
     DimensionConstraint width{ DimensionConstraint::Auto() };
     DimensionConstraint height{ DimensionConstraint::Auto() };
+    uint32_t cascadeMask{ 0 };
     bool captured{ false };
+
+    enum CascadePropBits : uint32_t {
+        CascadeOpacity          = 1 << 0,
+        CascadeTransformScale   = 1 << 1,
+        CascadeTransformOffset  = 1 << 2,
+        CascadeBackgroundColor  = 1 << 3,
+        CascadeBorderColor      = 1 << 4,
+        CascadeBorderWidth      = 1 << 5,
+        CascadeCornerRadius     = 1 << 6,
+        CascadeOutlineColor     = 1 << 7,
+        CascadeOutlineWidth     = 1 << 8,
+        CascadeOutlineOffset    = 1 << 9,
+        CascadeColor            = 1 << 10,
+        CascadeFontSize         = 1 << 11,
+        CascadeWidth            = 1 << 12,
+        CascadeHeight           = 1 << 13,
+    };
 
     void capture(const UIElement* el) {
         if (!el) return;
@@ -101,23 +119,127 @@ struct ElementBaseStyleSnapshot {
         if (!captured) {
             capture(el);
         }
-        if (c.opacity.has_value()) opacity = *c.opacity;
-        if (c.transformScale.has_value()) transformScale = *c.transformScale;
-        if (c.transformOffsetPx.has_value()) transformOffsetPx = *c.transformOffsetPx;
-        if (c.transformOffsetPct.has_value()) transformOffsetPct = *c.transformOffsetPct;
-        if (c.backgroundColor.has_value()) backgroundColor = *c.backgroundColor;
-        if (c.borderColor.has_value()) borderColor = *c.borderColor;
-        if (c.borderWidth.has_value()) borderWidth = *c.borderWidth;
-        if (c.cornerRadius.has_value()) cornerRadius = *c.cornerRadius;
-        if (c.outlineColor.has_value()) outlineColor = *c.outlineColor;
-        if (c.outlineWidth.has_value()) outlineWidth = *c.outlineWidth;
-        if (c.outlineOffset.has_value()) outlineOffset = *c.outlineOffset;
-        if (c.color.has_value()) color = *c.color;
-        if (c.fontSize.has_value()) fontSize = *c.fontSize;
-        if (c.widthConstraint.has_value()) width = *c.widthConstraint;
-        else if (c.width.has_value()) width = DimensionConstraint::Fixed(*c.width);
-        if (c.heightConstraint.has_value()) height = *c.heightConstraint;
-        else if (c.height.has_value()) height = DimensionConstraint::Fixed(*c.height);
+
+        if (c.opacity.has_value()) {
+            opacity = *c.opacity;
+            cascadeMask |= CascadeOpacity;
+        } else if (cascadeMask & CascadeOpacity) {
+            opacity = 1.0f;
+            cascadeMask &= ~CascadeOpacity;
+        }
+
+        if (c.transformScale.has_value()) {
+            transformScale = *c.transformScale;
+            cascadeMask |= CascadeTransformScale;
+        } else if (cascadeMask & CascadeTransformScale) {
+            transformScale = Point{ 1.0f, 1.0f };
+            cascadeMask &= ~CascadeTransformScale;
+        }
+
+        if (c.transformOffsetPx.has_value() || c.transformOffsetPct.has_value()) {
+            transformOffsetPx = c.transformOffsetPx.value_or(Point{ 0.0f, 0.0f });
+            transformOffsetPct = c.transformOffsetPct.value_or(Point{ 0.0f, 0.0f });
+            cascadeMask |= CascadeTransformOffset;
+        } else if (cascadeMask & CascadeTransformOffset) {
+            transformOffsetPx = Point{ 0.0f, 0.0f };
+            transformOffsetPct = Point{ 0.0f, 0.0f };
+            cascadeMask &= ~CascadeTransformOffset;
+        }
+
+        if (c.backgroundColor.has_value()) {
+            backgroundColor = *c.backgroundColor;
+            cascadeMask |= CascadeBackgroundColor;
+        } else if (cascadeMask & CascadeBackgroundColor) {
+            backgroundColor = std::nullopt;
+            cascadeMask &= ~CascadeBackgroundColor;
+        }
+
+        if (c.borderColor.has_value()) {
+            borderColor = *c.borderColor;
+            cascadeMask |= CascadeBorderColor;
+        } else if (cascadeMask & CascadeBorderColor) {
+            borderColor = std::nullopt;
+            cascadeMask &= ~CascadeBorderColor;
+        }
+
+        if (c.borderWidth.has_value()) {
+            borderWidth = *c.borderWidth;
+            cascadeMask |= CascadeBorderWidth;
+        } else if (cascadeMask & CascadeBorderWidth) {
+            borderWidth = std::nullopt;
+            cascadeMask &= ~CascadeBorderWidth;
+        }
+
+        if (c.cornerRadius.has_value()) {
+            cornerRadius = *c.cornerRadius;
+            cascadeMask |= CascadeCornerRadius;
+        } else if (cascadeMask & CascadeCornerRadius) {
+            cornerRadius = std::nullopt;
+            cascadeMask &= ~CascadeCornerRadius;
+        }
+
+        if (c.outlineColor.has_value()) {
+            outlineColor = *c.outlineColor;
+            cascadeMask |= CascadeOutlineColor;
+        } else if (cascadeMask & CascadeOutlineColor) {
+            outlineColor = std::nullopt;
+            cascadeMask &= ~CascadeOutlineColor;
+        }
+
+        if (c.outlineWidth.has_value()) {
+            outlineWidth = *c.outlineWidth;
+            cascadeMask |= CascadeOutlineWidth;
+        } else if (cascadeMask & CascadeOutlineWidth) {
+            outlineWidth = 0.0f;
+            cascadeMask &= ~CascadeOutlineWidth;
+        }
+
+        if (c.outlineOffset.has_value()) {
+            outlineOffset = *c.outlineOffset;
+            cascadeMask |= CascadeOutlineOffset;
+        } else if (cascadeMask & CascadeOutlineOffset) {
+            outlineOffset = 0.0f;
+            cascadeMask &= ~CascadeOutlineOffset;
+        }
+
+        if (c.color.has_value()) {
+            color = *c.color;
+            cascadeMask |= CascadeColor;
+        } else if (cascadeMask & CascadeColor) {
+            color = std::nullopt;
+            cascadeMask &= ~CascadeColor;
+        }
+
+        if (c.fontSize.has_value()) {
+            fontSize = *c.fontSize;
+            cascadeMask |= CascadeFontSize;
+        } else if (cascadeMask & CascadeFontSize) {
+            fontSize = std::nullopt;
+            cascadeMask &= ~CascadeFontSize;
+        }
+
+        if (c.widthConstraint.has_value()) {
+            width = *c.widthConstraint;
+            cascadeMask |= CascadeWidth;
+        } else if (c.width.has_value()) {
+            width = DimensionConstraint::Fixed(*c.width);
+            cascadeMask |= CascadeWidth;
+        } else if (cascadeMask & CascadeWidth) {
+            width = DimensionConstraint::Auto();
+            cascadeMask &= ~CascadeWidth;
+        }
+
+        if (c.heightConstraint.has_value()) {
+            height = *c.heightConstraint;
+            cascadeMask |= CascadeHeight;
+        } else if (c.height.has_value()) {
+            height = DimensionConstraint::Fixed(*c.height);
+            cascadeMask |= CascadeHeight;
+        } else if (cascadeMask & CascadeHeight) {
+            height = DimensionConstraint::Auto();
+            cascadeMask &= ~CascadeHeight;
+        }
+
         captured = true;
     }
 
@@ -395,28 +517,50 @@ struct AnimationTracks {
         if (transformScale.active) transformScale.updateImplicitStops(base.transformScale);
         if (transformOffsetPx.active) transformOffsetPx.updateImplicitStops(base.transformOffsetPx);
         if (transformOffsetPct.active) transformOffsetPct.updateImplicitStops(base.transformOffsetPct);
-        if (backgroundColor.active && base.backgroundColor.has_value()) {
-            backgroundColor.updateImplicitStops(*base.backgroundColor);
+        if (backgroundColor.active) {
+            Color defaultBg = Color{ 0, 0, 0, 0 };
+            if (base.backgroundColor.has_value()) {
+                backgroundColor.updateImplicitStops(*base.backgroundColor);
+            } else if (!backgroundColor.stops.empty()) {
+                const auto& last = backgroundColor.stops.back().value;
+                defaultBg = Color(last.r, last.g, last.b, 0);
+                backgroundColor.updateImplicitStops(defaultBg);
+            }
         }
-        if (borderColor.active && base.borderColor.has_value()) {
-            borderColor.updateImplicitStops(*base.borderColor);
+        if (borderColor.active) {
+            Color defaultBc = Color{ 0, 0, 0, 0 };
+            if (base.borderColor.has_value()) {
+                borderColor.updateImplicitStops(*base.borderColor);
+            } else if (!borderColor.stops.empty()) {
+                const auto& last = borderColor.stops.back().value;
+                defaultBc = Color(last.r, last.g, last.b, 0);
+                borderColor.updateImplicitStops(defaultBc);
+            }
         }
-        if (borderWidth.active && base.borderWidth.has_value()) {
-            borderWidth.updateImplicitStops(*base.borderWidth);
+        if (borderWidth.active) {
+            borderWidth.updateImplicitStops(base.borderWidth.value_or(0.0f));
         }
-        if (cornerRadius.active && base.cornerRadius.has_value()) {
-            cornerRadius.updateImplicitStops(*base.cornerRadius);
+        if (cornerRadius.active) {
+            cornerRadius.updateImplicitStops(base.cornerRadius.value_or(0.0f));
         }
-        if (outlineColor.active && base.outlineColor.has_value()) {
-            outlineColor.updateImplicitStops(*base.outlineColor);
+        if (outlineColor.active) {
+            Color defaultOc = Color{ 0, 0, 0, 0 };
+            if (base.outlineColor.has_value()) {
+                outlineColor.updateImplicitStops(*base.outlineColor);
+            } else if (!outlineColor.stops.empty()) {
+                const auto& last = outlineColor.stops.back().value;
+                defaultOc = Color(last.r, last.g, last.b, 0);
+                outlineColor.updateImplicitStops(defaultOc);
+            }
         }
         if (outlineWidth.active) outlineWidth.updateImplicitStops(base.outlineWidth);
         if (outlineOffset.active) outlineOffset.updateImplicitStops(base.outlineOffset);
-        if (color.active && base.color.has_value()) {
-            color.updateImplicitStops(*base.color);
+        if (color.active) {
+            Color defaultTextCol = (el && el->computedStyle().color.has_value()) ? *el->computedStyle().color : Theme::Current().colors.textPrimary;
+            color.updateImplicitStops(base.color.value_or(defaultTextCol));
         }
-        if (fontSize.active && base.fontSize.has_value()) {
-            fontSize.updateImplicitStops(*base.fontSize);
+        if (fontSize.active) {
+            fontSize.updateImplicitStops(base.fontSize.value_or(16.0f));
         }
 
         float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (el ? el->bounds().width : 0.0f);

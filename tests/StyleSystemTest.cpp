@@ -2077,6 +2077,108 @@ void TestBug2ColorFontSizeRestoration() {
     std::cout << "  -> Passed TestBug2ColorFontSizeRestoration" << std::endl;
 }
 
+void TestBug3BaseStyleClearing() {
+    std::cout << "[Test] Running TestBug3BaseStyleClearing..." << std::endl;
+
+    StyleSheet sheet;
+    sheet.loadString(R"(
+        @keyframes animOpacity {
+            from { opacity: 0.1; }
+            to   { opacity: 0.9; }
+        }
+        @keyframes animBg {
+            from { background: #ff0000; }
+            to   { background: #0000ff; }
+        }
+        .card {
+            background: #333333;
+        }
+        .anim-opac {
+            animation: animOpacity 0.5s linear 1;
+        }
+        .anim-bg {
+            animation: animBg 0.5s linear 1;
+        }
+        .border-red {
+            border: 2px #ff0000;
+        }
+        .border-blue {
+            border: 4px #0000ff;
+        }
+    )");
+
+    // Case 1: Class with background is removed during animation of opacity (different property)
+    Panel pCard;
+    pCard.addClass("card");
+    pCard.addClass("anim-opac");
+    pCard.applyStyle(sheet);
+
+    pCard.update(0.2f); // running opacity animation
+
+    // Now remove .card while animation is running!
+    pCard.removeClass("card");
+    pCard.applyStyle(sheet); // triggers updateBaseFromComputed
+
+    // Finish animation
+    pCard.update(0.4f); // total 0.6s >= 0.5s (finished)
+
+    bool bgCleared = !pCard.style().box.normal.has_value() || !pCard.style().box.normal->backgroundColor.has_value();
+    TEST_ASSERT(bgCleared, "Case 1: Background removed when .card class is removed during opacity animation");
+
+    // Case 2: Class with background is removed during animation of background itself
+    Panel pCard2;
+    pCard2.addClass("card");
+    pCard2.addClass("anim-bg");
+    pCard2.applyStyle(sheet);
+
+    pCard2.update(0.25f); // 50% through animBg
+    TEST_ASSERT(pCard2.style().box.normal.has_value() && pCard2.style().box.normal->backgroundColor.has_value(), "Background is actively animated");
+
+    pCard2.removeClass("card");
+    pCard2.applyStyle(sheet); // updateBaseFromComputed clears base background
+
+    pCard2.update(0.35f); // finishes animBg (fill: none)
+    bool bg2Cleared = !pCard2.style().box.normal.has_value() || !pCard2.style().box.normal->backgroundColor.has_value();
+    TEST_ASSERT(bg2Cleared, "Case 2: Background removed when .card is removed during background animation");
+
+    // Case 3: Class with border changes to class with a different border
+    Panel pBorder;
+    pBorder.addClass("border-red");
+    pBorder.addClass("anim-opac");
+    pBorder.applyStyle(sheet);
+
+    pBorder.update(0.2f);
+    // Switch to border-blue while animating
+    pBorder.removeClass("border-red");
+    pBorder.addClass("border-blue");
+    pBorder.applyStyle(sheet);
+
+    pBorder.update(0.4f); // finish opacity animation
+    TEST_ASSERT(pBorder.style().box.normal.has_value(), "Border box style is present");
+    TEST_ASSERT(pBorder.style().box.normal->borderColor.has_value() && *pBorder.style().box.normal->borderColor == Color(0, 0, 255), "Border color updated to blue");
+    TEST_ASSERT(pBorder.style().box.normal->borderWidth.has_value() && std::abs(*pBorder.style().box.normal->borderWidth - 4.0f) < 0.1f, "Border width updated to 4px");
+
+    // Case 4: Value set from C++ runtime (setOpacity(0.4)) without cascade value is NOT overwritten by base update
+    Panel pRuntime;
+    pRuntime.setOpacity(0.4f);
+    pRuntime.addClass("card");
+    pRuntime.addClass("anim-bg");
+    pRuntime.applyStyle(sheet); // card sets background, no rule sets opacity!
+
+    pRuntime.update(0.2f); // running background animation
+    TEST_ASSERT(std::abs(pRuntime.opacity() - 0.4f) < 0.01f, "Runtime opacity 0.4 preserved during background animation");
+
+    // Trigger updateBaseFromComputed via class change or style re-apply
+    pRuntime.removeClass("card");
+    pRuntime.applyStyle(sheet);
+
+    pRuntime.update(0.4f); // finish background animation
+    TEST_ASSERT(std::abs(pRuntime.opacity() - 0.4f) < 0.01f, "Runtime opacity 0.4 preserved after animation ends");
+
+    std::cout << "  -> Passed TestBug3BaseStyleClearing" << std::endl;
+}
+
+
 
 
 
@@ -2098,6 +2200,7 @@ int main() {
     TestViewportUnitsExtended();
     TestBug1SimultaneousAnimationRemoval();
     TestBug2ColorFontSizeRestoration();
+    TestBug3BaseStyleClearing();
     TestKeyframeAnimationBenchmark();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;
