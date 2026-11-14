@@ -99,9 +99,210 @@ struct ElementBaseStyleSnapshot {
     }
 };
 
+template<typename T>
+struct PropertyKeyframe {
+    float offset{ 0.0f };
+    T value{};
+    std::optional<EasingDef> timingFunction;
+};
+
+template<typename T>
+struct PropertyTrack {
+    std::vector<PropertyKeyframe<T>> stops;
+    bool active{ false };
+
+    template<typename Getter>
+    void buildFromSteps(const std::vector<KeyframeStep>& steps, const T& baseValue, Getter getter) {
+        stops.clear();
+        active = false;
+
+        for (const auto& step : steps) {
+            auto valOpt = getter(step);
+            if (valOpt.has_value()) {
+                active = true;
+                stops.push_back({ step.offset, *valOpt, step.timingFunction });
+            }
+        }
+
+        if (!active || stops.empty()) {
+            active = false;
+            return;
+        }
+
+        // Implicit start keyframe (offset == 0.0f)
+        if (stops.front().offset > 0.0001f) {
+            std::optional<EasingDef> firstTiming;
+            if (!steps.empty() && steps.front().offset < 0.0001f) {
+                firstTiming = steps.front().timingFunction;
+            }
+            stops.insert(stops.begin(), { 0.0f, baseValue, firstTiming });
+        }
+
+        // Implicit end keyframe (offset == 1.0f)
+        if (stops.back().offset < 0.9999f) {
+            stops.push_back({ 1.0f, baseValue, std::nullopt });
+        }
+    }
+
+    bool evaluate(float progress, const EasingDef& defaultEasing, T& outValue) const {
+        if (!active || stops.empty()) return false;
+        if (stops.size() == 1) {
+            outValue = stops[0].value;
+            return true;
+        }
+
+        float p = (std::clamp)(progress, 0.0f, 1.0f);
+
+        size_t idx = 0;
+        for (size_t i = 0; i + 1 < stops.size(); ++i) {
+            if (p >= stops[i].offset && p <= stops[i + 1].offset) {
+                idx = i;
+                break;
+            }
+            if (p > stops[i + 1].offset) {
+                idx = i;
+            }
+        }
+
+        const auto& k0 = stops[idx];
+        const auto& k1 = stops[(std::min)(idx + 1, stops.size() - 1)];
+
+        float span = k1.offset - k0.offset;
+        float segT = (span > 0.0001f) ? ((p - k0.offset) / span) : 0.0f;
+        segT = (std::clamp)(segT, 0.0f, 1.0f);
+
+        const EasingDef& segEasing = k0.timingFunction.has_value() ? *k0.timingFunction : defaultEasing;
+        float easedT = ApplyEasing(segT, segEasing);
+        easedT = (std::clamp)(easedT, 0.0f, 1.0f);
+
+        outValue = detail::LerpValue(k0.value, k1.value, easedT);
+        return true;
+    }
+};
+
+struct AnimationTracks {
+    PropertyTrack<float> opacity;
+    PropertyTrack<Point> transformScale;
+    PropertyTrack<Point> transformOffsetPx;
+    PropertyTrack<Point> transformOffsetPct;
+    PropertyTrack<Color> backgroundColor;
+    PropertyTrack<Color> borderColor;
+    PropertyTrack<float> borderWidth;
+    PropertyTrack<float> cornerRadius;
+    PropertyTrack<Color> outlineColor;
+    PropertyTrack<float> outlineWidth;
+    PropertyTrack<float> outlineOffset;
+    PropertyTrack<Color> color;
+    PropertyTrack<float> width;
+    PropertyTrack<float> height;
+
+    void build(const KeyframesDefinition& def, const ElementBaseStyleSnapshot& base, const UIElement* el) {
+        opacity.buildFromSteps(def.steps, base.opacity, [](const KeyframeStep& s) { return s.opacity; });
+        transformScale.buildFromSteps(def.steps, base.transformScale, [](const KeyframeStep& s) { return s.transformScale; });
+        transformOffsetPx.buildFromSteps(def.steps, base.transformOffsetPx, [](const KeyframeStep& s) { return s.transformOffsetPx; });
+        transformOffsetPct.buildFromSteps(def.steps, base.transformOffsetPct, [](const KeyframeStep& s) { return s.transformOffsetPct; });
+        backgroundColor.buildFromSteps(def.steps, base.backgroundColor.value_or(Color{ 0, 0, 0, 0 }), [](const KeyframeStep& s) { return s.backgroundColor; });
+        borderColor.buildFromSteps(def.steps, base.borderColor.value_or(Color{ 0, 0, 0, 0 }), [](const KeyframeStep& s) { return s.borderColor; });
+        borderWidth.buildFromSteps(def.steps, base.borderWidth.value_or(1.0f), [](const KeyframeStep& s) { return s.borderWidth; });
+        cornerRadius.buildFromSteps(def.steps, base.cornerRadius.value_or(0.0f), [](const KeyframeStep& s) { return s.cornerRadius; });
+        outlineColor.buildFromSteps(def.steps, base.outlineColor.value_or(Color{ 0, 0, 0, 0 }), [](const KeyframeStep& s) { return s.outlineColor; });
+        outlineWidth.buildFromSteps(def.steps, base.outlineWidth, [](const KeyframeStep& s) { return s.outlineWidth; });
+        outlineOffset.buildFromSteps(def.steps, base.outlineOffset, [](const KeyframeStep& s) { return s.outlineOffset; });
+        color.buildFromSteps(def.steps, base.color.value_or(Color{ 255, 255, 255, 255 }), [](const KeyframeStep& s) { return s.color; });
+
+        float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (el ? el->bounds().width : 0.0f);
+        float baseH = (base.height.mode == SizeMode::Fixed) ? base.height.value : (el ? el->bounds().height : 0.0f);
+        width.buildFromSteps(def.steps, baseW, [](const KeyframeStep& s) { return s.width; });
+        height.buildFromSteps(def.steps, baseH, [](const KeyframeStep& s) { return s.height; });
+    }
+
+    void apply(float progress, const EasingDef& defaultEasing, UIElement* element) const {
+        if (!element) return;
+
+        float valAlpha = 1.0f;
+        if (!element->isAlphaAnimating() && opacity.evaluate(progress, defaultEasing, valAlpha)) {
+            element->setOpacity(valAlpha);
+        }
+
+        Point valScale{ 1.0f, 1.0f };
+        if (!element->isScaleAnimating() && transformScale.evaluate(progress, defaultEasing, valScale)) {
+            element->setRenderScale(valScale);
+        }
+
+        Point px = element->renderOffset();
+        Point pct = element->renderOffsetPercent();
+        bool hasOffset = false;
+        if (!element->isPositionAnimating()) {
+            Point newPx{ 0.0f, 0.0f };
+            if (transformOffsetPx.evaluate(progress, defaultEasing, newPx)) {
+                px = newPx;
+                hasOffset = true;
+            }
+            Point newPct{ 0.0f, 0.0f };
+            if (transformOffsetPct.evaluate(progress, defaultEasing, newPct)) {
+                pct = newPct;
+                hasOffset = true;
+            }
+            if (hasOffset) {
+                element->setRenderOffset(px, pct);
+            }
+        }
+
+        Color bg;
+        if (backgroundColor.evaluate(progress, defaultEasing, bg)) {
+            element->style().box.normal = element->style().box.normal.value_or(BoxStyle{}).bg(bg);
+        }
+
+        Color bc;
+        float bw = 1.0f;
+        bool hasBorder = borderColor.evaluate(progress, defaultEasing, bc);
+        bool hasBorderW = borderWidth.evaluate(progress, defaultEasing, bw);
+        if (hasBorder || hasBorderW) {
+            Color curBc = hasBorder ? bc : (element->style().box.normal.has_value() ? element->style().box.normal->borderColor.value_or(Color::White()) : Color::White());
+            float curBw = hasBorderW ? bw : (element->style().box.normal.has_value() ? element->style().box.normal->borderWidth.value_or(1.0f) : 1.0f);
+            element->style().box.normal = element->style().box.normal.value_or(BoxStyle{}).border(curBc, curBw);
+        }
+
+        float radius = 0.0f;
+        if (cornerRadius.evaluate(progress, defaultEasing, radius)) {
+            element->style().box.normal = element->style().box.normal.value_or(BoxStyle{}).radius(radius);
+        }
+
+        Color oc;
+        if (outlineColor.evaluate(progress, defaultEasing, oc)) {
+            element->setOutlineColor(oc);
+        }
+        float ow = 0.0f;
+        if (outlineWidth.evaluate(progress, defaultEasing, ow)) {
+            element->setOutlineWidth(ow);
+        }
+        float oo = 0.0f;
+        if (outlineOffset.evaluate(progress, defaultEasing, oo)) {
+            element->setOutlineOffset(oo);
+        }
+
+        Color tc;
+        if (color.evaluate(progress, defaultEasing, tc)) {
+            element->style().text.normal = element->style().text.normal.value_or(TextStyleOverride{}).col(tc);
+        }
+
+        float wVal = 0.0f;
+        if (width.evaluate(progress, defaultEasing, wVal)) {
+            element->layout().width(DimensionConstraint::Fixed(wVal));
+            element->markLayoutDirty();
+        }
+        float hVal = 0.0f;
+        if (height.evaluate(progress, defaultEasing, hVal)) {
+            element->layout().height(DimensionConstraint::Fixed(hVal));
+            element->markLayoutDirty();
+        }
+    }
+};
+
 struct ActiveKeyframeAnimation {
     AnimationSpec spec;
     const KeyframesDefinition* def{ nullptr };
+    AnimationTracks tracks;
     float elapsedTime{ 0.0f };
     bool finished{ false };
 
@@ -127,6 +328,7 @@ public:
             ActiveKeyframeAnimation inst;
             inst.spec = sp;
             inst.def = kfDef;
+            inst.tracks.build(*kfDef, m_baseSnapshot, element);
 
             // Preserve elapsed time if animation already running with same name
             for (const auto& prev : m_instances) {
@@ -238,118 +440,8 @@ public:
 
 private:
     void applyStepAtProgress(float rawProgress, const ActiveKeyframeAnimation& inst, UIElement* element) {
-        if (!inst.def || inst.def->steps.empty() || !element) return;
-
-        float eased = ApplyEasing((std::clamp)(rawProgress, 0.0f, 1.0f), inst.spec.easing);
-        eased = (std::clamp)(eased, 0.0f, 1.0f);
-
-        const auto& steps = inst.def->steps;
-        if (steps.size() == 1) {
-            applyKeyframeProperties(steps[0], steps[0], 0.0f, element);
-            return;
-        }
-
-        const KeyframeStep* k0 = &steps.front();
-        const KeyframeStep* k1 = &steps.back();
-
-        for (size_t i = 0; i + 1 < steps.size(); ++i) {
-            if (eased >= steps[i].offset && eased <= steps[i + 1].offset) {
-                k0 = &steps[i];
-                k1 = &steps[i + 1];
-                break;
-            }
-        }
-
-        float segSpan = k1->offset - k0->offset;
-        float segT = (segSpan > 0.0001f) ? (eased - k0->offset) / segSpan : 0.0f;
-        if (k0->timingFunction.has_value()) {
-            segT = ApplyEasing(segT, *k0->timingFunction);
-        }
-        segT = (std::clamp)(segT, 0.0f, 1.0f);
-
-        applyKeyframeProperties(*k0, *k1, segT, element);
-    }
-
-    void applyKeyframeProperties(const KeyframeStep& k0, const KeyframeStep& k1, float t, UIElement* element) {
-        // 1. Opacity
-        if (k0.opacity.has_value() && k1.opacity.has_value()) {
-            element->setOpacity(detail::LerpValue(*k0.opacity, *k1.opacity, t));
-        } else if (k1.opacity.has_value() && t >= 0.999f) {
-            element->setOpacity(*k1.opacity);
-        } else if (k0.opacity.has_value() && t <= 0.001f) {
-            element->setOpacity(*k0.opacity);
-        }
-
-        // 2. Transform Scale
-        if (k0.transformScale.has_value() && k1.transformScale.has_value()) {
-            element->setRenderScale(detail::LerpValue(*k0.transformScale, *k1.transformScale, t));
-        } else if (k1.transformScale.has_value() && t >= 0.999f) {
-            element->setRenderScale(*k1.transformScale);
-        } else if (k0.transformScale.has_value() && t <= 0.001f) {
-            element->setRenderScale(*k0.transformScale);
-        }
-
-        // 3. Transform Offset
-        if (k0.transformOffsetPx.has_value() || k1.transformOffsetPx.has_value() ||
-            k0.transformOffsetPct.has_value() || k1.transformOffsetPct.has_value()) {
-            Point px0 = k0.transformOffsetPx.value_or(Point{ 0.0f, 0.0f });
-            Point px1 = k1.transformOffsetPx.value_or(Point{ 0.0f, 0.0f });
-            Point pct0 = k0.transformOffsetPct.value_or(Point{ 0.0f, 0.0f });
-            Point pct1 = k1.transformOffsetPct.value_or(Point{ 0.0f, 0.0f });
-            Point curPx = detail::LerpValue(px0, px1, t);
-            Point curPct = detail::LerpValue(pct0, pct1, t);
-            element->setRenderOffset(curPx, curPct);
-        }
-
-        // 4. Background Color
-        if (k0.backgroundColor.has_value() && k1.backgroundColor.has_value()) {
-            Color bg = Color::Lerp(*k0.backgroundColor, *k1.backgroundColor, t);
-            element->style().box.normal = element->style().box.normal.value_or(BoxStyle{}).bg(bg);
-        } else if (k1.backgroundColor.has_value() && t >= 0.999f) {
-            element->style().box.normal = element->style().box.normal.value_or(BoxStyle{}).bg(*k1.backgroundColor);
-        }
-
-        // 5. Border Color & Width
-        if (k0.borderColor.has_value() && k1.borderColor.has_value()) {
-            Color bc = Color::Lerp(*k0.borderColor, *k1.borderColor, t);
-            float bw = detail::LerpValue(k0.borderWidth.value_or(1.0f), k1.borderWidth.value_or(1.0f), t);
-            element->style().box.normal = element->style().box.normal.value_or(BoxStyle{}).border(bc, bw);
-        }
-
-        // 6. Corner Radius
-        if (k0.cornerRadius.has_value() && k1.cornerRadius.has_value()) {
-            float r = detail::LerpValue(*k0.cornerRadius, *k1.cornerRadius, t);
-            element->style().box.normal = element->style().box.normal.value_or(BoxStyle{}).radius(r);
-        }
-
-        // 7. Outline
-        if (k0.outlineColor.has_value() && k1.outlineColor.has_value()) {
-            element->setOutlineColor(Color::Lerp(*k0.outlineColor, *k1.outlineColor, t));
-        }
-        if (k0.outlineWidth.has_value() && k1.outlineWidth.has_value()) {
-            element->setOutlineWidth(detail::LerpValue(*k0.outlineWidth, *k1.outlineWidth, t));
-        }
-        if (k0.outlineOffset.has_value() && k1.outlineOffset.has_value()) {
-            element->setOutlineOffset(detail::LerpValue(*k0.outlineOffset, *k1.outlineOffset, t));
-        }
-
-        // 8. Text Color
-        if (k0.color.has_value() && k1.color.has_value()) {
-            Color tc = Color::Lerp(*k0.color, *k1.color, t);
-            element->style().text.normal = element->style().text.normal.value_or(TextStyleOverride{}).col(tc);
-        }
-
-        // 9. Width & Height
-        if (k0.width.has_value() && k1.width.has_value()) {
-            float w = detail::LerpValue(*k0.width, *k1.width, t);
-            element->layout().width(DimensionConstraint::Fixed(w));
-            element->markLayoutDirty();
-        }
-        if (k0.height.has_value() && k1.height.has_value()) {
-            float h = detail::LerpValue(*k0.height, *k1.height, t);
-            element->layout().height(DimensionConstraint::Fixed(h));
-            element->markLayoutDirty();
-        }
+        if (!inst.def || !element) return;
+        inst.tracks.apply(rawProgress, inst.spec.easing, element);
     }
 
     std::vector<ActiveKeyframeAnimation> m_instances;

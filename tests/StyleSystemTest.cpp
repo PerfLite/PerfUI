@@ -1251,6 +1251,71 @@ void TestKeyframeAnimations() {
     cancelPanel.applyStyle(testSheet1); // re-compute without animation
     TEST_ASSERT(std::abs(cancelPanel.opacity() - 1.0f) < 0.05f || std::abs(cancelPanel.opacity() - 0.75f) < 0.05f, "After class removal, opacity restored from base");
 
+    // 11. Test implicit keyframes (Points 2 & 3): missing from/to and intermediate omissions
+    StyleSheet implicitSheet;
+    implicitSheet.loadString(R"(
+        @keyframes fadeTo {
+            to { opacity: 1.0; }
+        }
+        @keyframes scaleFrom {
+            from { transform-scale: 0.5; }
+        }
+        @keyframes colorTo {
+            to { background-color: #ffffff; }
+        }
+        @keyframes demoGap {
+            0%   { opacity: 0.0; }
+            50%  { transform-scale: 1.2; }
+            100% { opacity: 1.0; }
+        }
+        .fade-to-box {
+            opacity: 0.2;
+            animation: fadeTo 1.0s linear 1 forwards;
+        }
+        .scale-from-box {
+            transform-scale: 1.0;
+            animation: scaleFrom 1.0s linear 1 forwards;
+        }
+        .color-to-box {
+            background-color: #000000;
+            animation: colorTo 1.0s linear 1 forwards;
+        }
+        .gap-box {
+            opacity: 0.2;
+            transform-scale: 1.0;
+            animation: demoGap 1.0s linear 1 forwards;
+        }
+    )");
+
+    Panel fadePanel;
+    fadePanel.addClass("fade-to-box");
+    fadePanel.applyStyle(implicitSheet);
+    fadePanel.update(0.5f); // 50%
+    TEST_ASSERT(std::abs(fadePanel.opacity() - 0.6f) < 0.05f, "Implicit 'from' uses base opacity 0.2 -> 0.6 at 50%");
+
+    Panel scalePanel;
+    scalePanel.addClass("scale-from-box");
+    scalePanel.applyStyle(implicitSheet);
+    scalePanel.update(0.5f); // 50%
+    TEST_ASSERT(std::abs(scalePanel.renderScale().x - 0.75f) < 0.05f, "Implicit 'to' uses base scale 1.0 -> 0.75 at 50%");
+
+    Panel colorPanel;
+    colorPanel.addClass("color-to-box");
+    colorPanel.applyStyle(implicitSheet);
+    colorPanel.update(0.5f); // 50%
+    Color curBg = colorPanel.resolveBoxStyle(WidgetState::Normal).backgroundColor.value_or(Color::Black());
+    TEST_ASSERT(std::abs((int)curBg.r - 127) <= 2 && std::abs((int)curBg.g - 127) <= 2, "Implicit 'from' uses base black color -> ~127 at 50%");
+
+    Panel gapPanel;
+    gapPanel.addClass("gap-box");
+    gapPanel.applyStyle(implicitSheet);
+    gapPanel.update(0.25f);
+    TEST_ASSERT(std::abs(gapPanel.opacity() - 0.25f) < 0.05f, "Continuous opacity across 50% gap is ~0.25 at 25%");
+    TEST_ASSERT(std::abs(gapPanel.renderScale().x - 1.1f) < 0.05f, "Scale with implicit from/to reaches ~1.1 at 25%");
+    gapPanel.update(0.25f); // now at 0.5s
+    TEST_ASSERT(std::abs(gapPanel.opacity() - 0.5f) < 0.05f, "Continuous opacity is ~0.5 at 50%");
+    TEST_ASSERT(std::abs(gapPanel.renderScale().x - 1.2f) < 0.05f, "Scale peak at 50% is 1.2");
+
     std::cout << "  -> Passed TestKeyframeAnimations" << std::endl;
 }
 
