@@ -169,14 +169,35 @@ Mutating a CSS variable via `ui.setVar("--gold", "#00ffff")` lazily invalidates 
 
 ---
 
-## 5. Cascading Priority Hierarchy
+## 5. Cascading & Layer Hierarchy
 
-Element property values are resolved strictly according to the following precedence order (from lowest to highest):
+Element property values are resolved strictly according to the following layer precedence (from lowest to highest):
+
+```mermaid
+flowchart LR
+    A["1. Theme Defaults"] --> B["2. PSS Cascade"]
+    B --> C["3. Inline XML"]
+    C --> D["4. Keyframes (@keyframes)"]
+    D --> E["5. Transitions (:hover/:active)"]
+    E --> F["6. Runtime C++/Lua"]
+```
 
 1. **Widget Defaults & Theme** (`Theme::Current()`)
 2. **PSS Stylesheets** (matching rules sorted by specificity and source order)
 3. **XML Inline Attributes** (`<Panel width="300" bg="#ff0000">` overrides PSS rules)
-4. **Runtime C++ and Lua API Calls** (direct setter calls like `element->setWidth(400)` or active `ElementAnimator` tracks have absolute priority and are never overridden by PSS cascading)
+4. **Keyframe Animations (`@keyframes`)**: applied on top of the element's computed style during updates.
+5. **CSS Transitions**: on `:hover`, `:active`, or state changes, transitions smoothly override keyframe tracks for animated properties, conforming to CSS Animations Level 1.
+6. **Runtime C++ and Lua API Calls**: direct setter calls (`element->setOpacity(...)`, `element->layout().width(...)`) or explicit animators (`ElementAnimator`, `ElementSpring`) have top priority and are never overwritten by styles or animations.
+
+### Base Snapshot Freshness & Selective Restoration
+- The source of base values for implicit stops (`from`/`to`) and restoration is the computed style (`ComputedStyle`) **excluding keyframe animation contributions**.
+- When base styles change during or after animation (`:hover`, class toggle, `ui.setVar`, `reloadStyles()`), the snapshot `ElementBaseStyleSnapshot` updates dynamically and implicit tracks track the new base.
+- **Selective Restoration**: on animation finish, **only properties that had active tracks** in the finishing animation are restored. Properties still animated by other concurrent keyframe instances or C++/Lua runtime are preserved.
+- **Layout Conservation**: `markLayoutDirty()` is triggered upon animation completion **only if geometry properties** (`width` or `height`) were restored. Visual properties (opacity, scale, colors) do not cause layout recalculation.
+- **Implicit Stops & Color Blending**:
+  - Missing border width defaults to `0.0px` (borders do not pop in at 1px).
+  - Missing color stops use the target stop's RGB with `alpha = 0` and interpolate in **premultiplied alpha color space** (`Color::Lerp`), eliminating dark muddy artifacts during fades.
+  - Text color defaults to the inherited computed text color or theme `textPrimary`.
 
 ---
 
@@ -356,32 +377,74 @@ Enables AAA texture frame borders without C++ code:
 
 ---
 
-## 9. Viewport Units (`vw`, `vh`, `vmin`, `vmax`)
+## 9. Viewport & Relative Units
 
-PSS and XML markup support responsive viewport units calculated dynamically from the current renderer window dimensions (`UIContext::viewportSize()`):
+PSS and XML markup support responsive viewport units and relative units calculated dynamically from current renderer window dimensions (`UIContext::viewportSize()`) and root font size:
 
 | Unit | Description | Example |
 | :--- | :--- | :--- |
+| `px` | Absolute physical UI pixels | `font-size: 16px;` |
 | `vw` | Percentage of viewport width (1vw = 1%) | `width: 50vw;` (half screen width) |
-| `vh` | Percentage of viewport height (1vh = 1%) | `height: 80vh;` (80% screen height) |
-| `vmin` | Percentage of minimum viewport dimension | `width: 25vmin;` |
+| `vh` | Percentage of viewport height (1vh = 1%) | `height: 80vh;` `font-size: 2vh;` |
+| `vmin` | Percentage of minimum viewport dimension | `padding: 1vmin;` |
 | `vmax` | Percentage of maximum viewport dimension | `max-width: 90vmax;` |
+| `%` | Percentage of parent container or dimension | `width: 50%; border-radius: 50%;` |
+| `rem` | Root element font size (default 16px, configurable via `:root`) | `margin: 1.5rem;` |
+| `$token` | Active theme tokens | `gap: $spacingMD;` |
 
-### Supported Properties
-- Dimensions: `width`, `height`, `min-width`, `max-width`, `min-height`, `max-height`.
-- Absolute positioning & anchors: `left`, `right`, `top`, `bottom`.
+### Supported Properties and Units Table
 
-> [!NOTE]
-> `padding`, `margin`, `gap`, `border-radius`, and `font-size` take pixel values or theme tokens ($spacing, $radius). `transform-offset` accepts pixels and percentages (`px`, `%`). When the display resolution changes or when running on ultrawide monitors (21:9 `3440×1440`, 32:9 `5120×1440`), all `vw/vh/vmin/vmax` units automatically adapt dynamically without UI reloads.
+| Property | `px` | `vw` / `vh` / `vmin` / `vmax` | `%` | `rem` | Theme Tokens |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| `width`, `height`, `min-*`, `max-*` | ✅ | ✅ | ✅ (from parent) | ✅ | ✅ |
+| `left`, `right`, `top`, `bottom` | ✅ | ✅ | ✅ (from parent) | ✅ | ✅ |
+| `padding`, `margin` | ✅ | ✅ | ✅ (from parent size) | ✅ | ✅ |
+| `gap` | ✅ | ✅ | ✅ (from parent size) | ✅ | ✅ |
+| `border-radius`, `radius` | ✅ | ✅ | ✅ (from smaller edge) | ✅ | ✅ |
+| `border-width` | ✅ | ✅ | — | ✅ | ✅ |
+| `outline-width`, `outline-offset` | ✅ | ✅ | — | ✅ | ✅ |
+| `font-size` | ✅ | ✅ | — | ✅ | ✅ |
+| `min-font-size`, `max-font-size` | ✅ | ✅ | — | ✅ | ✅ |
+| `transform-offset` | ✅ | ✅ | ✅ (from self size) | ✅ | ✅ |
+
+### Font Size Clamping (`min-font-size` & `max-font-size`)
+To prevent illegibly small text on 720p/600p or oversized letters on 4K/ultrawide displays, PSS supports font size clamping:
 
 ```css
-.modal-window {
-    width: 60vw;
-    height: 70vh;
-    left: 20vw;
-    top: 15vh;
+.responsive-title {
+    font-size: 2.2vh;
+    min-font-size: 14px;
+    max-font-size: 32px;
 }
 ```
+
+- On 1080p: `2.2vh = 23.76px` (within [14, 32]).
+- On 4K (2160p): `2.2vh = 47.52px` -> clamped to `32px`.
+- On compact displays (600p): `2.2vh = 13.2px` -> clamped to `14px`.
+
+### Root Font Size (`:root { font-size: ... }`) and `rem`
+By default, 1 `rem` equals 16 pixels. This can be configured in `:root`:
+
+```css
+:root {
+    font-size: 18px; /* 1rem = 18px, 1.5rem = 27px */
+}
+
+.panel-header {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+}
+```
+
+### Syntax Diagnostics and Typo Protection
+- Unrecognized units and typos (such as `12vwx` or `10px 20bad`) generate compiler warnings formatted as `file:line:col`:
+  ```
+  my_styles.pss:14:5: Unknown unit 'vwx' in property 'font-size'
+  ```
+- The invalid declaration is safely ignored without silently falling back to incorrect numbers via `strtof`.
+
+### Dynamic Recalculation without Tree Recreation
+When changing display resolutions or switching to ultrawide aspect ratios (21:9 `3440×1440`, 32:9 `5120×1440`), calling `UIContext::setViewportSize(newSize)` recomputes all viewport-dependent properties in place in **~0.28 ms for 1,000 elements** without recreating widgets. Layout is marked dirty only where dimensions changed.
 
 ---
 
