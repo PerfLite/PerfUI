@@ -64,6 +64,7 @@ add_includedirs("modules/postfx/include")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "src/backends/imgui/*.cpp",
         "src/skyrim/*.cpp",
         "third_party/pugixml/pugixml.cpp",
@@ -114,6 +115,7 @@ target("PerfUI_Test_Independence")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/BackendIndependenceTest.cpp"
     )
@@ -130,6 +132,7 @@ target("PerfUI_Test_Layout")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/LayoutTest.cpp"
     )
@@ -146,6 +149,7 @@ target("PerfUI_Test_Animation")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/AnimationTest.cpp"
     )
@@ -162,6 +166,7 @@ target("PerfUI_Test_WorldAnchor")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/WorldAnchorTest.cpp"
     )
@@ -178,6 +183,7 @@ target("PerfUI_Bench_ImGui")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "src/backends/imgui/ImGuiRenderBackend.cpp",
         "third_party/imgui/imgui.cpp",
@@ -195,6 +201,7 @@ target("PerfUI_Markup")
     add_files(
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp"
     )
 
@@ -210,6 +217,7 @@ target("PerfUI_Test_Markup")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/MarkupTest.cpp"
     )
@@ -226,6 +234,7 @@ target("PerfUI_Test_Overlay")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/OverlayTest.cpp"
     )
@@ -242,6 +251,7 @@ target("PerfUI_Test_Diagnostics")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/DiagnosticsTest.cpp"
     )
@@ -258,6 +268,7 @@ target("PerfUI_Test_Texture")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/TextureTest.cpp"
     )
@@ -277,6 +288,7 @@ target("PerfUI_Test_MapCanvas")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/MapCanvasTest.cpp"
     )
@@ -296,6 +308,7 @@ target("PerfUI_Test_Style")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/StyleSystemTest.cpp"
     )
@@ -312,8 +325,23 @@ target("PerfUI_Test_Svg")
         "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
         "third_party/pugixml/pugixml.cpp",
         "tests/SvgTest.cpp"
+    )
+
+target("PerfUI_Test_Settings")
+    set_kind("binary")
+    set_languages("c++20")
+    add_defines("PERFUI_STATIC")
+    add_syslinks("user32")
+    if is_plat("windows") then
+        add_cxflags("/utf-8", { force = true })
+    end
+    add_includedirs("include", "src", "src/settings")
+    add_files(
+        "src/settings/*.cpp",
+        "tests/SettingsTest.cpp"
     )
 
 
@@ -344,6 +372,7 @@ if has_config("perfui_lua") then
             "src/widgets/*.cpp",
         "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
             "third_party/pugixml/pugixml.cpp",
             "modules/lua/tests/ScriptHostTest.cpp"
         )
@@ -362,6 +391,7 @@ if has_config("perfui_lua") then
             "src/widgets/*.cpp",
             "src/markup/*.cpp",
         "src/style/*.cpp",
+        "src/settings/*.cpp",
             "third_party/pugixml/pugixml.cpp",
             "modules/lua/tests/LuaUiApiTest.cpp"
         )
@@ -414,6 +444,7 @@ if is_plat("windows") then
             "src/widgets/*.cpp",
             "src/markup/*.cpp",
             "src/style/*.cpp",
+        "src/settings/*.cpp",
             "src/backends/imgui/ImGuiRenderBackend.cpp",
             "third_party/pugixml/pugixml.cpp"
         )

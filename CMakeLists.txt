@@ -49,6 +49,7 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/ComboBox.h
     include/PerfUI/TextInput.h
     include/PerfUI/SettingsView.h
+    include/PerfUI/SettingsStore.h
     include/PerfUI/ConfigManager.h
     include/PerfUI/Toast.h
     include/PerfUI/ContextMenu.h
@@ -104,6 +105,8 @@ add_library(PerfUI_Core STATIC
     src/widgets/ComboBox.cpp
     src/widgets/TextInput.cpp
     src/widgets/SettingsView.cpp
+    src/settings/SettingsStore.cpp
+    src/settings/SimpleJson.h
     src/widgets/SettingsWindow.cpp
     src/widgets/Toast.cpp
     src/widgets/ContextMenu.cpp
@@ -414,6 +417,23 @@ add_test(NAME AnimationTest COMMAND PerfUI_Test_Animation)
 # ---------------------------------------------------------------------------
 # 15. PerfUI_Lua (Lua 5.4 scripting for mod logic; no Lua leaks into Core/Markup)
 # ---------------------------------------------------------------------------
+add_executable(PerfUI_Test_Settings
+    tests/SettingsTest.cpp
+    src/settings/SettingsStore.cpp
+)
+
+target_include_directories(PerfUI_Test_Settings PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/settings
+)
+
+target_compile_definitions(PerfUI_Test_Settings PRIVATE
+    PERFUI_STATIC
+)
+
+add_test(NAME SettingsTest COMMAND PerfUI_Test_Settings)
+
 option(PERFUI_ENABLE_LUA "Build the PerfUI_Lua module (Lua 5.4 runtime)" ON)
 
 if(PERFUI_ENABLE_LUA)
