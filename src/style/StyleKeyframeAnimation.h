@@ -297,10 +297,7 @@ struct ElementBaseStyleSnapshot {
             restoreBox = true;
         }
         if (restoreBox) {
-            if (!box.backgroundColor.has_value() && !box.borderColor.has_value() &&
-                !box.borderWidth.has_value() && !box.cornerRadius.has_value() &&
-                !box.shadow.has_value() && !box.opacity.has_value() &&
-                !box.liquidGlass.has_value() && box.backgroundTexture == 0) {
+            if (box.isEmpty()) {
                 el->style().box.normal.reset();
             } else {
                 el->style().box.normal = box;
@@ -335,10 +332,7 @@ struct ElementBaseStyleSnapshot {
         }
 
         if (el->style().text.normal.has_value()) {
-            const auto& t = *el->style().text.normal;
-            if (!t.color.has_value() && !t.fontSize.has_value() && !t.bold.has_value() &&
-                !t.italic.has_value() && !t.wrapWidth.has_value() && !t.shadowColor.has_value() &&
-                !t.shadowOffset.has_value()) {
+            if (el->style().text.normal->isEmpty()) {
                 el->style().text.normal.reset();
             }
         }

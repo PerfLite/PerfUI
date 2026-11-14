@@ -28,6 +28,16 @@ struct BoxStyle {
     std::optional<float> opacity;
     std::optional<bool> liquidGlass;
     TextureId backgroundTexture{ 0 };
+    std::optional<BlendMode> blendMode;
+    std::optional<Point> bgUv0;
+    std::optional<Point> bgUv1;
+    std::optional<Insets> bgSlice;
+
+    bool operator==(const BoxStyle& other) const = default;
+
+    bool isEmpty() const {
+        return *this == BoxStyle{};
+    }
 
     BoxStyle& bg(Color c) { backgroundColor = c; return *this; }
     BoxStyle& border(Color c, float width = 1.0f) { borderColor = c; borderWidth = width; return *this; }
@@ -39,6 +49,9 @@ struct BoxStyle {
     }
     BoxStyle& opac(float o) { opacity = o; return *this; }
     BoxStyle& texture(TextureId tex) { backgroundTexture = tex; return *this; }
+    BoxStyle& blend(BlendMode m) { blendMode = m; return *this; }
+    BoxStyle& uv(Point u0, Point u1) { bgUv0 = u0; bgUv1 = u1; return *this; }
+    BoxStyle& slice(Insets s) { bgSlice = s; return *this; }
 
     BoxStyle mergeWith(const BoxStyle& fallback) const {
         BoxStyle res = *this;
@@ -50,6 +63,10 @@ struct BoxStyle {
         if (!res.opacity.has_value()) res.opacity = fallback.opacity;
         if (!res.liquidGlass.has_value()) res.liquidGlass = fallback.liquidGlass;
         if (res.backgroundTexture == 0) res.backgroundTexture = fallback.backgroundTexture;
+        if (!res.blendMode.has_value()) res.blendMode = fallback.blendMode;
+        if (!res.bgUv0.has_value()) res.bgUv0 = fallback.bgUv0;
+        if (!res.bgUv1.has_value()) res.bgUv1 = fallback.bgUv1;
+        if (!res.bgSlice.has_value()) res.bgSlice = fallback.bgSlice;
         return res;
     }
 };
@@ -62,6 +79,13 @@ struct TextStyleOverride {
     std::optional<float> wrapWidth;
     std::optional<Color> shadowColor;
     std::optional<Point> shadowOffset;
+    std::optional<std::string> font;
+
+    bool operator==(const TextStyleOverride& other) const = default;
+
+    bool isEmpty() const {
+        return *this == TextStyleOverride{};
+    }
 
     TextStyleOverride& col(Color c) { color = c; return *this; }
     TextStyleOverride& size(float s) { fontSize = s; return *this; }
@@ -73,6 +97,7 @@ struct TextStyleOverride {
         shadowOffset = offset;
         return *this;
     }
+    TextStyleOverride& fontFamily(std::string f) { font = std::move(f); return *this; }
 
     TextStyle resolve(const TextStyle& fallback) const {
         TextStyle res = fallback;
@@ -93,6 +118,7 @@ struct TextStyleOverride {
         if (!res.wrapWidth.has_value()) res.wrapWidth = fallback.wrapWidth;
         if (!res.shadowColor.has_value()) res.shadowColor = fallback.shadowColor;
         if (!res.shadowOffset.has_value()) res.shadowOffset = fallback.shadowOffset;
+        if (!res.font.has_value()) res.font = fallback.font;
         return res;
     }
 };

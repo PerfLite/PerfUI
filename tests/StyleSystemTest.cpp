@@ -2248,6 +2248,80 @@ void TestBug4ImplicitAutoDimensionEscaping() {
     std::cout << "  -> Passed TestBug4ImplicitAutoDimensionEscaping" << std::endl;
 }
 
+void TestFix01EmptyStylesPreservation() {
+    std::cout << "[Test] Running TestFix01EmptyStylesPreservation..." << std::endl;
+
+    StyleSheet sheet;
+    sheet.loadString(R"(
+        @keyframes pulse-color {
+            0% { background-color: #ff0000; color: #00ff00; }
+            100% { background-color: #0000ff; color: #ffff00; }
+        }
+        .anim-pulse {
+            animation: pulse-color 0.5s ease;
+        }
+    )");
+
+    UIContext ctx;
+    ctx.styleSheet() = sheet;
+    MockRenderBackend mock;
+
+    auto* panel = ctx.root()->add<Panel>("TestPanel");
+    
+    // Set blendMode and UV in box.normal, and font in text.normal, but NO backgroundColor or color
+    BoxStyle bStyle;
+    bStyle.blend(BlendMode::Additive);
+    bStyle.uv(Point{ 0.1f, 0.2f }, Point{ 0.8f, 0.9f });
+    panel->style().box.normal = bStyle;
+
+    TextStyleOverride tStyle;
+    tStyle.fontFamily("CustomFont.ttf");
+    panel->style().text.normal = tStyle;
+
+    ctx.render(mock);
+
+    // Apply animation
+    panel->addClass("anim-pulse");
+    panel->applyStyle(sheet);
+
+    // Run halfway
+    ctx.update(0.25f);
+    ctx.render(mock);
+
+    // Complete animation (duration is 0.5s)
+    ctx.update(0.35f);
+    ctx.render(mock);
+
+    // Verify: animation finished, backgroundColor and color are restored,
+    // and box.normal and text.normal ARE NOT reset to nullopt because they contain blendMode/UV/font!
+    TEST_ASSERT(panel->style().box.normal.has_value(), "box.normal is preserved after animation");
+    TEST_ASSERT(panel->style().box.normal->blendMode == BlendMode::Additive, "blendMode is preserved");
+    TEST_ASSERT(panel->style().box.normal->bgUv0 == (Point{ 0.1f, 0.2f }), "bgUv0 is preserved");
+    TEST_ASSERT(panel->style().box.normal->bgUv1 == (Point{ 0.8f, 0.9f }), "bgUv1 is preserved");
+    TEST_ASSERT(!panel->style().box.normal->backgroundColor.has_value(), "backgroundColor is restored to empty");
+
+    TEST_ASSERT(panel->style().text.normal.has_value(), "text.normal is preserved after animation");
+    TEST_ASSERT(panel->style().text.normal->font.has_value() && *panel->style().text.normal->font == "CustomFont.ttf", "font is preserved");
+    TEST_ASSERT(!panel->style().text.normal->color.has_value(), "text color is restored to empty");
+
+    // Also test that an element with NO extra fields DOES get reset to nullopt when animation finishes!
+    auto* emptyPanel = ctx.root()->add<Panel>("EmptyPanel");
+    TEST_ASSERT(!emptyPanel->style().box.normal.has_value(), "emptyPanel has no initial box.normal");
+    TEST_ASSERT(!emptyPanel->style().text.normal.has_value(), "emptyPanel has no initial text.normal");
+
+    emptyPanel->addClass("anim-pulse");
+    emptyPanel->applyStyle(sheet);
+    ctx.update(0.25f);
+    ctx.render(mock);
+    ctx.update(0.35f);
+    ctx.render(mock);
+
+    TEST_ASSERT(!emptyPanel->style().box.normal.has_value(), "emptyPanel box.normal reset to nullopt after animation");
+    TEST_ASSERT(!emptyPanel->style().text.normal.has_value(), "emptyPanel text.normal reset to nullopt after animation");
+
+    std::cout << "  -> Passed TestFix01EmptyStylesPreservation" << std::endl;
+}
+
 
 
 
@@ -2273,6 +2347,7 @@ int main() {
     TestBug2ColorFontSizeRestoration();
     TestBug3BaseStyleClearing();
     TestBug4ImplicitAutoDimensionEscaping();
+    TestFix01EmptyStylesPreservation();
     TestKeyframeAnimationBenchmark();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;
