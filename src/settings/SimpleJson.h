@@ -91,6 +91,11 @@ public:
         return s_empty;
     }
 
+    std::string asString(const std::string& def) const {
+        if (m_type == Type::String) return m_string;
+        return def;
+    }
+
     std::string toString() const {
         if (m_type == Type::String) return m_string;
         if (m_type == Type::Bool) return m_bool ? "true" : "false";

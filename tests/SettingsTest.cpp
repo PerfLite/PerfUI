@@ -1,5 +1,7 @@
 #include "PerfUI/SettingsStore.h"
 #include "PerfUI/SettingsView.h"
+#include "PerfUI/SettingsSchema.h"
+#include "PerfUI/Localization.h"
 #include "MockRenderBackend.h"
 #include <iostream>
 #include <cassert>
@@ -471,6 +473,112 @@ void TestWidgetBindingAndTwoWaySync() {
     std::cout << "  -> Passed TestWidgetBindingAndTwoWaySync" << std::endl;
 }
 
+void TestDeclarativeSettingsSchema() {
+    std::cout << "[Test] Running TestDeclarativeSettingsSchema..." << std::endl;
+
+    auto& loc = LocalizationService::instance();
+    loc.setTranslation("en", "MOD_TITLE", "Survival Mode Overhaul");
+    loc.setTranslation("en", "PAGE_GENERAL", "General Features");
+    loc.setTranslation("en", "PAGE_DIFFICULTY", "Difficulty Tuning");
+
+    // 1. Valid multi-page schema with all types, localization, valueOptions
+    std::string validJson = R"({
+        "modName": "SurvivalMod",
+        "displayName": "$MOD_TITLE",
+        "pages": [
+            {
+                "pageDisplayName": "$PAGE_GENERAL",
+                "content": [
+                    { "type": "header", "text": "Core Mechanics" },
+                    { "type": "toggle", "id": "enableHunger", "text": "Enable Hunger", "help": "Characters require food", "groupControl": true, "valueOptions": { "default": true } },
+                    { "type": "slider", "id": "hungerRate", "text": "Hunger Rate", "groupCondition": true, "valueOptions": { "min": 0.1, "max": 5.0, "step": 0.1, "default": 1.5, "formatString": "%.1fx" } },
+                    { "type": "separator" },
+                    { "type": "color", "id": "hungerHudColor", "text": "Hunger Icon Color", "valueOptions": { "default": "#FFAA00" } },
+                    { "type": "keymap", "id": "eatQuickKey", "text": "Quick Eat Hotkey", "valueOptions": { "default": 48 } }
+                ]
+            },
+            {
+                "pageDisplayName": "$PAGE_DIFFICULTY",
+                "content": [
+                    { "type": "text", "text": "Adjust penalty multipliers below." },
+                    { "type": "stepper", "id": "damageMult", "text": "Exhaustion Damage", "valueOptions": { "min": 1, "max": 10, "step": 1, "default": 3 } },
+                    { "type": "menu", "id": "preset", "text": "Presets", "valueOptions": {
+                        "options": [
+                            { "id": "easy", "text": "Casual" },
+                            { "id": "normal", "text": "Standard" },
+                            { "id": "hardcore", "text": "Hardcore" }
+                        ],
+                        "default": "normal"
+                    }},
+                    { "type": "input", "id": "customProfile", "text": "Profile Name", "valueOptions": { "default": "DefaultProfile", "placeholder": "Enter name..." } },
+                    { "type": "empty", "height": 12.0 }
+                ]
+            }
+        ]
+    })";
+
+    SettingsView view("TestView");
+    auto res = SettingsSchemaLoader::loadFromString(validJson, "ValidSchema.json", &view);
+
+    TEST_ASSERT(res.success, "Schema loaded successfully");
+    TEST_ASSERT(res.modId == "SurvivalMod", "modId correctly extracted");
+    TEST_ASSERT(res.displayName == "Survival Mode Overhaul", "Localized displayName resolved");
+    TEST_ASSERT(res.pageTitles.size() == 2, "2 pages registered");
+    TEST_ASSERT(res.pageTitles[0] == "General Features", "Page 1 localized title");
+    TEST_ASSERT(res.pageTitles[1] == "Difficulty Tuning", "Page 2 localized title");
+
+    // Verify settings registered in store with proper defaults
+    auto& store = SettingsStore::GetSingleton();
+    TEST_ASSERT(store.getBool("SurvivalMod", "enableHunger") == true, "Hunger default true");
+    TEST_ASSERT(std::abs(store.getFloat("SurvivalMod", "hungerRate") - 1.5f) < 1e-4f, "Hunger rate default 1.5");
+    Color expectedColor = Color::FromHex("#FFAA00");
+    Color actualColor = store.getColor("SurvivalMod", "hungerHudColor");
+    TEST_ASSERT(actualColor.r == expectedColor.r && actualColor.g == expectedColor.g && actualColor.b == expectedColor.b, "Color default #FFAA00");
+    TEST_ASSERT(store.getKeyCode("SurvivalMod", "eatQuickKey") == 48, "Hotkey default 48");
+    TEST_ASSERT(store.getInt("SurvivalMod", "damageMult") == 3, "Stepper default 3");
+    TEST_ASSERT(store.getString("SurvivalMod", "preset") == "normal", "Menu default normal");
+    TEST_ASSERT(store.getString("SurvivalMod", "customProfile") == "DefaultProfile", "Input default DefaultProfile");
+
+    // 2. Corrupt / invalid JSON syntax
+    std::string corruptJson = "{ \"modName\": \"BadJson\", \"pages\": [ { unquoted_key } ";
+    auto corruptRes = SettingsSchemaLoader::loadFromString(corruptJson, "Corrupt.json", &view);
+    TEST_ASSERT(!corruptRes.success, "Corrupt JSON reports failure");
+    TEST_ASSERT(!corruptRes.errors.empty(), "Corrupt JSON records errors");
+
+    // 3. Unknown types and missing ID handling (resilience)
+    std::string resilientJson = R"({
+        "modName": "ResilientMod",
+        "displayName": "Resilience Test",
+        "content": [
+            { "type": "header", "text": "Valid Header" },
+            { "type": "unknown_future_widget", "text": "Should Skip" },
+            { "type": "toggle", "text": "Missing ID toggle" },
+            { "type": "toggle", "id": "validToggle", "text": "Valid Toggle", "valueOptions": { "default": true } }
+        ]
+    })";
+
+    SettingsView resilientView("ResilientView");
+    auto resilientRes = SettingsSchemaLoader::loadFromString(resilientJson, "Resilient.json", &resilientView);
+    TEST_ASSERT(!resilientRes.warnings.empty(), "Recorded warning for unknown type");
+    TEST_ASSERT(!resilientRes.errors.empty(), "Recorded error for missing id on toggle");
+    TEST_ASSERT(store.hasSetting("ResilientMod", "validToggle"), "Valid toggle was still registered and created despite errors");
+    TEST_ASSERT(store.getBool("ResilientMod", "validToggle") == true, "Valid toggle value set");
+
+    // 4. File round-trip test
+    auto tempFile = std::filesystem::temp_directory_path() / "PerfUI_Test_Schema.json";
+    {
+        std::ofstream out(tempFile, std::ios::trunc);
+        out << validJson;
+    }
+    SettingsView fileView("FileView");
+    auto fileRes = SettingsSchemaLoader::loadFromFile(tempFile, &fileView);
+    TEST_ASSERT(fileRes.success, "loadFromFile succeeded");
+    TEST_ASSERT(fileRes.modId == "SurvivalMod", "loadFromFile modId matches");
+    std::filesystem::remove(tempFile);
+
+    std::cout << "  -> Passed TestDeclarativeSettingsSchema" << std::endl;
+}
+
 int main() {
     std::cout << "=== Running PerfUI SettingsStore Tests ===" << std::endl;
 
@@ -482,6 +590,7 @@ int main() {
     TestDebounceSave();
     TestConcurrency();
     TestWidgetBindingAndTwoWaySync();
+    TestDeclarativeSettingsSchema();
 
     std::cout << "=== ALL SETTINGS TESTS PASSED ===" << std::endl;
     return 0;

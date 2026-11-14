@@ -50,6 +50,7 @@ add_library(PerfUI_Core STATIC
     include/PerfUI/TextInput.h
     include/PerfUI/SettingsView.h
     include/PerfUI/SettingsStore.h
+    include/PerfUI/SettingsSchema.h
     include/PerfUI/ConfigManager.h
     include/PerfUI/Toast.h
     include/PerfUI/ContextMenu.h
@@ -106,6 +107,7 @@ add_library(PerfUI_Core STATIC
     src/widgets/TextInput.cpp
     src/widgets/SettingsView.cpp
     src/settings/SettingsStore.cpp
+    src/settings/SettingsSchema.cpp
     src/settings/SimpleJson.h
     src/widgets/SettingsWindow.cpp
     src/widgets/Toast.cpp
