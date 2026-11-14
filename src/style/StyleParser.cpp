@@ -258,6 +258,11 @@ void StyleParser::parseKeyframesBlock() {
                 } else if (k == "animation-timing-function" || k == "animation-timing") {
                     EasingDef edef{ Easing::Linear };
                     if (parseEasingToken(v, edef)) step.timingFunction = edef;
+                } else {
+                    auto locIt = decl.propertyLocations.find(rawKey);
+                    int l = (locIt != decl.propertyLocations.end()) ? locIt->second.first : 0;
+                    int c = (locIt != decl.propertyLocations.end()) ? locIt->second.second : 0;
+                    warning("Property '" + rawKey + "' in @keyframes is not animatable", l, c);
                 }
             }
 
@@ -269,6 +274,33 @@ void StyleParser::parseKeyframesBlock() {
     std::stable_sort(kfDef.steps.begin(), kfDef.steps.end(), [](const KeyframeStep& a, const KeyframeStep& b) {
         return a.offset < b.offset;
     });
+
+    std::vector<KeyframeStep> mergedSteps;
+    mergedSteps.reserve(kfDef.steps.size());
+
+    for (auto& step : kfDef.steps) {
+        if (!mergedSteps.empty() && std::abs(mergedSteps.back().offset - step.offset) < 0.0001f) {
+            auto& prev = mergedSteps.back();
+            if (step.opacity.has_value()) prev.opacity = step.opacity;
+            if (step.transformScale.has_value()) prev.transformScale = step.transformScale;
+            if (step.transformOffsetPx.has_value()) prev.transformOffsetPx = step.transformOffsetPx;
+            if (step.transformOffsetPct.has_value()) prev.transformOffsetPct = step.transformOffsetPct;
+            if (step.backgroundColor.has_value()) prev.backgroundColor = step.backgroundColor;
+            if (step.borderColor.has_value()) prev.borderColor = step.borderColor;
+            if (step.borderWidth.has_value()) prev.borderWidth = step.borderWidth;
+            if (step.cornerRadius.has_value()) prev.cornerRadius = step.cornerRadius;
+            if (step.outlineColor.has_value()) prev.outlineColor = step.outlineColor;
+            if (step.outlineWidth.has_value()) prev.outlineWidth = step.outlineWidth;
+            if (step.outlineOffset.has_value()) prev.outlineOffset = step.outlineOffset;
+            if (step.color.has_value()) prev.color = step.color;
+            if (step.width.has_value()) prev.width = step.width;
+            if (step.height.has_value()) prev.height = step.height;
+            if (step.timingFunction.has_value()) prev.timingFunction = step.timingFunction;
+        } else {
+            mergedSteps.push_back(std::move(step));
+        }
+    }
+    kfDef.steps = std::move(mergedSteps);
 
     m_sheet.addKeyframes(std::move(kfDef));
 }
@@ -450,6 +482,8 @@ bool StyleParser::parseDeclarationBlock(StyleDeclaration& outDecl) {
             continue;
         }
 
+        int propLine = m_current.line;
+        int propCol = m_current.col;
         std::string propName = m_current.text;
         advance();
 
@@ -485,6 +519,7 @@ bool StyleParser::parseDeclarationBlock(StyleDeclaration& outDecl) {
         propVal = trimString(propVal);
         if (!propName.empty()) {
             outDecl.properties[propName] = propVal;
+            outDecl.propertyLocations[propName] = { propLine, propCol };
         }
     }
 

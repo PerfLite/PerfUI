@@ -1351,6 +1351,147 @@ void TestKeyframeAnimations() {
     timingPanel.update(0.25f); // now 0.5s
     TEST_ASSERT(std::abs(timingPanel.opacity() - 0.8f) < 0.02f, "Exact 50% keyframe reached at progress 0.5 (opacity 0.8)");
 
+    // 13. Test Point 5 details: fractional iterations, width constraint restore, sorting/merging, warnings, reducedMotion
+    StyleSheet detailsSheet;
+    detailsSheet.loadString(R"(
+        @keyframes unorderedDup {
+            100% { opacity: 1.0; }
+            from { opacity: 0.1; transform-scale: 1.0; }
+            50%  { opacity: 0.5; }
+            0%   { opacity: 0.3; } /* duplicate offset 0%: should override opacity 0.1 to 0.3 while keeping scale 1.0 */
+            to   { font-family: "Arial"; } /* non-animatable warning */
+        }
+        @keyframes fractionalAnim {
+            0%   { opacity: 0.0; }
+            100% { opacity: 1.0; }
+        }
+        @keyframes animWidth {
+            0%   { width: 100px; }
+            100% { width: 300px; }
+        }
+        .frac-normal {
+            animation: fractionalAnim 1.0s linear 1.5 normal forwards;
+        }
+        .frac-alt {
+            animation: fractionalAnim 1.0s linear 1.5 alternate forwards;
+        }
+        .width-box {
+            animation: animWidth 1.0s linear 1 none;
+        }
+    )", "test_style.pss");
+
+    // 5.4 Check sorting and duplicate merging
+    const auto* kfMerged = detailsSheet.findKeyframes("unorderedDup");
+    TEST_ASSERT(kfMerged != nullptr, "Keyframes unorderedDup parsed");
+    TEST_ASSERT(kfMerged->steps.size() == 3, "Merged duplicate 0% and 100% offsets into 3 unique steps (0%, 50%, 100%)");
+    TEST_ASSERT(kfMerged->steps[0].offset == 0.0f, "Step 0 is 0%");
+    TEST_ASSERT(kfMerged->steps[0].opacity == 0.3f, "Later duplicate 0% step overrode opacity to 0.3");
+    TEST_ASSERT(kfMerged->steps[0].transformScale == Point(1.0f, 1.0f), "Preserved transformScale 1.0 from earlier 0% step");
+    TEST_ASSERT(kfMerged->steps[1].offset == 0.5f, "Step 1 is 50%");
+    TEST_ASSERT(kfMerged->steps[2].offset == 1.0f, "Step 2 is 100%");
+
+    // 5.5 Check warning with file:line:col format
+    bool foundWarning = false;
+    for (const auto& w : detailsSheet.warnings()) {
+        if (w.find("Property 'font-family' in @keyframes is not animatable") != std::string::npos &&
+            w.find("test_style.pss:") != std::string::npos) {
+            foundWarning = true;
+            break;
+        }
+    }
+    TEST_ASSERT(foundWarning, "Warning generated with file:line:col for non-animatable property");
+
+    // 5.2 Fractional iteration count
+    Panel fracPanel;
+    fracPanel.addClass("frac-normal");
+    fracPanel.applyStyle(detailsSheet);
+    fracPanel.update(1.6f); // 1.5 iterations completed (1.5s)
+    TEST_ASSERT(std::abs(fracPanel.opacity() - 0.5f) < 0.05f, "Normal 1.5 iterations finishes at 50% frame (0.5 opacity)");
+
+    Panel fracAltPanel;
+    fracAltPanel.addClass("frac-alt");
+    fracAltPanel.applyStyle(detailsSheet);
+    fracAltPanel.update(1.6f);
+    TEST_ASSERT(std::abs(fracAltPanel.opacity() - 0.5f) < 0.05f, "Alternate 1.5 iterations finishes at 50% backward frame (0.5 opacity)");
+
+    // 5.3 Width DimensionConstraint restoration
+    Panel widthPanel;
+    widthPanel.layout().width(DimensionConstraint::Percent(60.0f));
+    widthPanel.addClass("width-box");
+    widthPanel.applyStyle(detailsSheet);
+    widthPanel.update(0.5f);
+    TEST_ASSERT(widthPanel.layout().width().mode == SizeMode::Fixed, "During animation width is fixed pixel constraint");
+    widthPanel.update(0.6f); // finished (1.1s > 1.0s)
+    TEST_ASSERT(widthPanel.layout().width().mode == SizeMode::Percent, "After animation without forwards fill, restored to Percent mode");
+    TEST_ASSERT(std::abs(widthPanel.layout().width().value - 60.0f) < 0.01f, "Restored original percent width constraint 60%");
+
+    // 5.1 reducedMotion handling
+    UIContext reducedCtx;
+    reducedCtx.setReducedMotion(true);
+
+    Panel rmPanel;
+    rmPanel.setContext(&reducedCtx);
+    rmPanel.addClass("frac-normal");
+    rmPanel.applyStyle(detailsSheet);
+    rmPanel.update(0.0f); // with reducedMotion, finishes instantly
+    TEST_ASSERT(!rmPanel.keyframeAnimations()->hasActiveAnimations(), "Finite animation finishes instantly in reducedMotion");
+    TEST_ASSERT(std::abs(rmPanel.opacity() - 0.5f) < 0.05f, "Finite animation with forwards fill takes final fractional frame in reducedMotion");
+
+    // 14. Edge cases: empty keyframes, single keyframe, paused play-state, infinite alternate
+    StyleSheet edgeSheet;
+    edgeSheet.loadString(R"(
+        @keyframes emptyAnim {
+        }
+        @keyframes singleKeyframeAnim {
+            50% { opacity: 0.8; }
+        }
+        .empty-box {
+            animation: emptyAnim 1s linear infinite;
+        }
+        .single-box {
+            opacity: 0.2;
+            animation: singleKeyframeAnim 1.0s linear 1 forwards;
+        }
+        .paused-box {
+            opacity: 0.2;
+            animation: singleKeyframeAnim 1.0s linear 1 forwards;
+            animation-play-state: paused;
+        }
+        .alt-inf-box {
+            opacity: 0.2;
+            animation: singleKeyframeAnim 1.0s linear infinite alternate;
+        }
+    )");
+
+    Panel emptyPanel;
+    emptyPanel.addClass("empty-box");
+    emptyPanel.applyStyle(edgeSheet);
+    emptyPanel.update(0.5f);
+    TEST_ASSERT(emptyPanel.keyframeAnimations() == nullptr || !emptyPanel.keyframeAnimations()->hasActiveAnimations(), "Empty keyframes does not create active running animation");
+
+    Panel singlePanel;
+    singlePanel.addClass("single-box");
+    singlePanel.applyStyle(edgeSheet);
+    singlePanel.update(0.25f);
+    TEST_ASSERT(std::abs(singlePanel.opacity() - 0.5f) < 0.05f, "Single frame at 50% uses implicit base at 0% (0.5 at 25%)");
+    singlePanel.update(0.25f);
+    TEST_ASSERT(std::abs(singlePanel.opacity() - 0.8f) < 0.05f, "Single frame reaches 0.8 at 50%");
+    singlePanel.update(0.5f);
+    TEST_ASSERT(std::abs(singlePanel.opacity() - 0.2f) < 0.05f, "Single frame returns to base 0.2 at 100%");
+
+    Panel pausedPanel;
+    pausedPanel.addClass("paused-box");
+    pausedPanel.applyStyle(edgeSheet);
+    pausedPanel.update(0.5f);
+    TEST_ASSERT(std::abs(pausedPanel.opacity() - 0.2f) < 0.01f, "Paused animation does not advance opacity");
+
+    Panel altInfPanel;
+    altInfPanel.addClass("alt-inf-box");
+    altInfPanel.applyStyle(edgeSheet);
+    altInfPanel.update(1.25f);
+    TEST_ASSERT(altInfPanel.keyframeAnimations()->hasActiveAnimations(), "Infinite alternate still active");
+    TEST_ASSERT(std::abs(altInfPanel.opacity() - 0.5f) < 0.05f, "Infinite alternate in reverse phase correctly interpolates");
+
     std::cout << "  -> Passed TestKeyframeAnimations" << std::endl;
 }
 

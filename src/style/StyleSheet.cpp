@@ -1157,19 +1157,39 @@ ComputedStyle StyleSheet::computeStyle(const UIElement* element, const ComputedS
 
     if (!element) return computed;
 
+    auto isShorthand = [](const std::string& prop) {
+        return prop == "animation" || prop == "transition" || prop == "border" || prop == "outline";
+    };
+
     // 2. Apply PSS rules in specificity order
     auto matched = matchRules(element, element->activePseudoClasses());
     for (const auto* rule : matched) {
         for (const auto& [k, v] : rule->declaration.properties) {
-            std::string resolved = resolveVariables(v);
-            applyPropertyToComputed(k, resolved, computed);
+            if (isShorthand(k)) {
+                std::string resolved = resolveVariables(v);
+                applyPropertyToComputed(k, resolved, computed);
+            }
+        }
+        for (const auto& [k, v] : rule->declaration.properties) {
+            if (!isShorthand(k)) {
+                std::string resolved = resolveVariables(v);
+                applyPropertyToComputed(k, resolved, computed);
+            }
         }
     }
 
     // 3. Apply inline XML attributes (Inline attributes beat PSS rules)
     for (const auto& [k, v] : element->inlineAttrs()) {
-        std::string resolved = resolveVariables(v);
-        applyPropertyToComputed(k, resolved, computed);
+        if (isShorthand(k)) {
+            std::string resolved = resolveVariables(v);
+            applyPropertyToComputed(k, resolved, computed);
+        }
+    }
+    for (const auto& [k, v] : element->inlineAttrs()) {
+        if (!isShorthand(k)) {
+            std::string resolved = resolveVariables(v);
+            applyPropertyToComputed(k, resolved, computed);
+        }
     }
 
     // 4. Resolve border-image to texture if context is available

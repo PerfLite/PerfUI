@@ -344,6 +344,24 @@ public:
         m_instances = std::move(newInstances);
 
         if (element) {
+            bool reduced = element->context() && element->context()->reducedMotion();
+            if (reduced) {
+                for (auto& inst : m_instances) {
+                    inst.finished = true;
+                    if (inst.isInfinite()) {
+                        applyStepAtProgress(0.0f, inst, element);
+                    } else {
+                        if (inst.spec.fillMode == AnimationFillMode::Forwards || inst.spec.fillMode == AnimationFillMode::Both) {
+                            float finalP = calculateFinalProgress(inst);
+                            applyStepAtProgress(finalP, inst, element);
+                        } else {
+                            m_baseSnapshot.restore(element);
+                        }
+                    }
+                }
+                return;
+            }
+
             for (const auto& inst : m_instances) {
                 if (inst.elapsedTime == 0.0f && (inst.spec.delay <= 0.0f || inst.spec.fillMode == AnimationFillMode::Backwards || inst.spec.fillMode == AnimationFillMode::Both)) {
                     applyStepAtProgress(0.0f, inst, element);
@@ -373,8 +391,52 @@ public:
         return m_baseSnapshot;
     }
 
+    static float calculateFinalProgress(const ActiveKeyframeAnimation& inst) {
+        float cycleFloat = inst.spec.iterationCount;
+        int cycleIndex = static_cast<int>(cycleFloat);
+        float frac = cycleFloat - static_cast<float>(cycleIndex);
+        if (frac <= 0.0001f && cycleIndex > 0) {
+            cycleIndex -= 1;
+            frac = 1.0f;
+        }
+        bool reverse = false;
+        switch (inst.spec.direction) {
+        case AnimationDirection::Reverse:
+            reverse = true;
+            break;
+        case AnimationDirection::Alternate:
+            reverse = (cycleIndex % 2 == 1);
+            break;
+        case AnimationDirection::AlternateReverse:
+            reverse = (cycleIndex % 2 == 0);
+            break;
+        default:
+            break;
+        }
+        return reverse ? (1.0f - frac) : frac;
+    }
+
     void update(float dt, UIElement* element) {
         if (!element || m_instances.empty()) return;
+
+        bool reducedMotion = element && element->context() && element->context()->reducedMotion();
+        if (reducedMotion) {
+            for (auto& inst : m_instances) {
+                inst.finished = true;
+                if (inst.isInfinite()) {
+                    // In reduced motion mode, freeze infinite animations at initial 0% frame
+                    applyStepAtProgress(0.0f, inst, element);
+                } else {
+                    if (inst.spec.fillMode == AnimationFillMode::Forwards || inst.spec.fillMode == AnimationFillMode::Both) {
+                        float finalP = calculateFinalProgress(inst);
+                        applyStepAtProgress(finalP, inst, element);
+                    } else {
+                        m_baseSnapshot.restore(element);
+                    }
+                }
+            }
+            return;
+        }
 
         for (auto& inst : m_instances) {
             if (inst.spec.playState == AnimationPlayState::Paused || inst.finished) continue;
@@ -397,16 +459,7 @@ public:
             if (!infinite && activeTime >= totalDuration) {
                 inst.finished = true;
                 if (inst.spec.fillMode == AnimationFillMode::Forwards || inst.spec.fillMode == AnimationFillMode::Both) {
-                    // Final frame depends on direction & iteration count
-                    float finalP = 1.0f;
-                    int finalCycle = static_cast<int>(inst.spec.iterationCount);
-                    if (inst.spec.direction == AnimationDirection::Reverse) {
-                        finalP = 0.0f;
-                    } else if (inst.spec.direction == AnimationDirection::Alternate) {
-                        if (finalCycle % 2 == 0) finalP = 0.0f;
-                    } else if (inst.spec.direction == AnimationDirection::AlternateReverse) {
-                        if (finalCycle % 2 != 0) finalP = 0.0f;
-                    }
+                    float finalP = calculateFinalProgress(inst);
                     applyStepAtProgress(finalP, inst, element);
                 } else {
                     m_baseSnapshot.restore(element);

@@ -414,6 +414,9 @@ void UIElement::update(float deltaTime) {
         if (m_transitions && m_transitions->hasActiveTransitions()) {
             m_transitions->finishAll(this);
         }
+        if (m_keyframeAnimations && m_keyframeAnimations->hasActiveAnimations()) {
+            m_keyframeAnimations->update(0.0f, this);
+        }
     } else {
         float effectiveDt = deltaTime;
         if (m_context) {

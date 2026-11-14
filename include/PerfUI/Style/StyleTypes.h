@@ -67,6 +67,7 @@ struct ComplexSelector {
 
 struct StyleDeclaration {
     std::unordered_map<std::string, std::string> properties;
+    std::unordered_map<std::string, std::pair<int, int>> propertyLocations;
 };
 
 struct StyleRule {
