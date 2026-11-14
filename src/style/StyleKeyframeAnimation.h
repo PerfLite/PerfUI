@@ -6,6 +6,7 @@
 #include "PerfUI/Style/StyleTypes.h"
 #include "PerfUI/Style/StyleSheet.h"
 #include "PerfUI/UIElement.h"
+#include "StyleTransition.h"
 #include <cmath>
 #include <vector>
 #include <algorithm>
@@ -71,6 +72,10 @@ struct ElementBaseStyleSnapshot {
     std::optional<float> fontSize;
     DimensionConstraint width{ DimensionConstraint::Auto() };
     DimensionConstraint height{ DimensionConstraint::Auto() };
+    float measuredWidth{ 0.0f };
+    float measuredHeight{ 0.0f };
+    bool widthTrackActive{ false };
+    bool heightTrackActive{ false };
     uint32_t cascadeMask{ 0 };
     bool captured{ false };
 
@@ -112,12 +117,23 @@ struct ElementBaseStyleSnapshot {
         }
         width = el->layout().width();
         height = el->layout().height();
+        if (el) {
+            measuredWidth = el->bounds().width;
+            measuredHeight = el->bounds().height;
+        }
         captured = true;
     }
 
     void updateFromComputed(const ComputedStyle& c, const UIElement* el) {
         if (!captured) {
             capture(el);
+        }
+
+        if (!widthTrackActive && el && el->bounds().width > 0.0f) {
+            measuredWidth = el->bounds().width;
+        }
+        if (!heightTrackActive && el && el->bounds().height > 0.0f) {
+            measuredHeight = el->bounds().height;
         }
 
         if (c.opacity.has_value()) {
@@ -256,21 +272,27 @@ struct ElementBaseStyleSnapshot {
             el->setRenderOffset(transformOffsetPx, transformOffsetPct);
         }
 
+        const StyleTransitionController* trans = el->transitions();
+        bool hasBgTrans = trans && trans->trackBackground.active;
+        bool hasBcTrans = trans && trans->trackBorderColor.active;
+        bool hasBwTrans = trans && trans->trackBorderWidth.active;
+        bool hasCrTrans = trans && trans->trackCornerRadius.active;
+
         bool restoreBox = false;
         BoxStyle box = el->style().box.normal.value_or(BoxStyle{});
-        if (propsMask & (1 << 3)) {
+        if ((propsMask & (1 << 3)) && !hasBgTrans) {
             box.backgroundColor = backgroundColor;
             restoreBox = true;
         }
-        if (propsMask & (1 << 4)) {
+        if ((propsMask & (1 << 4)) && !hasBcTrans) {
             box.borderColor = borderColor;
             restoreBox = true;
         }
-        if (propsMask & (1 << 5)) {
+        if ((propsMask & (1 << 5)) && !hasBwTrans) {
             box.borderWidth = borderWidth;
             restoreBox = true;
         }
-        if (propsMask & (1 << 6)) {
+        if ((propsMask & (1 << 6)) && !hasCrTrans) {
             box.cornerRadius = cornerRadius;
             restoreBox = true;
         }
@@ -506,8 +528,8 @@ struct AnimationTracks {
         float baseFs = base.fontSize.value_or(16.0f);
         fontSize.buildFromSteps(def.steps, baseFs, [](const KeyframeStep& s) { return s.fontSize; });
 
-        float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (el ? el->bounds().width : 0.0f);
-        float baseH = (base.height.mode == SizeMode::Fixed) ? base.height.value : (el ? el->bounds().height : 0.0f);
+        float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (base.measuredWidth > 0.0f ? base.measuredWidth : (el ? el->bounds().width : 0.0f));
+        float baseH = (base.height.mode == SizeMode::Fixed) ? base.height.value : (base.measuredHeight > 0.0f ? base.measuredHeight : (el ? el->bounds().height : 0.0f));
         width.buildFromSteps(def.steps, baseW, [](const KeyframeStep& s) { return s.width; });
         height.buildFromSteps(def.steps, baseH, [](const KeyframeStep& s) { return s.height; });
     }
@@ -563,8 +585,8 @@ struct AnimationTracks {
             fontSize.updateImplicitStops(base.fontSize.value_or(16.0f));
         }
 
-        float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (el ? el->bounds().width : 0.0f);
-        float baseH = (base.height.mode == SizeMode::Fixed) ? base.height.value : (el ? el->bounds().height : 0.0f);
+        float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (base.measuredWidth > 0.0f ? base.measuredWidth : (el ? el->bounds().width : 0.0f));
+        float baseH = (base.height.mode == SizeMode::Fixed) ? base.height.value : (base.measuredHeight > 0.0f ? base.measuredHeight : (el ? el->bounds().height : 0.0f));
         if (width.active) width.updateImplicitStops(baseW);
         if (height.active) height.updateImplicitStops(baseH);
     }
@@ -700,7 +722,21 @@ public:
         m_baseSnapshot.restoreProperties(targetMask, element);
     }
 
+    void updateTrackActivityFlags() {
+        bool anyW = false;
+        bool anyH = false;
+        for (const auto& inst : m_instances) {
+            if (!inst.finished && inst.spec.playState == AnimationPlayState::Running) {
+                if (inst.tracks.width.active) anyW = true;
+                if (inst.tracks.height.active) anyH = true;
+            }
+        }
+        m_baseSnapshot.widthTrackActive = anyW;
+        m_baseSnapshot.heightTrackActive = anyH;
+    }
+
     void updateBaseFromComputed(UIElement* el, const ComputedStyle& c) {
+        updateTrackActivityFlags();
         m_baseSnapshot.updateFromComputed(c, el);
         for (auto& inst : m_instances) {
             inst.tracks.updateBase(m_baseSnapshot, el);
@@ -710,6 +746,13 @@ public:
     void applyAnimations(UIElement* element, const std::vector<AnimationSpec>& specs, const StyleSheet& sheet) {
         if (element && !m_baseSnapshot.captured) {
             m_baseSnapshot.capture(element);
+        } else if (element) {
+            if (!m_baseSnapshot.widthTrackActive && element->bounds().width > 0.0f) {
+                m_baseSnapshot.measuredWidth = element->bounds().width;
+            }
+            if (!m_baseSnapshot.heightTrackActive && element->bounds().height > 0.0f) {
+                m_baseSnapshot.measuredHeight = element->bounds().height;
+            }
         }
 
         // Restore properties for animations that were removed and not filled forwards
@@ -765,6 +808,7 @@ public:
         }
 
         m_instances = std::move(newInstances);
+        updateTrackActivityFlags();
 
         if (element) {
             bool reduced = element->context() && element->context()->reducedMotion();
@@ -814,6 +858,7 @@ public:
             m_baseSnapshot.captured = false;
         }
         m_instances.clear();
+        updateTrackActivityFlags();
     }
 
     const ElementBaseStyleSnapshot& baseSnapshot() const {
@@ -918,6 +963,7 @@ public:
 
             applyStepAtProgress(progress, inst, element);
         }
+        updateTrackActivityFlags();
     }
 
 private:

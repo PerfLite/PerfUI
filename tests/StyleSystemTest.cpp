@@ -2178,6 +2178,77 @@ void TestBug3BaseStyleClearing() {
     std::cout << "  -> Passed TestBug3BaseStyleClearing" << std::endl;
 }
 
+void TestBug4ImplicitAutoDimensionEscaping() {
+    std::cout << "[Test] Running TestBug4ImplicitAutoDimensionEscaping..." << std::endl;
+
+    UIContext ctx;
+    ctx.setViewportSize({ 1000.0f, 1000.0f });
+    MockRenderBackend mock;
+
+    StyleSheet& sheet = ctx.styleSheet();
+    sheet.loadString(R"(
+        @keyframes expandWidth {
+            to { width: 200px; }
+        }
+        .anim-expand {
+            animation: expandWidth 1.0s linear 1;
+        }
+        .hover-color {
+            color: #ffff00;
+        }
+    )");
+
+    auto* parent = ctx.root()->add<Panel>("Parent");
+    parent->layout()
+        .direction(LayoutDirection::Vertical)
+        .alignment(Alignment::Start)
+        .width(DimensionConstraint::Auto())
+        .height(DimensionConstraint::Fixed(50.0f))
+        .padding(0.0f)
+        .gap(0.0f);
+
+    // Child gives parent content-measured width of 100px
+    auto* child = parent->add<Panel>("Child");
+    child->layout().width(DimensionConstraint::Fixed(100.0f)).height(DimensionConstraint::Fixed(50.0f));
+
+    // Initial layout calculation
+    ctx.render(mock);
+    std::cout << "Initial parent width: " << parent->bounds().width << std::endl;
+    TEST_ASSERT(std::abs(parent->bounds().width - 100.0f) < 0.5f, "Initial measured width from Auto layout is 100px");
+
+    // Add animation
+    parent->addClass("anim-expand");
+    parent->applyStyle(sheet);
+
+    // Run 40% through animation (t = 0.4s) -> width should be 100 + (200 - 100)*0.4 = 140px
+    ctx.update(0.4f);
+    ctx.render(mock);
+    TEST_ASSERT(std::abs(parent->bounds().width - 140.0f) < 1.0f, "At t=0.4s, width is 140px");
+
+    // While animation is at 140px, a hover or style reload triggers updateBaseFromComputed!
+    parent->addClass("hover-color");
+    parent->applyStyle(sheet);
+
+    // Now advance to t = 0.5s (0.1s step).
+    // At t=0.5s of 1.0s linear animation from 100 to 200, width MUST BE 150px!
+    // (If Bug 4 is present, start escaped to 140px and at 50% it evaluates to 170px)
+    ctx.update(0.1f);
+    ctx.render(mock);
+    std::cout << "At t=0.5s after style reload, parent width = " << parent->bounds().width << std::endl;
+    TEST_ASSERT(std::abs(parent->bounds().width - 150.0f) < 1.5f, "Width at t=0.5s is 150px (implicit start did not escape to 140px)");
+
+    // Run to completion (total 1.1s > 1.0s)
+    ctx.update(0.6f);
+    ctx.render(mock);
+
+    // After animation ends without forwards, width constraint MUST be restored to Auto!
+    TEST_ASSERT(parent->layout().width().mode == SizeMode::Auto, "Width mode restored to Auto after animation completion");
+    TEST_ASSERT(std::abs(parent->bounds().width - 100.0f) < 0.5f, "Parent width adapted back to 100px content width");
+
+    std::cout << "  -> Passed TestBug4ImplicitAutoDimensionEscaping" << std::endl;
+}
+
+
 
 
 
@@ -2201,6 +2272,7 @@ int main() {
     TestBug1SimultaneousAnimationRemoval();
     TestBug2ColorFontSizeRestoration();
     TestBug3BaseStyleClearing();
+    TestBug4ImplicitAutoDimensionEscaping();
     TestKeyframeAnimationBenchmark();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;
