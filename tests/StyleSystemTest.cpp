@@ -1579,6 +1579,130 @@ void TestKeyframeAnimationBenchmark() {
     std::cout << "  -> Passed TestKeyframeAnimationBenchmark" << std::endl;
 }
 
+void TestKeyframeBaseRestorationAndTracks() {
+    std::cout << "[Test] Running TestKeyframeBaseRestorationAndTracks..." << std::endl;
+
+    StyleSheet sheet;
+    sheet.loadString(R"(
+        @keyframes fadeToFull {
+            to { opacity: 1.0; }
+        }
+        @keyframes animBorderColor {
+            to { border-color: #ff0000; }
+        }
+        @keyframes animBgRed {
+            to { background: #ff0000; }
+        }
+        @keyframes animScaleOnly {
+            0%   { transform-scale: 1.0; }
+            50%  { transform-scale: 2.0; }
+            100% { transform-scale: 1.0; }
+        }
+        @keyframes animBgOnly {
+            0%   { background-color: #0000ff; }
+            100% { background-color: #00ff00; }
+        }
+
+        .base-op-20 {
+            opacity: 0.2;
+            animation: fadeToFull 1.0s linear 1 none;
+        }
+        .base-op-60 {
+            opacity: 0.6;
+            animation: fadeToFull 1.0s linear 1 none;
+        }
+        .scale-box {
+            animation: animScaleOnly 1.0s linear 1 none;
+        }
+        .multi-anim-box {
+            animation: animScaleOnly 1.0s linear 1 none, animBgOnly 2.0s linear 1 none;
+        }
+        .border-box {
+            animation: animBorderColor 1.0s linear 1 forwards;
+        }
+        .bg-box {
+            animation: animBgRed 1.0s linear 1 none;
+        }
+    )");
+
+    // A1. Test base snapshot freshness when class/style changes during animation
+    Panel pA1;
+    pA1.addClass("base-op-20");
+    pA1.applyStyle(sheet);
+    pA1.update(0.5f); // halfway
+    // Change base class midway
+    pA1.removeClass("base-op-20");
+    pA1.addClass("base-op-60");
+    pA1.applyStyle(sheet);
+    pA1.update(0.6f); // finished (total 1.1s > 1.0s)
+    TEST_ASSERT(!pA1.keyframeAnimations()->hasActiveAnimations(), "Animation finished");
+    TEST_ASSERT(std::abs(pA1.opacity() - 0.6f) < 0.05f, "After finish without forwards, restored to updated base opacity 0.6 (not old 0.2)");
+
+    // A2. Selective restoration & layout dirty flag
+    Panel pA2;
+    pA2.addClass("base-op-20");
+    pA2.applyStyle(sheet);
+    pA2.measure({ 100, 100 });
+    pA2.arrange({ 0, 0, 100, 100 });
+    TEST_ASSERT(!pA2.isLayoutDirty(), "Layout clean before animation update");
+    // Change scale manually from C++ during opacity animation
+    pA2.setRenderScale(Point{ 3.0f, 3.0f });
+    pA2.update(1.1f); // finish opacity animation
+    TEST_ASSERT(!pA2.isLayoutDirty(), "Pure visual animation finish did NOT mark layout dirty");
+    TEST_ASSERT(std::abs(pA2.renderScale().x - 3.0f) < 0.01f, "Manual C++ scale 3.0 was NOT wiped by opacity animation finish");
+
+    // A2. Multi-animation: finish of one does not wipe property animated by other
+    Panel pMulti;
+    pMulti.addClass("multi-anim-box");
+    pMulti.applyStyle(sheet);
+    pMulti.update(1.1f); // animScaleOnly finished (1.0s), animBgOnly still running (2.0s)
+    TEST_ASSERT(pMulti.keyframeAnimations()->hasActiveAnimations(), "Multi-anim still has animBgOnly running");
+    TEST_ASSERT(std::abs(pMulti.renderScale().x - 1.0f) < 0.05f, "Finished scale animation restored scale");
+
+    // A3. Missing border: at t=0 border is not visible (alpha 0), at t=1 it is red
+    Panel pBorder;
+    pBorder.addClass("border-box");
+    pBorder.applyStyle(sheet);
+    pBorder.update(0.0f); // start
+    BoxStyle bsBorder0 = pBorder.resolveBoxStyle(WidgetState::Normal);
+    Color col0 = bsBorder0.borderColor.value_or(Color::Transparent());
+    TEST_ASSERT(col0.a == 0, "Element without base border starts at border alpha 0 (invisible at t=0)");
+
+    pBorder.update(1.0f); // end
+    BoxStyle bsBorder1 = pBorder.resolveBoxStyle(WidgetState::Normal);
+    Color col1 = bsBorder1.borderColor.value_or(Color::Transparent());
+    TEST_ASSERT(col1.r == 255 && col1.g == 0 && col1.b == 0 && col1.a == 255, "At t=1 border is fully red");
+
+    // A3. Missing border-width animates from 0.0px, not 1.0px
+    StyleSheet bwSheet;
+    bwSheet.loadString(R"(
+        @keyframes animBw {
+            to { border-width: 4px; }
+        }
+        .bw-box {
+            animation: animBw 1.0s linear 1 forwards;
+        }
+    )");
+    Panel pBw;
+    pBw.addClass("bw-box");
+    pBw.applyStyle(bwSheet);
+    pBw.update(0.5f); // at 50% it should be 2.0px (from 0 to 4), NOT 2.5px (from 1 to 4)
+    float midBw = pBw.style().box.normal.has_value() ? pBw.style().box.normal->borderWidth.value_or(0.0f) : 0.0f;
+    TEST_ASSERT(std::abs(midBw - 2.0f) < 0.05f, "Element without base border animates border-width from 0 (at 50% is 2px, not 2.5px)");
+
+    // A3. Color lerp from transparent: at t=0.5 with red target, RGB is pure red without darkening
+    Panel pBg;
+    pBg.addClass("bg-box");
+    pBg.applyStyle(sheet);
+    pBg.update(0.5f);
+    BoxStyle bs = pBg.resolveBoxStyle(WidgetState::Normal);
+    Color midCol = bs.backgroundColor.value_or(Color::Transparent());
+    TEST_ASSERT(midCol.r > 240, "Midway background color red channel is fully vibrant (not darkened to 127)");
+    TEST_ASSERT(midCol.a > 100 && midCol.a < 155, "Midway background alpha is ~127");
+
+    std::cout << "  -> Passed TestKeyframeBaseRestorationAndTracks" << std::endl;
+}
+
 int main() {
     std::cout << "=== Running PerfUI Style System & Components Tests ===" << std::endl;
 
@@ -1593,6 +1717,7 @@ int main() {
     TestSpringTransitions();
     TestViewportUnits();
     TestKeyframeAnimations();
+    TestKeyframeBaseRestorationAndTracks();
     TestKeyframeAnimationBenchmark();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;

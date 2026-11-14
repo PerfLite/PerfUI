@@ -2,6 +2,7 @@
 
 #include "PerfUI/Types.h"
 #include "PerfUI/Animation.h"
+#include "PerfUI/Theme.h"
 #include "PerfUI/Style/StyleTypes.h"
 #include "PerfUI/Style/StyleSheet.h"
 #include "PerfUI/UIElement.h"
@@ -21,7 +22,30 @@ inline T LerpValue(const T& a, const T& b, float t) {
 
 template<>
 inline Color LerpValue<Color>(const Color& a, const Color& b, float t) {
-    return Color::Lerp(a, b, t);
+    if (a == b) return a;
+    if (a.a == 0 && b.a == 0) return Color{ 0, 0, 0, 0 };
+    if (a.a == 0) {
+        return Color(b.r, b.g, b.b, static_cast<uint8_t>(b.a * t + 0.5f));
+    }
+    if (b.a == 0) {
+        return Color(a.r, a.g, a.b, static_cast<uint8_t>(a.a * (1.0f - t) + 0.5f));
+    }
+    // Premultiplied alpha Lerp to avoid dark fringes:
+    float af = a.a / 255.0f;
+    float bf = b.a / 255.0f;
+    float outA = af + (bf - af) * t;
+    if (outA <= 0.0001f) {
+        return Color{ 0, 0, 0, 0 };
+    }
+    float outR = (a.r * af * (1.0f - t) + b.r * bf * t) / outA;
+    float outG = (a.g * af * (1.0f - t) + b.g * bf * t) / outA;
+    float outB = (a.b * af * (1.0f - t) + b.b * bf * t) / outA;
+    return Color(
+        static_cast<uint8_t>((std::clamp)(outR + 0.5f, 0.0f, 255.0f)),
+        static_cast<uint8_t>((std::clamp)(outG + 0.5f, 0.0f, 255.0f)),
+        static_cast<uint8_t>((std::clamp)(outB + 0.5f, 0.0f, 255.0f)),
+        static_cast<uint8_t>((std::clamp)(outA * 255.0f + 0.5f, 0.0f, 255.0f))
+    );
 }
 
 template<>
@@ -71,31 +95,95 @@ struct ElementBaseStyleSnapshot {
         captured = true;
     }
 
-    void restore(UIElement* el) const {
-        if (!el || !captured) return;
-        if (!el->isAlphaAnimating()) el->setOpacity(opacity);
-        if (!el->isScaleAnimating()) el->setRenderScale(transformScale);
-        if (!el->isPositionAnimating()) el->setRenderOffset(transformOffsetPx, transformOffsetPct);
-        if (el->style().box.normal.has_value() || backgroundColor || borderColor || borderWidth || cornerRadius) {
-            BoxStyle box = el->style().box.normal.value_or(BoxStyle{});
+    void updateFromComputed(const ComputedStyle& c, const UIElement* el) {
+        if (!captured) {
+            capture(el);
+        }
+        if (c.opacity.has_value()) opacity = *c.opacity;
+        if (c.transformScale.has_value()) transformScale = *c.transformScale;
+        if (c.transformOffsetPx.has_value()) transformOffsetPx = *c.transformOffsetPx;
+        if (c.transformOffsetPct.has_value()) transformOffsetPct = *c.transformOffsetPct;
+        if (c.backgroundColor.has_value()) backgroundColor = *c.backgroundColor;
+        if (c.borderColor.has_value()) borderColor = *c.borderColor;
+        if (c.borderWidth.has_value()) borderWidth = *c.borderWidth;
+        if (c.cornerRadius.has_value()) cornerRadius = *c.cornerRadius;
+        if (c.outlineColor.has_value()) outlineColor = *c.outlineColor;
+        if (c.outlineWidth.has_value()) outlineWidth = *c.outlineWidth;
+        if (c.outlineOffset.has_value()) outlineOffset = *c.outlineOffset;
+        if (c.color.has_value()) color = *c.color;
+        if (c.widthConstraint.has_value()) width = *c.widthConstraint;
+        else if (c.width.has_value()) width = DimensionConstraint::Fixed(*c.width);
+        if (c.heightConstraint.has_value()) height = *c.heightConstraint;
+        else if (c.height.has_value()) height = DimensionConstraint::Fixed(*c.height);
+        captured = true;
+    }
+
+    void restoreProperties(uint16_t propsMask, UIElement* el) const {
+        if (!el || !captured || propsMask == 0) return;
+
+        if ((propsMask & (1 << 0)) && !el->isAlphaAnimating()) {
+            el->setOpacity(opacity);
+        }
+        if ((propsMask & (1 << 1)) && !el->isScaleAnimating()) {
+            el->setRenderScale(transformScale);
+        }
+        if ((propsMask & (1 << 2)) && !el->isPositionAnimating()) {
+            el->setRenderOffset(transformOffsetPx, transformOffsetPct);
+        }
+
+        bool restoreBox = false;
+        BoxStyle box = el->style().box.normal.value_or(BoxStyle{});
+        if (propsMask & (1 << 3)) {
             box.backgroundColor = backgroundColor;
+            restoreBox = true;
+        }
+        if (propsMask & (1 << 4)) {
             box.borderColor = borderColor;
+            restoreBox = true;
+        }
+        if (propsMask & (1 << 5)) {
             box.borderWidth = borderWidth;
+            restoreBox = true;
+        }
+        if (propsMask & (1 << 6)) {
             box.cornerRadius = cornerRadius;
+            restoreBox = true;
+        }
+        if (restoreBox) {
             el->style().box.normal = box;
         }
-        if (outlineColor.has_value()) el->setOutlineColor(*outlineColor);
-        else el->setOutlineColor(Color{ 0, 0, 0, 0 });
-        el->setOutlineWidth(outlineWidth);
-        el->setOutlineOffset(outlineOffset);
-        if (color.has_value()) {
-            TextStyleOverride text = el->style().text.normal.value_or(TextStyleOverride{});
-            text.color = color;
-            el->style().text.normal = text;
+
+        if (propsMask & (1 << 7)) {
+            if (outlineColor.has_value()) el->setOutlineColor(*outlineColor);
+            else el->setOutlineColor(Color{ 0, 0, 0, 0 });
+            el->setOutlineWidth(outlineWidth);
+            el->setOutlineOffset(outlineOffset);
         }
-        el->layout().width(width);
-        el->layout().height(height);
-        el->markLayoutDirty();
+
+        if (propsMask & (1 << 8)) {
+            if (color.has_value()) {
+                TextStyleOverride text = el->style().text.normal.value_or(TextStyleOverride{});
+                text.color = color;
+                el->style().text.normal = text;
+            }
+        }
+
+        bool dirtyLayout = false;
+        if (propsMask & (1 << 9)) {
+            el->layout().width(width);
+            dirtyLayout = true;
+        }
+        if (propsMask & (1 << 10)) {
+            el->layout().height(height);
+            dirtyLayout = true;
+        }
+        if (dirtyLayout) {
+            el->markLayoutDirty();
+        }
+    }
+
+    void restoreAll(UIElement* el) const {
+        restoreProperties(0xFFFF, el);
     }
 };
 
@@ -110,11 +198,15 @@ template<typename T>
 struct PropertyTrack {
     std::vector<PropertyKeyframe<T>> stops;
     bool active{ false };
+    bool hasImplicitStart{ false };
+    bool hasImplicitEnd{ false };
 
     template<typename Getter>
     void buildFromSteps(const std::vector<KeyframeStep>& steps, const T& baseValue, Getter getter) {
         stops.clear();
         active = false;
+        hasImplicitStart = false;
+        hasImplicitEnd = false;
 
         for (const auto& step : steps) {
             auto valOpt = getter(step);
@@ -136,11 +228,23 @@ struct PropertyTrack {
                 firstTiming = steps.front().timingFunction;
             }
             stops.insert(stops.begin(), { 0.0f, baseValue, firstTiming });
+            hasImplicitStart = true;
         }
 
         // Implicit end keyframe (offset == 1.0f)
         if (stops.back().offset < 0.9999f) {
             stops.push_back({ 1.0f, baseValue, std::nullopt });
+            hasImplicitEnd = true;
+        }
+    }
+
+    void updateImplicitStops(const T& baseValue) {
+        if (!active) return;
+        if (hasImplicitStart && !stops.empty() && stops.front().offset <= 0.0001f) {
+            stops.front().value = baseValue;
+        }
+        if (hasImplicitEnd && !stops.empty() && stops.back().offset >= 0.9999f) {
+            stops.back().value = baseValue;
         }
     }
 
@@ -201,19 +305,86 @@ struct AnimationTracks {
         transformScale.buildFromSteps(def.steps, base.transformScale, [](const KeyframeStep& s) { return s.transformScale; });
         transformOffsetPx.buildFromSteps(def.steps, base.transformOffsetPx, [](const KeyframeStep& s) { return s.transformOffsetPx; });
         transformOffsetPct.buildFromSteps(def.steps, base.transformOffsetPct, [](const KeyframeStep& s) { return s.transformOffsetPct; });
-        backgroundColor.buildFromSteps(def.steps, base.backgroundColor.value_or(Color{ 0, 0, 0, 0 }), [](const KeyframeStep& s) { return s.backgroundColor; });
-        borderColor.buildFromSteps(def.steps, base.borderColor.value_or(Color{ 0, 0, 0, 0 }), [](const KeyframeStep& s) { return s.borderColor; });
-        borderWidth.buildFromSteps(def.steps, base.borderWidth.value_or(1.0f), [](const KeyframeStep& s) { return s.borderWidth; });
+
+        // Background color: if base has none, use target color with alpha 0
+        Color defaultBg = Color{ 0, 0, 0, 0 };
+        for (const auto& s : def.steps) {
+            if (s.backgroundColor.has_value()) {
+                defaultBg = Color(s.backgroundColor->r, s.backgroundColor->g, s.backgroundColor->b, 0);
+                break;
+            }
+        }
+        backgroundColor.buildFromSteps(def.steps, base.backgroundColor.value_or(defaultBg), [](const KeyframeStep& s) { return s.backgroundColor; });
+
+        // Border color: if base has none, use target color with alpha 0
+        Color defaultBc = Color{ 0, 0, 0, 0 };
+        for (const auto& s : def.steps) {
+            if (s.borderColor.has_value()) {
+                defaultBc = Color(s.borderColor->r, s.borderColor->g, s.borderColor->b, 0);
+                break;
+            }
+        }
+        borderColor.buildFromSteps(def.steps, base.borderColor.value_or(defaultBc), [](const KeyframeStep& s) { return s.borderColor; });
+
+        // Border width: if base has none, base width is 0.0f
+        float baseBw = base.borderWidth.value_or(0.0f);
+        borderWidth.buildFromSteps(def.steps, baseBw, [](const KeyframeStep& s) { return s.borderWidth; });
+
         cornerRadius.buildFromSteps(def.steps, base.cornerRadius.value_or(0.0f), [](const KeyframeStep& s) { return s.cornerRadius; });
-        outlineColor.buildFromSteps(def.steps, base.outlineColor.value_or(Color{ 0, 0, 0, 0 }), [](const KeyframeStep& s) { return s.outlineColor; });
+
+        // Outline color: if base has none, use target color with alpha 0
+        Color defaultOc = Color{ 0, 0, 0, 0 };
+        for (const auto& s : def.steps) {
+            if (s.outlineColor.has_value()) {
+                defaultOc = Color(s.outlineColor->r, s.outlineColor->g, s.outlineColor->b, 0);
+                break;
+            }
+        }
+        outlineColor.buildFromSteps(def.steps, base.outlineColor.value_or(defaultOc), [](const KeyframeStep& s) { return s.outlineColor; });
+
         outlineWidth.buildFromSteps(def.steps, base.outlineWidth, [](const KeyframeStep& s) { return s.outlineWidth; });
         outlineOffset.buildFromSteps(def.steps, base.outlineOffset, [](const KeyframeStep& s) { return s.outlineOffset; });
-        color.buildFromSteps(def.steps, base.color.value_or(Color{ 255, 255, 255, 255 }), [](const KeyframeStep& s) { return s.color; });
+
+        // Color (text): if base has none, inherit from computed style or theme
+        Color defaultTextCol = (el && el->computedStyle().color.has_value()) ? *el->computedStyle().color : Theme::Current().colors.textPrimary;
+        color.buildFromSteps(def.steps, base.color.value_or(defaultTextCol), [](const KeyframeStep& s) { return s.color; });
 
         float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (el ? el->bounds().width : 0.0f);
         float baseH = (base.height.mode == SizeMode::Fixed) ? base.height.value : (el ? el->bounds().height : 0.0f);
         width.buildFromSteps(def.steps, baseW, [](const KeyframeStep& s) { return s.width; });
         height.buildFromSteps(def.steps, baseH, [](const KeyframeStep& s) { return s.height; });
+    }
+
+    void updateBase(const ElementBaseStyleSnapshot& base, const UIElement* el) {
+        if (opacity.active) opacity.updateImplicitStops(base.opacity);
+        if (transformScale.active) transformScale.updateImplicitStops(base.transformScale);
+        if (transformOffsetPx.active) transformOffsetPx.updateImplicitStops(base.transformOffsetPx);
+        if (transformOffsetPct.active) transformOffsetPct.updateImplicitStops(base.transformOffsetPct);
+        if (backgroundColor.active && base.backgroundColor.has_value()) {
+            backgroundColor.updateImplicitStops(*base.backgroundColor);
+        }
+        if (borderColor.active && base.borderColor.has_value()) {
+            borderColor.updateImplicitStops(*base.borderColor);
+        }
+        if (borderWidth.active && base.borderWidth.has_value()) {
+            borderWidth.updateImplicitStops(*base.borderWidth);
+        }
+        if (cornerRadius.active && base.cornerRadius.has_value()) {
+            cornerRadius.updateImplicitStops(*base.cornerRadius);
+        }
+        if (outlineColor.active && base.outlineColor.has_value()) {
+            outlineColor.updateImplicitStops(*base.outlineColor);
+        }
+        if (outlineWidth.active) outlineWidth.updateImplicitStops(base.outlineWidth);
+        if (outlineOffset.active) outlineOffset.updateImplicitStops(base.outlineOffset);
+        if (color.active && base.color.has_value()) {
+            color.updateImplicitStops(*base.color);
+        }
+
+        float baseW = (base.width.mode == SizeMode::Fixed) ? base.width.value : (el ? el->bounds().width : 0.0f);
+        float baseH = (base.height.mode == SizeMode::Fixed) ? base.height.value : (el ? el->bounds().height : 0.0f);
+        if (width.active) width.updateImplicitStops(baseW);
+        if (height.active) height.updateImplicitStops(baseH);
     }
 
     void apply(float progress, const EasingDef& defaultEasing, UIElement* element) const {
@@ -313,9 +484,62 @@ struct ActiveKeyframeAnimation {
 
 class StyleKeyframeAnimationController {
 public:
+    uint16_t getActiveProperties(const AnimationTracks& t) const {
+        uint16_t mask = 0;
+        if (t.opacity.active) mask |= (1 << 0);
+        if (t.transformScale.active) mask |= (1 << 1);
+        if (t.transformOffsetPx.active || t.transformOffsetPct.active) mask |= (1 << 2);
+        if (t.backgroundColor.active) mask |= (1 << 3);
+        if (t.borderColor.active) mask |= (1 << 4);
+        if (t.borderWidth.active) mask |= (1 << 5);
+        if (t.cornerRadius.active) mask |= (1 << 6);
+        if (t.outlineColor.active || t.outlineWidth.active || t.outlineOffset.active) mask |= (1 << 7);
+        if (t.color.active) mask |= (1 << 8);
+        if (t.width.active) mask |= (1 << 9);
+        if (t.height.active) mask |= (1 << 10);
+        return mask;
+    }
+
+    void restoreInstanceProperties(const ActiveKeyframeAnimation& targetInst, UIElement* element) {
+        if (!element) return;
+        uint16_t targetMask = getActiveProperties(targetInst.tracks);
+        // Do not restore properties that are still being actively animated by other running instances
+        for (const auto& other : m_instances) {
+            if (&other != &targetInst && !other.finished && other.spec.playState == AnimationPlayState::Running) {
+                targetMask &= ~getActiveProperties(other.tracks);
+            }
+        }
+        m_baseSnapshot.restoreProperties(targetMask, element);
+    }
+
+    void updateBaseFromComputed(UIElement* el, const ComputedStyle& c) {
+        m_baseSnapshot.updateFromComputed(c, el);
+        for (auto& inst : m_instances) {
+            inst.tracks.updateBase(m_baseSnapshot, el);
+        }
+    }
+
     void applyAnimations(UIElement* element, const std::vector<AnimationSpec>& specs, const StyleSheet& sheet) {
         if (element && !m_baseSnapshot.captured) {
             m_baseSnapshot.capture(element);
+        }
+
+        // Restore properties for animations that were removed and not filled forwards
+        if (element) {
+            for (const auto& prev : m_instances) {
+                bool retained = false;
+                for (const auto& sp : specs) {
+                    if (sp.name == prev.spec.name) {
+                        retained = true;
+                        break;
+                    }
+                }
+                if (!retained) {
+                    if (prev.spec.fillMode != AnimationFillMode::Forwards && prev.spec.fillMode != AnimationFillMode::Both) {
+                        restoreInstanceProperties(prev, element);
+                    }
+                }
+            }
         }
 
         std::vector<ActiveKeyframeAnimation> newInstances;
@@ -355,7 +579,7 @@ public:
                             float finalP = calculateFinalProgress(inst);
                             applyStepAtProgress(finalP, inst, element);
                         } else {
-                            m_baseSnapshot.restore(element);
+                            restoreInstanceProperties(inst, element);
                         }
                     }
                 }
@@ -381,7 +605,13 @@ public:
 
     void clear(UIElement* element = nullptr) {
         if (element && m_baseSnapshot.captured) {
-            m_baseSnapshot.restore(element);
+            uint16_t allProps = 0;
+            for (const auto& inst : m_instances) {
+                if (inst.spec.fillMode != AnimationFillMode::Forwards && inst.spec.fillMode != AnimationFillMode::Both) {
+                    allProps |= getActiveProperties(inst.tracks);
+                }
+            }
+            m_baseSnapshot.restoreProperties(allProps, element);
             m_baseSnapshot.captured = false;
         }
         m_instances.clear();
@@ -431,7 +661,7 @@ public:
                         float finalP = calculateFinalProgress(inst);
                         applyStepAtProgress(finalP, inst, element);
                     } else {
-                        m_baseSnapshot.restore(element);
+                        restoreInstanceProperties(inst, element);
                     }
                 }
             }
@@ -462,7 +692,7 @@ public:
                     float finalP = calculateFinalProgress(inst);
                     applyStepAtProgress(finalP, inst, element);
                 } else {
-                    m_baseSnapshot.restore(element);
+                    restoreInstanceProperties(inst, element);
                 }
                 continue;
             }

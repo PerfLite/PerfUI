@@ -772,9 +772,14 @@ void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const Computed
         }
     }
 
+    if (m_keyframeAnimations) {
+        m_keyframeAnimations->updateBaseFromComputed(this, c);
+    }
+
     if (!c.animations.empty()) {
         if (!m_keyframeAnimations) {
             m_keyframeAnimations = std::make_unique<StyleKeyframeAnimationController>();
+            m_keyframeAnimations->updateBaseFromComputed(this, c);
         }
         const StyleSheet* activeSheet = sheet;
         if (!activeSheet && m_context) {
