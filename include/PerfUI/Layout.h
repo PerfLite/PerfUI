@@ -25,6 +25,25 @@ struct DimensionConstraint {
     static constexpr DimensionConstraint Fixed(float px) { return { SizeMode::Fixed, px }; }
     static constexpr DimensionConstraint Percent(float pct) { return { SizeMode::Percent, pct }; }
     static constexpr DimensionConstraint Flex(float weight = 1.0f) { return { SizeMode::Flex, weight }; }
+    static constexpr DimensionConstraint Vw(float vw) { return { SizeMode::Vw, vw }; }
+    static constexpr DimensionConstraint Vh(float vh) { return { SizeMode::Vh, vh }; }
+    static constexpr DimensionConstraint Vmin(float vmin) { return { SizeMode::Vmin, vmin }; }
+    static constexpr DimensionConstraint Vmax(float vmax) { return { SizeMode::Vmax, vmax }; }
+
+    constexpr float resolve(float parentSize, const Dimensions& viewport) const {
+        switch (mode) {
+        case SizeMode::Fixed: return value;
+        case SizeMode::Percent: return parentSize * (value / 100.0f);
+        case SizeMode::Flex: return parentSize;
+        case SizeMode::Vw: return viewport.width * (value / 100.0f);
+        case SizeMode::Vh: return viewport.height * (value / 100.0f);
+        case SizeMode::Vmin: return (viewport.width < viewport.height ? viewport.width : viewport.height) * (value / 100.0f);
+        case SizeMode::Vmax: return (viewport.width > viewport.height ? viewport.width : viewport.height) * (value / 100.0f);
+        default: return -1.0f;
+        }
+    }
+
+    constexpr bool operator==(const DimensionConstraint&) const = default;
 };
 
 class LayoutProps {
@@ -63,12 +82,24 @@ public:
 
     PERFUI_API std::optional<float> left() const;
     PERFUI_API LayoutProps& left(float px);
+    PERFUI_API LayoutProps& left(Length len);
+    PERFUI_API std::optional<Length> leftLength() const;
+
     PERFUI_API std::optional<float> right() const;
     PERFUI_API LayoutProps& right(float px);
+    PERFUI_API LayoutProps& right(Length len);
+    PERFUI_API std::optional<Length> rightLength() const;
+
     PERFUI_API std::optional<float> top() const;
     PERFUI_API LayoutProps& top(float px);
+    PERFUI_API LayoutProps& top(Length len);
+    PERFUI_API std::optional<Length> topLength() const;
+
     PERFUI_API std::optional<float> bottom() const;
     PERFUI_API LayoutProps& bottom(float px);
+    PERFUI_API LayoutProps& bottom(Length len);
+    PERFUI_API std::optional<Length> bottomLength() const;
+
     PERFUI_API bool centerX() const;
     PERFUI_API LayoutProps& centerX(bool enabled);
     PERFUI_API bool hasAbsoluteAnchors() const;
@@ -116,6 +147,10 @@ namespace Size {
     inline constexpr DimensionConstraint Fixed(float px) { return DimensionConstraint::Fixed(px); }
     inline constexpr DimensionConstraint Percent(float pct) { return DimensionConstraint::Percent(pct); }
     inline constexpr DimensionConstraint Flex(float weight = 1.0f) { return DimensionConstraint::Flex(weight); }
+    inline constexpr DimensionConstraint Vw(float vw) { return DimensionConstraint::Vw(vw); }
+    inline constexpr DimensionConstraint Vh(float vh) { return DimensionConstraint::Vh(vh); }
+    inline constexpr DimensionConstraint Vmin(float vmin) { return DimensionConstraint::Vmin(vmin); }
+    inline constexpr DimensionConstraint Vmax(float vmax) { return DimensionConstraint::Vmax(vmax); }
 }
 
 } // namespace PerfUI

@@ -19,6 +19,7 @@ class ElementAnimator;
 class ElementSpring;
 class WeakElementRef;
 struct StyleTransitionController;
+class StyleKeyframeAnimationController;
 
 class PERFUI_API UIElement {
 public:
@@ -144,13 +145,16 @@ public:
     void markStyleDirty();
     void invalidateStyleSubtree();
     void updateStyleCascade();
+    void applyStyle(const class StyleSheet& sheet);
     void applyComputedStyle(const ComputedStyle& style);
-    void applyComputedStyle(const ComputedStyle& oldStyle, const ComputedStyle& newStyle);
+    void applyComputedStyle(const ComputedStyle& oldStyle, const ComputedStyle& newStyle, const class StyleSheet* sheet = nullptr);
     bool isAlphaAnimating() const;
     bool isScaleAnimating() const;
     bool isPositionAnimating() const;
     StyleTransitionController* transitions() { return m_transitions.get(); }
     const StyleTransitionController* transitions() const { return m_transitions.get(); }
+    StyleKeyframeAnimationController* keyframeAnimations() { return m_keyframeAnimations.get(); }
+    const StyleKeyframeAnimationController* keyframeAnimations() const { return m_keyframeAnimations.get(); }
     virtual void onStyleApplied(const ComputedStyle& style) { (void)style; }
 
     // Opacity
@@ -311,6 +315,7 @@ protected:
     bool m_styleDirty{ true };
     bool m_childStyleDirty{ false };
     std::unique_ptr<StyleTransitionController> m_transitions;
+    std::unique_ptr<StyleKeyframeAnimationController> m_keyframeAnimations;
     bool m_styleInitialized{ false };
 
     std::optional<Color> m_outlineColor;

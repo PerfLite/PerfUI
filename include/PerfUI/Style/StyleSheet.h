@@ -1,5 +1,6 @@
 #pragma once
 
+#include "PerfUI/Export.h"
 #include "PerfUI/Style/StyleTypes.h"
 #include "PerfUI/Style/ComputedStyle.h"
 #include <filesystem>
@@ -14,7 +15,7 @@ namespace PerfUI {
 class UIElement;
 class UIContext;
 
-class StyleSheet {
+class PERFUI_API StyleSheet {
 public:
     StyleSheet() = default;
     ~StyleSheet() = default;
@@ -54,6 +55,11 @@ public:
     /// Computes the final ComputedStyle for an element.
     ComputedStyle computeStyle(const UIElement* element, const ComputedStyle* parentStyle = nullptr) const;
 
+    /// Keyframes management (@keyframes name { ... })
+    void addKeyframes(KeyframesDefinition kf);
+    const KeyframesDefinition* findKeyframes(const std::string& name) const;
+    const std::unordered_map<std::string, KeyframesDefinition>& keyframes() const { return m_keyframes; }
+
     /// Diagnostics and error reporting.
     const std::vector<std::string>& warnings() const { return m_warnings; }
     const std::vector<std::string>& errors() const { return m_errors; }
@@ -65,6 +71,7 @@ private:
 
     std::vector<StyleRule> m_rules;
     std::unordered_map<std::string, std::string> m_variables;
+    std::unordered_map<std::string, KeyframesDefinition> m_keyframes;
     std::vector<std::string> m_warnings;
     std::vector<std::string> m_errors;
 

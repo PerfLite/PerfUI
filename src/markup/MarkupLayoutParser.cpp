@@ -192,8 +192,71 @@ DimensionConstraint parseDimension(std::string_view val) {
         float pct = parseNumberOrToken(s.substr(0, s.size() - 1), 0.0f);
         return DimensionConstraint::Percent(pct);
     }
+    if (s.size() > 2) {
+        std::string suffix2 = toLower(s.substr(s.size() - 2));
+        if (suffix2 == "vw") {
+            float v = parseNumberOrToken(s.substr(0, s.size() - 2), 0.0f);
+            return DimensionConstraint::Vw(v);
+        }
+        if (suffix2 == "vh") {
+            float v = parseNumberOrToken(s.substr(0, s.size() - 2), 0.0f);
+            return DimensionConstraint::Vh(v);
+        }
+        if (suffix2 == "px") {
+            float px = parseNumberOrToken(s.substr(0, s.size() - 2), 0.0f);
+            return DimensionConstraint::Fixed(px);
+        }
+    }
+    if (s.size() > 4) {
+        std::string suffix4 = toLower(s.substr(s.size() - 4));
+        if (suffix4 == "vmin") {
+            float v = parseNumberOrToken(s.substr(0, s.size() - 4), 0.0f);
+            return DimensionConstraint::Vmin(v);
+        }
+        if (suffix4 == "vmax") {
+            float v = parseNumberOrToken(s.substr(0, s.size() - 4), 0.0f);
+            return DimensionConstraint::Vmax(v);
+        }
+    }
     float px = parseNumberOrToken(s, 0.0f);
     return DimensionConstraint::Fixed(px);
+}
+
+Length parseLength(std::string_view val, Length defaultLen) {
+    std::string s = trim(val);
+    if (s.empty()) return defaultLen;
+    if (s.back() == '%') {
+        float pct = parseNumberOrToken(s.substr(0, s.size() - 1), 0.0f);
+        return Length::Percent(pct);
+    }
+    if (s.size() > 2) {
+        std::string suffix2 = toLower(s.substr(s.size() - 2));
+        if (suffix2 == "vw") {
+            float v = parseNumberOrToken(s.substr(0, s.size() - 2), 0.0f);
+            return Length::Vw(v);
+        }
+        if (suffix2 == "vh") {
+            float v = parseNumberOrToken(s.substr(0, s.size() - 2), 0.0f);
+            return Length::Vh(v);
+        }
+        if (suffix2 == "px") {
+            float v = parseNumberOrToken(s.substr(0, s.size() - 2), 0.0f);
+            return Length::Px(v);
+        }
+    }
+    if (s.size() > 4) {
+        std::string suffix4 = toLower(s.substr(s.size() - 4));
+        if (suffix4 == "vmin") {
+            float v = parseNumberOrToken(s.substr(0, s.size() - 4), 0.0f);
+            return Length::Vmin(v);
+        }
+        if (suffix4 == "vmax") {
+            float v = parseNumberOrToken(s.substr(0, s.size() - 4), 0.0f);
+            return Length::Vmax(v);
+        }
+    }
+    float v = parseNumberOrToken(s, 0.0f);
+    return Length::Px(v);
 }
 
 void parsePaddingOrMargin(std::string_view val, LayoutProps& props, bool isPadding) {
@@ -385,10 +448,10 @@ bool applyCommonLayoutAttribute(UIElement* element, const std::string& key, cons
         else if (lower == "relative" || lower == "static") element->setAbsolute(false);
         return true;
     }
-    if (key == "left") { props.left(parseNumberOrToken(val)); return true; }
-    if (key == "right") { props.right(parseNumberOrToken(val)); return true; }
-    if (key == "top") { props.top(parseNumberOrToken(val)); return true; }
-    if (key == "bottom") { props.bottom(parseNumberOrToken(val)); return true; }
+    if (key == "left") { props.left(parseLength(val)); return true; }
+    if (key == "right") { props.right(parseLength(val)); return true; }
+    if (key == "top") { props.top(parseLength(val)); return true; }
+    if (key == "bottom") { props.bottom(parseLength(val)); return true; }
     if (key == "center-x") { props.centerX(parseBool(val, true)); return true; }
     if (key == "direction" || key == "flex-direction") {
         std::string lower = toLower(trim(val));

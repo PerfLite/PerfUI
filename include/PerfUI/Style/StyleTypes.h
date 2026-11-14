@@ -135,4 +135,65 @@ struct LinearGradientDef {
     bool operator==(const LinearGradientDef&) const = default;
 };
 
+enum class AnimationDirection : uint8_t {
+    Normal,
+    Reverse,
+    Alternate,
+    AlternateReverse
+};
+
+enum class AnimationFillMode : uint8_t {
+    None,
+    Forwards,
+    Backwards,
+    Both
+};
+
+enum class AnimationPlayState : uint8_t {
+    Running,
+    Paused
+};
+
+struct AnimationSpec {
+    std::string name;
+    float duration{ 1.0f };             // in seconds
+    EasingDef easing{ Easing::Linear };
+    float delay{ 0.0f };                // in seconds
+    float iterationCount{ 1.0f };       // -1.0f or infinity for infinite
+    AnimationDirection direction{ AnimationDirection::Normal };
+    AnimationFillMode fillMode{ AnimationFillMode::None };
+    AnimationPlayState playState{ AnimationPlayState::Running };
+
+    bool isInfinite() const {
+        return iterationCount < 0.0f || std::isinf(iterationCount);
+    }
+
+    bool operator==(const AnimationSpec&) const = default;
+};
+
+struct KeyframeStep {
+    float offset{ 0.0f }; // 0.0f .. 1.0f
+
+    std::optional<float> opacity;
+    std::optional<Point> transformScale;
+    std::optional<Point> transformOffsetPx;
+    std::optional<Point> transformOffsetPct;
+    std::optional<Color> backgroundColor;
+    std::optional<Color> borderColor;
+    std::optional<float> borderWidth;
+    std::optional<float> cornerRadius;
+    std::optional<Color> outlineColor;
+    std::optional<float> outlineWidth;
+    std::optional<float> outlineOffset;
+    std::optional<Color> color;
+    std::optional<float> width;
+    std::optional<float> height;
+    std::optional<EasingDef> timingFunction;
+};
+
+struct KeyframesDefinition {
+    std::string name;
+    std::vector<KeyframeStep> steps; // sorted by offset ascending
+};
+
 } // namespace PerfUI

@@ -4,6 +4,7 @@
 #include "PerfUI/Animation.h"
 #include "PerfUI/Style/StyleSheet.h"
 #include "../style/StyleTransition.h"
+#include "../style/StyleKeyframeAnimation.h"
 #include <atomic>
 #include <algorithm>
 #include <mutex>
@@ -433,6 +434,11 @@ void UIElement::update(float deltaTime) {
                 m_transitions->update(effectiveDt, this);
             }
         }
+        if (effectiveDt >= 0.0f) {
+            if (m_keyframeAnimations && m_keyframeAnimations->hasActiveAnimations()) {
+                m_keyframeAnimations->update(effectiveDt, this);
+            }
+        }
     }
 
     for (auto& child : m_children) {
@@ -597,6 +603,20 @@ void UIElement::invalidateStyleSubtree() {
     }
 }
 
+void UIElement::applyStyle(const StyleSheet& sheet) {
+    const ComputedStyle* parentStyle = m_parent ? &m_parent->computedStyle() : nullptr;
+    ComputedStyle newStyle = sheet.computeStyle(this, parentStyle);
+
+    if (m_computedStyle.hasLayoutDifferences(newStyle)) {
+        markLayoutDirty();
+    }
+
+    ComputedStyle oldStyle = m_computedStyle;
+    m_computedStyle = newStyle;
+    applyComputedStyle(oldStyle, m_computedStyle, &sheet);
+    m_styleDirty = false;
+}
+
 void UIElement::updateStyleCascade() {
     bool selfDirty = m_styleDirty;
     if (m_context && selfDirty) {
@@ -610,7 +630,7 @@ void UIElement::updateStyleCascade() {
 
         ComputedStyle oldStyle = m_computedStyle;
         m_computedStyle = newStyle;
-        applyComputedStyle(oldStyle, m_computedStyle);
+        applyComputedStyle(oldStyle, m_computedStyle, &sheet);
         m_styleDirty = false;
     }
 
@@ -630,10 +650,10 @@ void UIElement::updateStyleCascade() {
 }
 
 void UIElement::applyComputedStyle(const ComputedStyle& c) {
-    applyComputedStyle(m_computedStyle, c);
+    applyComputedStyle(m_computedStyle, c, nullptr);
 }
 
-void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const ComputedStyle& c) {
+void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const ComputedStyle& c, const StyleSheet* sheet) {
     bool animAlpha = isAlphaAnimating();
     bool animScale = isScaleAnimating();
     bool animPos = isPositionAnimating();
@@ -655,10 +675,14 @@ void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const Computed
     if (c.padding.has_value()) props.padding(c.padding->left, c.padding->top, c.padding->right, c.padding->bottom);
     if (c.margin.has_value()) props.margin(c.margin->left, c.margin->top, c.margin->right, c.margin->bottom);
     if (c.isAbsolute.has_value()) setAbsolute(*c.isAbsolute);
-    if (c.left.has_value()) props.left(*c.left);
-    if (c.right.has_value()) props.right(*c.right);
-    if (c.top.has_value()) props.top(*c.top);
-    if (c.bottom.has_value()) props.bottom(*c.bottom);
+    if (c.leftLength.has_value()) props.left(*c.leftLength);
+    else if (c.left.has_value()) props.left(*c.left);
+    if (c.rightLength.has_value()) props.right(*c.rightLength);
+    else if (c.right.has_value()) props.right(*c.right);
+    if (c.topLength.has_value()) props.top(*c.topLength);
+    else if (c.top.has_value()) props.top(*c.top);
+    if (c.bottomLength.has_value()) props.bottom(*c.bottomLength);
+    else if (c.bottom.has_value()) props.bottom(*c.bottom);
     if (c.centerX.has_value()) props.centerX(*c.centerX);
 
     if (c.shadow.has_value() && *c.shadow) {
@@ -684,8 +708,10 @@ void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const Computed
         if ((c.transformOffsetPx.has_value() || c.transformOffsetPct.has_value()) && !animPos) {
             setRenderOffset(c.transformOffsetPx.value_or(Point{0, 0}), c.transformOffsetPct.value_or(Point{0, 0}));
         }
-        if (c.width.has_value()) props.width(DimensionConstraint::Fixed(*c.width));
-        if (c.height.has_value()) props.height(DimensionConstraint::Fixed(*c.height));
+        if (c.widthConstraint.has_value()) props.width(*c.widthConstraint);
+        else if (c.width.has_value()) props.width(DimensionConstraint::Fixed(*c.width));
+        if (c.heightConstraint.has_value()) props.height(*c.heightConstraint);
+        else if (c.height.has_value()) props.height(DimensionConstraint::Fixed(*c.height));
         if (c.backgroundColor.has_value()) {
             m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).bg(*c.backgroundColor);
         }
@@ -719,8 +745,10 @@ void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const Computed
             if ((c.transformOffsetPx.has_value() || c.transformOffsetPct.has_value()) && !animPos) {
                 setRenderOffset(c.transformOffsetPx.value_or(Point{0, 0}), c.transformOffsetPct.value_or(Point{0, 0}));
             }
-            if (c.width.has_value()) props.width(DimensionConstraint::Fixed(*c.width));
-            if (c.height.has_value()) props.height(DimensionConstraint::Fixed(*c.height));
+            if (c.widthConstraint.has_value()) props.width(*c.widthConstraint);
+            else if (c.width.has_value()) props.width(DimensionConstraint::Fixed(*c.width));
+            if (c.heightConstraint.has_value()) props.height(*c.heightConstraint);
+            else if (c.height.has_value()) props.height(DimensionConstraint::Fixed(*c.height));
             if (c.backgroundColor.has_value()) {
                 m_style.box.normal = m_style.box.normal.value_or(BoxStyle{}).bg(*c.backgroundColor);
             }
@@ -739,6 +767,21 @@ void UIElement::applyComputedStyle(const ComputedStyle& oldStyle, const Computed
             if (c.outlineWidth.has_value()) setOutlineWidth(c.outlineWidth);
             if (c.outlineOffset.has_value()) setOutlineOffset(c.outlineOffset);
         }
+    }
+
+    if (!c.animations.empty()) {
+        if (!m_keyframeAnimations) {
+            m_keyframeAnimations = std::make_unique<StyleKeyframeAnimationController>();
+        }
+        const StyleSheet* activeSheet = sheet;
+        if (!activeSheet && m_context) {
+            activeSheet = &m_context->styleSheet();
+        }
+        if (activeSheet) {
+            m_keyframeAnimations->applyAnimations(this, c.animations, *activeSheet);
+        }
+    } else if (m_keyframeAnimations) {
+        m_keyframeAnimations->clear();
     }
 
     onStyleApplied(c);

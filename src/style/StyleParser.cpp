@@ -1,8 +1,11 @@
 #include "StyleParser.h"
+#include "../markup/MarkupLayoutParser.h"
 #include <algorithm>
 #include <sstream>
 
 namespace PerfUI {
+
+using namespace MarkupInternal;
 
 static std::string trimString(std::string_view sv) {
     size_t first = 0;
@@ -10,6 +13,46 @@ static std::string trimString(std::string_view sv) {
     size_t last = sv.size();
     while (last > first && std::isspace(static_cast<unsigned char>(sv[last - 1]))) --last;
     return std::string(sv.substr(first, last - first));
+}
+
+static std::string toLower(std::string_view sv) {
+    std::string s;
+    s.reserve(sv.size());
+    for (char c : sv) s.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+    return s;
+}
+
+static bool parseEasingToken(std::string_view tok, EasingDef& outEasing) {
+    std::string s = toLower(tok);
+    if (s.rfind("cubic-bezier(", 0) == 0 && s.back() == ')') {
+        std::string inner = s.substr(13, s.size() - 14);
+        std::vector<std::string> parts;
+        std::stringstream ss(inner);
+        std::string item;
+        while (std::getline(ss, item, ',')) parts.push_back(item);
+        if (parts.size() == 4) {
+            float x1 = std::strtof(parts[0].c_str(), nullptr);
+            float y1 = std::strtof(parts[1].c_str(), nullptr);
+            float x2 = std::strtof(parts[2].c_str(), nullptr);
+            float y2 = std::strtof(parts[3].c_str(), nullptr);
+            outEasing = EasingDef::Bezier(x1, y1, x2, y2);
+            return true;
+        }
+    }
+    if (s == "linear") { outEasing = Easing::Linear; return true; }
+    if (s == "ease") { outEasing = EasingDef::Bezier(0.25f, 0.1f, 0.25f, 1.0f); return true; }
+    if (s == "ease-in") { outEasing = EasingDef::Bezier(0.42f, 0.0f, 1.0f, 1.0f); return true; }
+    if (s == "ease-out") { outEasing = EasingDef::Bezier(0.0f, 0.0f, 0.58f, 1.0f); return true; }
+    if (s == "ease-in-out") { outEasing = EasingDef::Bezier(0.42f, 0.0f, 0.58f, 1.0f); return true; }
+    if (s == "ease-in-quad") { outEasing = Easing::EaseInQuad; return true; }
+    if (s == "ease-out-quad") { outEasing = Easing::EaseOutQuad; return true; }
+    if (s == "ease-in-out-quad") { outEasing = Easing::EaseInOutQuad; return true; }
+    if (s == "ease-in-cubic") { outEasing = Easing::EaseInCubic; return true; }
+    if (s == "ease-out-cubic") { outEasing = Easing::EaseOutCubic; return true; }
+    if (s == "ease-in-out-cubic") { outEasing = Easing::EaseInOutCubic; return true; }
+    if (s == "ease-out-bounce") { outEasing = Easing::EaseOutBounce; return true; }
+    if (s == "ease-out-elastic") { outEasing = Easing::EaseOutElastic; return true; }
+    return false;
 }
 
 StyleParser::StyleParser(std::string_view source, StyleSheet& sheet, std::string sourceName)
@@ -80,6 +123,11 @@ void StyleParser::parseRuleOrRoot() {
         parseRootBlock();
         return;
     }
+    if (m_current.type == TokenType::Keyframes) {
+        advance();
+        parseKeyframesBlock();
+        return;
+    }
 
     std::vector<ComplexSelector> selectors;
     if (!parseSelectorList(selectors)) {
@@ -96,6 +144,133 @@ void StyleParser::parseRuleOrRoot() {
     for (auto& sel : selectors) {
         m_sheet.addRule(StyleRule{ sel, decl, ++m_orderCounter });
     }
+}
+
+void StyleParser::parseKeyframesBlock() {
+    if (m_current.type != TokenType::Ident && m_current.type != TokenType::String) {
+        error("Expected keyframes name");
+        skipUntilNextRule();
+        return;
+    }
+
+    std::string name = advance().text;
+    if (name.size() >= 2 && ((name.front() == '"' && name.back() == '"') || (name.front() == '\'' && name.back() == '\''))) {
+        name = name.substr(1, name.size() - 2);
+    }
+
+    if (!expect(TokenType::LBrace, "{")) {
+        skipUntilNextRule();
+        return;
+    }
+
+    KeyframesDefinition kfDef;
+    kfDef.name = name;
+
+    while (m_current.type != TokenType::EndOfFile && m_current.type != TokenType::RBrace) {
+        std::vector<float> offsets;
+        while (m_current.type != TokenType::LBrace && m_current.type != TokenType::EndOfFile) {
+            if (m_current.text == "from") {
+                offsets.push_back(0.0f);
+                advance();
+            } else if (m_current.text == "to") {
+                offsets.push_back(1.0f);
+                advance();
+            } else if (m_current.type == TokenType::Number) {
+                std::string txt = advance().text;
+                float pct = 0.0f;
+                if (!txt.empty() && txt.back() == '%') {
+                    pct = std::strtof(txt.substr(0, txt.size() - 1).c_str(), nullptr) / 100.0f;
+                } else {
+                    pct = std::strtof(txt.c_str(), nullptr);
+                    if (pct > 1.0f) pct /= 100.0f;
+                }
+                offsets.push_back((std::clamp)(pct, 0.0f, 1.0f));
+            } else {
+                error("Expected keyframe offset (e.g. 0%, 50%, from, to)");
+                skipUntilNextRule();
+                return;
+            }
+            match(TokenType::Comma);
+        }
+
+        StyleDeclaration decl;
+        if (!parseDeclarationBlock(decl)) {
+            skipUntilNextRule();
+            return;
+        }
+
+        for (float off : offsets) {
+            KeyframeStep step;
+            step.offset = off;
+
+            for (const auto& [rawKey, rawVal] : decl.properties) {
+                std::string k = toLower(rawKey);
+                std::string v = m_sheet.resolveVariables(rawVal);
+
+                if (k == "opacity" || k == "alpha") {
+                    step.opacity = parseNumberOrToken(v);
+                } else if (k == "transform-scale" || k == "transformscale" || k == "scale") {
+                    Point sc{ 1.0f, 1.0f };
+                    if (parseTransformScale(v, sc)) step.transformScale = sc;
+                } else if (k == "transform-scale-x" || k == "scale-x") {
+                    Point sc = step.transformScale.value_or(Point{ 1.0f, 1.0f });
+                    sc.x = parseNumberOrToken(v, 1.0f);
+                    step.transformScale = sc;
+                } else if (k == "transform-scale-y" || k == "scale-y") {
+                    Point sc = step.transformScale.value_or(Point{ 1.0f, 1.0f });
+                    sc.y = parseNumberOrToken(v, 1.0f);
+                    step.transformScale = sc;
+                } else if (k == "transform-offset" || k == "transformoffset" || k == "offset") {
+                    Point px{ 0.0f, 0.0f }, pct{ 0.0f, 0.0f };
+                    bool hasPct = false;
+                    if (parseTransformOffset(v, px, pct, hasPct)) {
+                        step.transformOffsetPx = px;
+                        if (hasPct) step.transformOffsetPct = pct;
+                    }
+                } else if (k == "transform-offset-x" || k == "offset-x") {
+                    Point cur = step.transformOffsetPx.value_or(Point{ 0.0f, 0.0f });
+                    cur.x = parseNumberOrToken(v);
+                    step.transformOffsetPx = cur;
+                } else if (k == "transform-offset-y" || k == "offset-y") {
+                    Point cur = step.transformOffsetPx.value_or(Point{ 0.0f, 0.0f });
+                    cur.y = parseNumberOrToken(v);
+                    step.transformOffsetPx = cur;
+                } else if (k == "background" || k == "background-color" || k == "bg" || k == "bg-color") {
+                    step.backgroundColor = parseColorOrToken(v);
+                } else if (k == "border-color") {
+                    step.borderColor = parseColorOrToken(v);
+                } else if (k == "border-width") {
+                    step.borderWidth = parseNumberOrToken(v);
+                } else if (k == "border-radius" || k == "radius" || k == "corner-radius") {
+                    step.cornerRadius = parseNumberOrToken(v);
+                } else if (k == "outline-color") {
+                    step.outlineColor = parseColorOrToken(v);
+                } else if (k == "outline-width") {
+                    step.outlineWidth = parseNumberOrToken(v);
+                } else if (k == "outline-offset") {
+                    step.outlineOffset = parseNumberOrToken(v);
+                } else if (k == "color" || k == "text-color") {
+                    step.color = parseColorOrToken(v);
+                } else if (k == "width") {
+                    step.width = parseNumberOrToken(v);
+                } else if (k == "height") {
+                    step.height = parseNumberOrToken(v);
+                } else if (k == "animation-timing-function" || k == "animation-timing") {
+                    EasingDef edef{ Easing::Linear };
+                    if (parseEasingToken(v, edef)) step.timingFunction = edef;
+                }
+            }
+
+            kfDef.steps.push_back(std::move(step));
+        }
+    }
+
+    expect(TokenType::RBrace, "}");
+    std::stable_sort(kfDef.steps.begin(), kfDef.steps.end(), [](const KeyframeStep& a, const KeyframeStep& b) {
+        return a.offset < b.offset;
+    });
+
+    m_sheet.addKeyframes(std::move(kfDef));
 }
 
 void StyleParser::parseRootBlock() {

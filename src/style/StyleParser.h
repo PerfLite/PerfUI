@@ -14,6 +14,7 @@ public:
 private:
     void parseRuleOrRoot();
     void parseRootBlock();
+    void parseKeyframesBlock();
     bool parseSelectorList(std::vector<ComplexSelector>& outSelectors);
     bool parseComplexSelector(ComplexSelector& outSelector);
     bool parseDeclarationBlock(StyleDeclaration& outDecl);

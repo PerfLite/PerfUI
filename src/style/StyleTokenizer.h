@@ -9,6 +9,8 @@ namespace PerfUI {
 enum class TokenType {
     EndOfFile,
     Root,
+    Keyframes,
+    At,
     Ident,
     Number,
     String,
@@ -56,6 +58,18 @@ public:
 private:
     Token readNextRawToken(int startLine, int startCol) {
         char c = m_source[m_pos];
+
+        if (c == '@') {
+            if (m_source.substr(m_pos).rfind("@keyframes", 0) == 0) {
+                if (m_pos + 10 >= m_source.size() || !isIdentChar(m_source[m_pos + 10])) {
+                    m_pos += 10;
+                    m_col += 10;
+                    return Token{ TokenType::Keyframes, "@keyframes", startLine, startCol };
+                }
+            }
+            advance();
+            return Token{ TokenType::At, "@", startLine, startCol };
+        }
 
         if (c == ':') {
             if (m_source.substr(m_pos).rfind(":root", 0) == 0) {

@@ -6,7 +6,7 @@
 namespace PerfUI {
 namespace {
 struct Anchors {
-    std::optional<float> left, right, top, bottom;
+    std::optional<Length> left, right, top, bottom;
     bool centerX{ false };
 };
 std::mutex g_anchorMutex;
@@ -16,42 +16,81 @@ std::unordered_map<const LayoutProps*, Anchors> g_anchors;
 std::optional<float> LayoutProps::left() const {
     std::lock_guard lock(g_anchorMutex);
     auto it = g_anchors.find(this);
-    return it == g_anchors.end() ? std::nullopt : it->second.left;
+    if (it == g_anchors.end() || !it->second.left) return std::nullopt;
+    return it->second.left->value;
 }
 LayoutProps& LayoutProps::left(float px) {
+    return left(Length::Px(px));
+}
+LayoutProps& LayoutProps::left(Length len) {
     std::lock_guard lock(g_anchorMutex);
-    g_anchors[this].left = px;
+    g_anchors[this].left = len;
     return *this;
 }
+std::optional<Length> LayoutProps::leftLength() const {
+    std::lock_guard lock(g_anchorMutex);
+    auto it = g_anchors.find(this);
+    return it == g_anchors.end() ? std::nullopt : it->second.left;
+}
+
 std::optional<float> LayoutProps::right() const {
+    std::lock_guard lock(g_anchorMutex);
+    auto it = g_anchors.find(this);
+    if (it == g_anchors.end() || !it->second.right) return std::nullopt;
+    return it->second.right->value;
+}
+LayoutProps& LayoutProps::right(float px) {
+    return right(Length::Px(px));
+}
+LayoutProps& LayoutProps::right(Length len) {
+    std::lock_guard lock(g_anchorMutex);
+    g_anchors[this].right = len;
+    return *this;
+}
+std::optional<Length> LayoutProps::rightLength() const {
     std::lock_guard lock(g_anchorMutex);
     auto it = g_anchors.find(this);
     return it == g_anchors.end() ? std::nullopt : it->second.right;
 }
-LayoutProps& LayoutProps::right(float px) {
+
+std::optional<float> LayoutProps::top() const {
     std::lock_guard lock(g_anchorMutex);
-    g_anchors[this].right = px;
+    auto it = g_anchors.find(this);
+    if (it == g_anchors.end() || !it->second.top) return std::nullopt;
+    return it->second.top->value;
+}
+LayoutProps& LayoutProps::top(float px) {
+    return top(Length::Px(px));
+}
+LayoutProps& LayoutProps::top(Length len) {
+    std::lock_guard lock(g_anchorMutex);
+    g_anchors[this].top = len;
     return *this;
 }
-std::optional<float> LayoutProps::top() const {
+std::optional<Length> LayoutProps::topLength() const {
     std::lock_guard lock(g_anchorMutex);
     auto it = g_anchors.find(this);
     return it == g_anchors.end() ? std::nullopt : it->second.top;
 }
-LayoutProps& LayoutProps::top(float px) {
-    std::lock_guard lock(g_anchorMutex);
-    g_anchors[this].top = px;
-    return *this;
-}
+
 std::optional<float> LayoutProps::bottom() const {
     std::lock_guard lock(g_anchorMutex);
     auto it = g_anchors.find(this);
-    return it == g_anchors.end() ? std::nullopt : it->second.bottom;
+    if (it == g_anchors.end() || !it->second.bottom) return std::nullopt;
+    return it->second.bottom->value;
 }
 LayoutProps& LayoutProps::bottom(float px) {
+    return bottom(Length::Px(px));
+}
+LayoutProps& LayoutProps::bottom(Length len) {
     std::lock_guard lock(g_anchorMutex);
-    g_anchors[this].bottom = px;
+    g_anchors[this].bottom = len;
     return *this;
+}
+std::optional<Length> LayoutProps::bottomLength() const {
+    std::lock_guard lock(g_anchorMutex);
+    auto it = g_anchors.find(this);
+    return it == g_anchors.end() ? std::nullopt : it->second.bottom;
 }
 bool LayoutProps::centerX() const {
     std::lock_guard lock(g_anchorMutex);

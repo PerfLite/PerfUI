@@ -1,35 +1,30 @@
 #include "PerfUI/LayoutEngine.h"
 #include "PerfUI/UIElement.h"
+#include "PerfUI/UIContext.h"
 #include <algorithm>
 #include <vector>
 
 namespace PerfUI {
+
+static Dimensions ResolveViewport(const UIElement* element) {
+    if (!element) return Dimensions{ 1920.0f, 1080.0f };
+    if (element->context()) return element->context()->viewportSize();
+    for (const auto* p = element->parent(); p; p = p->parent()) {
+        if (p->context()) return p->context()->viewportSize();
+    }
+    return Dimensions{ 1920.0f, 1080.0f };
+}
 
 void LayoutEngine::Measure(UIElement* element, Dimensions availableSize) {
     if (!element) return;
 
     const auto& layout = element->layout();
     const auto& pad = layout.padding();
+    Dimensions vp = ResolveViewport(element);
 
-    // Target width constraint
-    float targetW = -1.0f;
-    if (layout.width().mode == SizeMode::Fixed) {
-        targetW = layout.width().value;
-    } else if (layout.width().mode == SizeMode::Percent) {
-        targetW = availableSize.width * (layout.width().value / 100.0f);
-    } else if (layout.width().mode == SizeMode::Flex) {
-        targetW = availableSize.width;
-    }
-
-    // Target height constraint
-    float targetH = -1.0f;
-    if (layout.height().mode == SizeMode::Fixed) {
-        targetH = layout.height().value;
-    } else if (layout.height().mode == SizeMode::Percent) {
-        targetH = availableSize.height * (layout.height().value / 100.0f);
-    } else if (layout.height().mode == SizeMode::Flex) {
-        targetH = availableSize.height;
-    }
+    // Target width and height constraints
+    float targetW = layout.width().resolve(availableSize.width, vp);
+    float targetH = layout.height().resolve(availableSize.height, vp);
 
     // Inner space available for children
     float innerAvailW = (std::max)(0.0f, (targetW >= 0.0f ? targetW : availableSize.width) - pad.horizontal());
@@ -166,6 +161,7 @@ void LayoutEngine::ArrangeContent(UIElement* element, const Rect& contentRect) {
         ArrangeVertical(element, contentRect);
     }
 
+    Dimensions vp = ResolveViewport(element);
     for (const auto& child : element->children()) {
         if (child && child->isVisible() && child->isAbsolute()) {
             const auto& anchors = child->layout();
@@ -174,19 +170,31 @@ void LayoutEngine::ArrangeContent(UIElement* element, const Rect& contentRect) {
                 const auto desired = child->desiredSize();
                 float width = desired.width;
                 float height = desired.height;
-                if (anchors.left() && anchors.right()) {
-                    width = (std::max)(0.0f, contentRect.width - *anchors.left() - *anchors.right());
+
+                auto resolveAnchor = [&](const std::optional<Length>& lOpt, const std::optional<float>& fOpt, float parentDim) -> std::optional<float> {
+                    if (lOpt) return lOpt->resolve(parentDim, vp);
+                    if (fOpt) return *fOpt;
+                    return std::nullopt;
+                };
+
+                auto left = resolveAnchor(anchors.leftLength(), anchors.left(), contentRect.width);
+                auto right = resolveAnchor(anchors.rightLength(), anchors.right(), contentRect.width);
+                auto top = resolveAnchor(anchors.topLength(), anchors.top(), contentRect.height);
+                auto bottom = resolveAnchor(anchors.bottomLength(), anchors.bottom(), contentRect.height);
+
+                if (left && right) {
+                    width = (std::max)(0.0f, contentRect.width - *left - *right);
                 }
-                if (anchors.top() && anchors.bottom()) {
-                    height = (std::max)(0.0f, contentRect.height - *anchors.top() - *anchors.bottom());
+                if (top && bottom) {
+                    height = (std::max)(0.0f, contentRect.height - *top - *bottom);
                 }
                 float x = child->bounds().x;
                 float y = child->bounds().y;
-                if (anchors.left()) x = contentRect.x + *anchors.left();
-                else if (anchors.right()) x = contentRect.x + contentRect.width - *anchors.right() - width;
+                if (left) x = contentRect.x + *left;
+                else if (right) x = contentRect.x + contentRect.width - *right - width;
                 else if (anchors.centerX()) x = contentRect.x + (contentRect.width - width) * 0.5f;
-                if (anchors.top()) y = contentRect.y + *anchors.top();
-                else if (anchors.bottom()) y = contentRect.y + contentRect.height - *anchors.bottom() - height;
+                if (top) y = contentRect.y + *top;
+                else if (bottom) y = contentRect.y + contentRect.height - *bottom - height;
                 child->arrange({ x, y, width, height });
             } else {
                 child->measure(child->size());
@@ -204,6 +212,8 @@ void LayoutEngine::ArrangeHorizontal(UIElement* element, const Rect& contentRect
         }
     }
     if (visible.empty()) return;
+
+    Dimensions vp = ResolveViewport(element);
 
     float totalFlex = 0.0f;
     float nonFlexWidth = 0.0f;
@@ -281,8 +291,8 @@ void LayoutEngine::ArrangeHorizontal(UIElement* element, const Rect& contentRect
         }
 
         float childH = child->desiredSize().height;
-        if (child->layout().height().mode == SizeMode::Fixed) {
-            childH = child->layout().height().value;
+        if (child->layout().height().mode != SizeMode::Auto && child->layout().height().mode != SizeMode::Flex) {
+            childH = child->layout().height().resolve(contentRect.height, vp);
         } else if (align == Alignment::Stretch || child->layout().height().mode == SizeMode::Flex) {
             childH = (std::max)(0.0f, contentRect.height - margin.vertical());
         }
@@ -310,6 +320,8 @@ void LayoutEngine::ArrangeVertical(UIElement* element, const Rect& contentRect) 
         }
     }
     if (visible.empty()) return;
+
+    Dimensions vp = ResolveViewport(element);
 
     float totalFlex = 0.0f;
     float nonFlexHeight = 0.0f;
@@ -388,8 +400,8 @@ void LayoutEngine::ArrangeVertical(UIElement* element, const Rect& contentRect) 
         }
 
         float childW = child->desiredSize().width;
-        if (child->layout().width().mode == SizeMode::Fixed) {
-            childW = child->layout().width().value;
+        if (child->layout().width().mode != SizeMode::Auto && child->layout().width().mode != SizeMode::Flex) {
+            childW = child->layout().width().resolve(contentRect.width, vp);
         } else if (align == Alignment::Stretch || child->layout().width().mode == SizeMode::Flex) {
             childW = (std::max)(0.0f, contentRect.width - margin.horizontal());
         }

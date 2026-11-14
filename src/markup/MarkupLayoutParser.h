@@ -13,6 +13,7 @@ float parseNumberOrToken(std::string_view val, float defaultValue = 0.0f);
 Color parseColorOrToken(std::string_view val, Color defaultColor = Color::White());
 bool parseBool(std::string_view val, bool defaultValue = false);
 DimensionConstraint parseDimension(std::string_view val);
+Length parseLength(std::string_view val, Length defaultLen = Length::Px(0.0f));
 void parsePaddingOrMargin(std::string_view val, LayoutProps& props, bool isPadding);
 std::string resolveLocalizedText(std::string_view val);
 

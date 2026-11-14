@@ -185,7 +185,49 @@ enum class SizeMode {
     Auto,      // Shrink-to-content
     Fixed,     // Explicit pixel count
     Percent,   // Percentage of parent space
-    Flex       // Weighted fraction of leftover space
+    Flex,      // Weighted fraction of leftover space
+    Vw,        // Percentage of viewport width (0..100)
+    Vh,        // Percentage of viewport height (0..100)
+    Vmin,      // Percentage of min(viewport.width, viewport.height)
+    Vmax       // Percentage of max(viewport.width, viewport.height)
+};
+
+enum class LengthUnit : uint8_t {
+    Px,
+    Percent,
+    Vw,
+    Vh,
+    Vmin,
+    Vmax
+};
+
+struct Length {
+    float value{ 0.0f };
+    LengthUnit unit{ LengthUnit::Px };
+
+    constexpr Length() = default;
+    constexpr Length(float val, LengthUnit u = LengthUnit::Px) : value(val), unit(u) {}
+
+    static constexpr Length Px(float px) { return { px, LengthUnit::Px }; }
+    static constexpr Length Percent(float pct) { return { pct, LengthUnit::Percent }; }
+    static constexpr Length Vw(float vw) { return { vw, LengthUnit::Vw }; }
+    static constexpr Length Vh(float vh) { return { vh, LengthUnit::Vh }; }
+    static constexpr Length Vmin(float vmin) { return { vmin, LengthUnit::Vmin }; }
+    static constexpr Length Vmax(float vmax) { return { vmax, LengthUnit::Vmax }; }
+
+    constexpr float resolve(float parentSize, const Dimensions& viewport) const {
+        switch (unit) {
+        case LengthUnit::Px: return value;
+        case LengthUnit::Percent: return parentSize * (value / 100.0f);
+        case LengthUnit::Vw: return viewport.width * (value / 100.0f);
+        case LengthUnit::Vh: return viewport.height * (value / 100.0f);
+        case LengthUnit::Vmin: return (viewport.width < viewport.height ? viewport.width : viewport.height) * (value / 100.0f);
+        case LengthUnit::Vmax: return (viewport.width > viewport.height ? viewport.width : viewport.height) * (value / 100.0f);
+        default: return value;
+        }
+    }
+
+    constexpr bool operator==(const Length&) const = default;
 };
 
 struct SizeConstraint {
@@ -196,6 +238,10 @@ struct SizeConstraint {
     static constexpr SizeConstraint Fixed(float px) { return { SizeMode::Fixed, px }; }
     static constexpr SizeConstraint Percent(float pct) { return { SizeMode::Percent, pct }; }
     static constexpr SizeConstraint Flex(float weight = 1.0f) { return { SizeMode::Flex, weight }; }
+    static constexpr SizeConstraint Vw(float val) { return { SizeMode::Vw, val }; }
+    static constexpr SizeConstraint Vh(float val) { return { SizeMode::Vh, val }; }
+    static constexpr SizeConstraint Vmin(float val) { return { SizeMode::Vmin, val }; }
+    static constexpr SizeConstraint Vmax(float val) { return { SizeMode::Vmax, val }; }
 };
 
 enum class WidgetState {

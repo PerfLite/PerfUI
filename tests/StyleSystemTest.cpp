@@ -5,6 +5,7 @@
 #include "PerfUI/PerfUI.h"
 #include "PerfUI/Style/StyleSheet.h"
 #include "../src/style/StyleTransition.h"
+#include "../src/style/StyleKeyframeAnimation.h"
 #include "PerfUI/Markup/MarkupLoader.h"
 #include "MockRenderBackend.h"
 
@@ -1043,6 +1044,180 @@ void TestSpringTransitions() {
     std::cout << "  -> Passed TestSpringTransitions" << std::endl;
 }
 
+void TestViewportUnits() {
+    std::cout << "[Test] Running TestViewportUnits..." << std::endl;
+
+    // 1. Direct DimensionConstraint and Length resolution
+    Dimensions vp1080{ 1920.0f, 1080.0f };
+    auto dcW = DimensionConstraint::Vw(50.0f);
+    TEST_ASSERT(std::abs(dcW.resolve(0.0f, vp1080) - 960.0f) < 0.001f, "50vw on 1080p is 960px");
+
+    auto dcH = DimensionConstraint::Vh(25.0f);
+    TEST_ASSERT(std::abs(dcH.resolve(0.0f, vp1080) - 270.0f) < 0.001f, "25vh on 1080p is 270px");
+
+    auto dcMin = DimensionConstraint::Vmin(10.0f);
+    TEST_ASSERT(std::abs(dcMin.resolve(0.0f, vp1080) - 108.0f) < 0.001f, "10vmin on 1080p is 108px");
+
+    auto dcMax = DimensionConstraint::Vmax(10.0f);
+    TEST_ASSERT(std::abs(dcMax.resolve(0.0f, vp1080) - 192.0f) < 0.001f, "10vmax on 1080p is 192px");
+
+    // 2. 4K screen test
+    Dimensions vp4k{ 3840.0f, 2160.0f };
+    TEST_ASSERT(std::abs(dcW.resolve(0.0f, vp4k) - 1920.0f) < 0.001f, "50vw on 4K is 1920px");
+    TEST_ASSERT(std::abs(dcH.resolve(0.0f, vp4k) - 540.0f) < 0.001f, "25vh on 4K is 540px");
+
+    // 3. LayoutEngine measure with viewport units
+    UIContext ctx;
+    ctx.setViewportSize(Dimensions{ 1920.0f, 1080.0f });
+
+    Panel panel;
+    panel.setContext(&ctx);
+    panel.layout().width(DimensionConstraint::Vw(30.0f));
+    panel.layout().height(DimensionConstraint::Vh(40.0f));
+    panel.measure(Dimensions{ 1920.0f, 1080.0f });
+
+    TEST_ASSERT(std::abs(panel.desiredSize().width - 576.0f) < 0.1f, "30vw desired width is 576px");
+    TEST_ASSERT(std::abs(panel.desiredSize().height - 432.0f) < 0.1f, "40vh desired height is 432px");
+
+    // 4. PSS parsing of viewport units
+    StyleSheet sheet;
+    sheet.loadString(R"(
+        .responsive-card {
+            width: 25vw;
+            height: 50vh;
+            left: 5vw;
+            top: 10vh;
+        }
+    )");
+
+    Panel card;
+    card.setContext(&ctx);
+    card.addClass("responsive-card");
+    card.applyStyle(sheet);
+
+    TEST_ASSERT(card.layout().width().mode == SizeMode::Vw, "Width constraint mode is Vw");
+    TEST_ASSERT(card.layout().width().value == 25.0f, "Width constraint value is 25");
+    TEST_ASSERT(card.layout().height().mode == SizeMode::Vh, "Height constraint mode is Vh");
+    TEST_ASSERT(card.layout().height().value == 50.0f, "Height constraint value is 50");
+
+    card.measure(Dimensions{ 1920.0f, 1080.0f });
+    TEST_ASSERT(std::abs(card.desiredSize().width - 480.0f) < 0.1f, "25vw desired width is 480px on 1080p");
+    TEST_ASSERT(std::abs(card.desiredSize().height - 540.0f) < 0.1f, "50vh desired height is 540px on 1080p");
+
+    // 5. Dynamic screen resize adaptation
+    ctx.setViewportSize(Dimensions{ 2560.0f, 1440.0f }); // 2K QHD
+    card.measure(Dimensions{ 2560.0f, 1440.0f });
+    TEST_ASSERT(std::abs(card.desiredSize().width - 640.0f) < 0.1f, "25vw desired width dynamically updates to 640px on 1440p");
+    TEST_ASSERT(std::abs(card.desiredSize().height - 720.0f) < 0.1f, "50vh desired height dynamically updates to 720px on 1440p");
+
+    std::cout << "  -> Passed TestViewportUnits" << std::endl;
+}
+
+void TestKeyframeAnimations() {
+    std::cout << "[Test] Running TestKeyframeAnimations..." << std::endl;
+
+    // 1. Parse @keyframes block and animation shorthand in PSS
+    StyleSheet sheet;
+    bool ok = sheet.loadString(R"(
+        @keyframes pulse {
+            0% {
+                opacity: 0.2;
+                transform-scale: 0.8;
+                background-color: #000000;
+            }
+            50% {
+                opacity: 1.0;
+                transform-scale: 1.2;
+                background-color: #ffd700;
+            }
+            100% {
+                opacity: 0.2;
+                transform-scale: 0.8;
+                background-color: #000000;
+            }
+        }
+
+        Button.pulsing {
+            animation: pulse 2s infinite linear;
+        }
+
+        Panel.slide-in {
+            animation-name: slide;
+            animation-duration: 500ms;
+            animation-timing-function: ease-out;
+            animation-fill-mode: forwards;
+        }
+
+        @keyframes slide {
+            from {
+                transform-offset-y: 50px;
+                opacity: 0.0;
+            }
+            to {
+                transform-offset-y: 0px;
+                opacity: 1.0;
+            }
+        }
+    )");
+    TEST_ASSERT(ok, "StyleSheet loaded @keyframes without errors");
+
+    // 2. Verify keyframes registered in sheet
+    const auto* kfPulse = sheet.findKeyframes("pulse");
+    TEST_ASSERT(kfPulse != nullptr, "Keyframes 'pulse' registered");
+    TEST_ASSERT(kfPulse->steps.size() == 3, "Pulse has 3 keyframe steps");
+    TEST_ASSERT(kfPulse->steps[0].offset == 0.0f, "Step 0 offset is 0.0");
+    TEST_ASSERT(kfPulse->steps[1].offset == 0.5f, "Step 1 offset is 0.5");
+    TEST_ASSERT(kfPulse->steps[2].offset == 1.0f, "Step 2 offset is 1.0");
+    TEST_ASSERT(kfPulse->steps[1].backgroundColor == Color(255, 215, 0, 255), "Step 1 bg is gold");
+
+    const auto* kfSlide = sheet.findKeyframes("slide");
+    TEST_ASSERT(kfSlide != nullptr, "Keyframes 'slide' registered");
+    TEST_ASSERT(kfSlide->steps.size() == 2, "Slide has from/to (2 steps)");
+
+    // 3. Verify element receives animation spec
+    Button btn("TestBtn");
+    btn.addClass("pulsing");
+    btn.applyStyle(sheet);
+
+    TEST_ASSERT(btn.keyframeAnimations() != nullptr, "Button allocated keyframe animation controller");
+    TEST_ASSERT(btn.keyframeAnimations()->hasActiveAnimations(), "Button has active keyframe animation");
+
+    // 4. Runtime update at t = 0.0s (start)
+    btn.update(0.0f);
+    TEST_ASSERT(std::abs(btn.opacity() - 0.2f) < 0.02f, "Initial opacity is 0.2");
+    TEST_ASSERT(std::abs(btn.renderScale().x - 0.8f) < 0.02f, "Initial scale is 0.8");
+
+    // 5. Runtime update at t = 1.0s (50% midpoint)
+    btn.update(1.0f);
+    TEST_ASSERT(std::abs(btn.opacity() - 1.0f) < 0.02f, "Midpoint opacity reached 1.0");
+    TEST_ASSERT(std::abs(btn.renderScale().x - 1.2f) < 0.02f, "Midpoint scale reached 1.2");
+    BoxStyle bs = btn.resolveBoxStyle(WidgetState::Normal);
+    TEST_ASSERT(bs.backgroundColor == Color(255, 215, 0, 255), "Midpoint background color is gold");
+
+    // 6. Runtime update at t = 2.0s (100% full cycle)
+    btn.update(1.0f);
+    TEST_ASSERT(std::abs(btn.opacity() - 0.2f) < 0.05f, "End-of-cycle opacity returned to 0.2");
+    TEST_ASSERT(std::abs(btn.renderScale().x - 0.8f) < 0.05f, "End-of-cycle scale returned to 0.8");
+
+    // 7. Verify infinite loop continues into second cycle (t = 2.5s -> 25% of second cycle)
+    btn.update(0.5f);
+    TEST_ASSERT(btn.keyframeAnimations()->hasActiveAnimations(), "Infinite animation still running");
+    TEST_ASSERT(std::abs(btn.opacity() - 0.6f) < 0.05f, "Second cycle 25% opacity is ~0.6");
+
+    // 8. Test Slide panel with fill-mode: forwards
+    Panel slidePanel;
+    slidePanel.addClass("slide-in");
+    slidePanel.applyStyle(sheet);
+
+    // Initial state before update: tick to 0.55s (end of 500ms duration)
+    slidePanel.update(0.55f);
+    TEST_ASSERT(std::abs(slidePanel.opacity() - 1.0f) < 0.02f, "Forwards fill mode holds opacity 1.0");
+    TEST_ASSERT(std::abs(slidePanel.renderOffset().y - 0.0f) < 0.05f, "Forwards fill mode holds offset Y 0.0");
+    TEST_ASSERT(!slidePanel.keyframeAnimations()->hasActiveAnimations(), "Finished non-infinite animation stopped");
+
+    std::cout << "  -> Passed TestKeyframeAnimations" << std::endl;
+}
+
 int main() {
     std::cout << "=== Running PerfUI Style System & Components Tests ===" << std::endl;
 
@@ -1055,6 +1230,8 @@ int main() {
     TestOutlineAndBorderImage();
     TestLinearGradients();
     TestSpringTransitions();
+    TestViewportUnits();
+    TestKeyframeAnimations();
 
     std::cout << "=== ALL STYLE SYSTEM & COMPONENT TESTS PASSED ===" << std::endl;
     return 0;

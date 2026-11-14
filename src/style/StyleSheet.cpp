@@ -19,15 +19,33 @@ static std::string toLowerString(std::string_view sv) {
     return s;
 }
 
+static std::string trimWhitespace(std::string_view sv) {
+    size_t first = 0;
+    while (first < sv.size() && std::isspace(static_cast<unsigned char>(sv[first]))) ++first;
+    size_t last = sv.size();
+    while (last > first && std::isspace(static_cast<unsigned char>(sv[last - 1]))) --last;
+    return std::string(sv.substr(first, last - first));
+}
+
 void StyleSheet::clear() {
     m_rules.clear();
     m_variables.clear();
+    m_keyframes.clear();
     m_warnings.clear();
     m_errors.clear();
     m_idIndex.clear();
     m_classIndex.clear();
     m_tagIndex.clear();
     m_universalIndex.clear();
+}
+
+void StyleSheet::addKeyframes(KeyframesDefinition kf) {
+    m_keyframes[kf.name] = std::move(kf);
+}
+
+const KeyframesDefinition* StyleSheet::findKeyframes(const std::string& name) const {
+    auto it = m_keyframes.find(name);
+    return it != m_keyframes.end() ? &it->second : nullptr;
 }
 
 bool StyleSheet::loadString(std::string_view pss, const std::string& sourceName) {
@@ -615,6 +633,161 @@ static void applyTransitionDelay(ComputedStyle& c, const std::string& val) {
     }
 }
 
+static void parseAnimationShorthand(const std::string& val, std::vector<AnimationSpec>& outSpecs) {
+    auto clauses = splitTopLevelCommas(val);
+    outSpecs.clear();
+    for (const auto& clause : clauses) {
+        if (clause == "none") {
+            outSpecs.clear();
+            return;
+        }
+        auto tokens = splitWhitespaceOutsideParens(clause);
+        if (tokens.empty()) continue;
+
+        AnimationSpec spec;
+        bool durationParsed = false;
+
+        for (const auto& tok : tokens) {
+            std::string lowerTok = toLowerString(tok);
+            float sec = 0.0f;
+            EasingDef easing;
+
+            if (isTimeToken(tok, sec)) {
+                if (!durationParsed) {
+                    spec.duration = sec;
+                    durationParsed = true;
+                } else {
+                    spec.delay = sec;
+                }
+            } else if (isEasingToken(tok, easing)) {
+                spec.easing = easing;
+            } else if (lowerTok == "infinite") {
+                spec.iterationCount = -1.0f;
+            } else if (lowerTok == "normal") {
+                spec.direction = AnimationDirection::Normal;
+            } else if (lowerTok == "reverse") {
+                spec.direction = AnimationDirection::Reverse;
+            } else if (lowerTok == "alternate") {
+                spec.direction = AnimationDirection::Alternate;
+            } else if (lowerTok == "alternate-reverse") {
+                spec.direction = AnimationDirection::AlternateReverse;
+            } else if (lowerTok == "forwards") {
+                spec.fillMode = AnimationFillMode::Forwards;
+            } else if (lowerTok == "backwards") {
+                spec.fillMode = AnimationFillMode::Backwards;
+            } else if (lowerTok == "both") {
+                spec.fillMode = AnimationFillMode::Both;
+            } else if (lowerTok == "running") {
+                spec.playState = AnimationPlayState::Running;
+            } else if (lowerTok == "paused") {
+                spec.playState = AnimationPlayState::Paused;
+            } else {
+                char* endPtr = nullptr;
+                float num = std::strtof(tok.c_str(), &endPtr);
+                if (endPtr != tok.c_str() && *endPtr == '\0') {
+                    spec.iterationCount = num;
+                } else {
+                    std::string animName = tok;
+                    if (animName.size() >= 2 && ((animName.front() == '"' && animName.back() == '"') || (animName.front() == '\'' && animName.back() == '\''))) {
+                        animName = animName.substr(1, animName.size() - 2);
+                    }
+                    spec.name = animName;
+                }
+            }
+        }
+
+        if (!spec.name.empty()) {
+            outSpecs.push_back(std::move(spec));
+        }
+    }
+}
+
+static void applyAnimationName(ComputedStyle& c, const std::string& val) {
+    auto names = splitTopLevelCommas(val);
+    if (c.animations.size() < names.size()) c.animations.resize(names.size());
+    for (size_t i = 0; i < names.size(); ++i) {
+        std::string n = trimWhitespace(names[i]);
+        if (n.size() >= 2 && ((n.front() == '"' && n.back() == '"') || (n.front() == '\'' && n.back() == '\''))) {
+            n = n.substr(1, n.size() - 2);
+        }
+        c.animations[i].name = n;
+    }
+}
+
+static void applyAnimationDuration(ComputedStyle& c, const std::string& val) {
+    auto tokens = splitTopLevelCommas(val);
+    if (c.animations.empty()) c.animations.resize(tokens.size());
+    for (size_t i = 0; i < c.animations.size(); ++i) {
+        float sec = 0.0f;
+        const auto& tok = tokens[i % tokens.size()];
+        if (isTimeToken(tok, sec)) c.animations[i].duration = sec;
+    }
+}
+
+static void applyAnimationTiming(ComputedStyle& c, const std::string& val) {
+    auto tokens = splitTopLevelCommas(val);
+    if (c.animations.empty()) c.animations.resize(tokens.size());
+    for (size_t i = 0; i < c.animations.size(); ++i) {
+        EasingDef easing;
+        const auto& tok = tokens[i % tokens.size()];
+        if (isEasingToken(tok, easing)) c.animations[i].easing = easing;
+    }
+}
+
+static void applyAnimationDelay(ComputedStyle& c, const std::string& val) {
+    auto tokens = splitTopLevelCommas(val);
+    if (c.animations.empty()) c.animations.resize(tokens.size());
+    for (size_t i = 0; i < c.animations.size(); ++i) {
+        float sec = 0.0f;
+        const auto& tok = tokens[i % tokens.size()];
+        if (isTimeToken(tok, sec)) c.animations[i].delay = sec;
+    }
+}
+
+static void applyAnimationIterationCount(ComputedStyle& c, const std::string& val) {
+    auto tokens = splitTopLevelCommas(val);
+    if (c.animations.empty()) c.animations.resize(tokens.size());
+    for (size_t i = 0; i < c.animations.size(); ++i) {
+        std::string t = toLowerString(trimWhitespace(tokens[i % tokens.size()]));
+        if (t == "infinite") c.animations[i].iterationCount = -1.0f;
+        else c.animations[i].iterationCount = std::strtof(t.c_str(), nullptr);
+    }
+}
+
+static void applyAnimationDirection(ComputedStyle& c, const std::string& val) {
+    auto tokens = splitTopLevelCommas(val);
+    if (c.animations.empty()) c.animations.resize(tokens.size());
+    for (size_t i = 0; i < c.animations.size(); ++i) {
+        std::string t = toLowerString(trimWhitespace(tokens[i % tokens.size()]));
+        if (t == "reverse") c.animations[i].direction = AnimationDirection::Reverse;
+        else if (t == "alternate") c.animations[i].direction = AnimationDirection::Alternate;
+        else if (t == "alternate-reverse") c.animations[i].direction = AnimationDirection::AlternateReverse;
+        else c.animations[i].direction = AnimationDirection::Normal;
+    }
+}
+
+static void applyAnimationFillMode(ComputedStyle& c, const std::string& val) {
+    auto tokens = splitTopLevelCommas(val);
+    if (c.animations.empty()) c.animations.resize(tokens.size());
+    for (size_t i = 0; i < c.animations.size(); ++i) {
+        std::string t = toLowerString(trimWhitespace(tokens[i % tokens.size()]));
+        if (t == "forwards") c.animations[i].fillMode = AnimationFillMode::Forwards;
+        else if (t == "backwards") c.animations[i].fillMode = AnimationFillMode::Backwards;
+        else if (t == "both") c.animations[i].fillMode = AnimationFillMode::Both;
+        else c.animations[i].fillMode = AnimationFillMode::None;
+    }
+}
+
+static void applyAnimationPlayState(ComputedStyle& c, const std::string& val) {
+    auto tokens = splitTopLevelCommas(val);
+    if (c.animations.empty()) c.animations.resize(tokens.size());
+    for (size_t i = 0; i < c.animations.size(); ++i) {
+        std::string t = toLowerString(trimWhitespace(tokens[i % tokens.size()]));
+        if (t == "paused") c.animations[i].playState = AnimationPlayState::Paused;
+        else c.animations[i].playState = AnimationPlayState::Running;
+    }
+}
+
 static bool parseLinearGradient(const std::string& val, LinearGradientDef& outGrad) {
     std::string s = val;
     while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.erase(s.begin());
@@ -834,19 +1007,23 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
     } else if (lower == "wrap") {
         c.wrap = parseNumberOrToken(val);
     } else if (lower == "width") {
-        DimensionConstraint d = parseDimension(val);
-        if (d.mode == SizeMode::Fixed) c.width = d.value;
+        c.widthConstraint = parseDimension(val);
+        if (c.widthConstraint->mode == SizeMode::Fixed) c.width = c.widthConstraint->value;
     } else if (lower == "height") {
-        DimensionConstraint d = parseDimension(val);
-        if (d.mode == SizeMode::Fixed) c.height = d.value;
+        c.heightConstraint = parseDimension(val);
+        if (c.heightConstraint->mode == SizeMode::Fixed) c.height = c.heightConstraint->value;
     } else if (lower == "min-width") {
-        c.minWidth = parseNumberOrToken(val);
+        Length l = parseLength(val);
+        c.minWidth = l.resolve(0.0f, Dimensions{ 1920.0f, 1080.0f });
     } else if (lower == "max-width") {
-        c.maxWidth = parseNumberOrToken(val);
+        Length l = parseLength(val);
+        c.maxWidth = l.resolve(0.0f, Dimensions{ 1920.0f, 1080.0f });
     } else if (lower == "min-height") {
-        c.minHeight = parseNumberOrToken(val);
+        Length l = parseLength(val);
+        c.minHeight = l.resolve(0.0f, Dimensions{ 1920.0f, 1080.0f });
     } else if (lower == "max-height") {
-        c.maxHeight = parseNumberOrToken(val);
+        Length l = parseLength(val);
+        c.maxHeight = l.resolve(0.0f, Dimensions{ 1920.0f, 1080.0f });
     } else if (lower == "flex") {
         c.flex = parseNumberOrToken(val, 1.0f);
     } else if (lower == "direction" || lower == "flex-direction") {
@@ -880,13 +1057,17 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
         std::string p = toLowerString(val);
         c.isAbsolute = (p == "absolute");
     } else if (lower == "left") {
-        c.left = parseNumberOrToken(val);
+        c.leftLength = parseLength(val);
+        if (c.leftLength->unit == LengthUnit::Px) c.left = c.leftLength->value;
     } else if (lower == "right") {
-        c.right = parseNumberOrToken(val);
+        c.rightLength = parseLength(val);
+        if (c.rightLength->unit == LengthUnit::Px) c.right = c.rightLength->value;
     } else if (lower == "top") {
-        c.top = parseNumberOrToken(val);
+        c.topLength = parseLength(val);
+        if (c.topLength->unit == LengthUnit::Px) c.top = c.topLength->value;
     } else if (lower == "bottom") {
-        c.bottom = parseNumberOrToken(val);
+        c.bottomLength = parseLength(val);
+        if (c.bottomLength->unit == LengthUnit::Px) c.bottom = c.bottomLength->value;
     } else if (lower == "center-x") {
         c.centerX = parseBool(val, true);
     } else if (lower == "visible" || lower == "display") {
@@ -945,6 +1126,24 @@ static void applyPropertyToComputed(const std::string& key, const std::string& v
         applyTransitionTiming(c, val);
     } else if (lower == "transition-delay") {
         applyTransitionDelay(c, val);
+    } else if (lower == "animation") {
+        parseAnimationShorthand(val, c.animations);
+    } else if (lower == "animation-name") {
+        applyAnimationName(c, val);
+    } else if (lower == "animation-duration") {
+        applyAnimationDuration(c, val);
+    } else if (lower == "animation-timing-function" || lower == "animation-timing") {
+        applyAnimationTiming(c, val);
+    } else if (lower == "animation-delay") {
+        applyAnimationDelay(c, val);
+    } else if (lower == "animation-iteration-count") {
+        applyAnimationIterationCount(c, val);
+    } else if (lower == "animation-direction") {
+        applyAnimationDirection(c, val);
+    } else if (lower == "animation-fill-mode") {
+        applyAnimationFillMode(c, val);
+    } else if (lower == "animation-play-state") {
+        applyAnimationPlayState(c, val);
     }
 }
 
