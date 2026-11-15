@@ -1,0 +1,143 @@
+{
+  "modName": "MyAwesomeMod",
+  "displayName": "$MY_MOD_TITLE",
+  "pages": [
+    {
+      "pageDisplayName": "$PAGE_GENERAL",
+      "content": [
+        {
+          "type": "header",
+          "text": "Display & HUD Configuration"
+        },
+        {
+          "type": "text",
+          "text": "Configure status bar display, colors, and layout scale in real-time."
+        },
+        {
+          "type": "toggle",
+          "id": "enableDynamicHud",
+          "text": "Enable Dynamic Status Bars",
+          "help": "Shows or hides the custom status bars during gameplay.",
+          "valueOptions": {
+            "default": true
+          }
+        },
+        {
+          "type": "slider",
+          "id": "hudScale",
+          "text": "HUD Scale",
+          "help": "Adjust HUD element scaling percentage.",
+          "visibleIf": "enableDynamicHud",
+          "valueOptions": {
+            "min": 50.0,
+            "max": 200.0,
+            "step": 5.0,
+            "default": 100.0,
+            "formatString": "%.0f%%"
+          }
+        },
+        {
+          "type": "stepper",
+          "id": "updateFrequencyHz",
+          "text": "Update Frequency (Hz)",
+          "help": "Refresh rate of the HUD widgets.",
+          "visibleIf": "enableDynamicHud",
+          "valueOptions": {
+            "min": 10.0,
+            "max": 60.0,
+            "step": 5.0,
+            "default": 30.0,
+            "formatString": "%.0f FPS"
+          }
+        },
+        {
+          "type": "color",
+          "id": "hudAccentColor",
+          "text": "HUD Accent Color",
+          "help": "Accent color for borders and active bar fills.",
+          "visibleIf": "enableDynamicHud",
+          "valueOptions": {
+            "default": "0x3399FFCC"
+          }
+        },
+        {
+          "type": "empty"
+        },
+        {
+          "type": "header",
+          "text": "Controls & Keybindings"
+        },
+        {
+          "type": "keymap",
+          "id": "toggleMenuKey",
+          "text": "Toggle Menu Hotkey",
+          "help": "Hotkey used to open and close this configuration window.",
+          "valueOptions": {
+            "default": 67
+          }
+        },
+        {
+          "type": "menu",
+          "id": "anchorPreset",
+          "text": "HUD Anchor Preset",
+          "help": "Screen positioning preset for status bars.",
+          "valueOptions": {
+            "default": "top_left",
+            "options": [
+              { "id": "top_left", "text": "Top Left" },
+              { "id": "top_right", "text": "Top Right" },
+              { "id": "bottom_left", "text": "Bottom Left" },
+              { "id": "bottom_right", "text": "Bottom Right" },
+              { "id": "custom", "text": "Custom Coordinates" }
+            ]
+          }
+        },
+        {
+          "type": "input",
+          "id": "customPresetName",
+          "text": "Profile Name",
+          "help": "Custom label for saved layout preset.",
+          "valueOptions": {
+            "default": "Default Preset"
+          }
+        }
+      ]
+    },
+    {
+      "pageDisplayName": "$PAGE_ADVANCED",
+      "content": [
+        {
+          "type": "header",
+          "text": "Experimental Features"
+        },
+        {
+          "type": "toggle",
+          "id": "enablePostProcessing",
+          "text": "Enable Post-Processing Blur",
+          "help": "Applies dual-kawase blur to UI backgrounds.",
+          "valueOptions": {
+            "default": false
+          }
+        },
+        {
+          "type": "slider",
+          "id": "blurRadius",
+          "text": "Blur Radius",
+          "help": "Gaussian/Kawase blur kernel size.",
+          "enabledIf": "enablePostProcessing",
+          "valueOptions": {
+            "min": 1.0,
+            "max": 16.0,
+            "step": 1.0,
+            "default": 4.0,
+            "formatString": "%.0f px"
+          }
+        },
+        {
+          "type": "text",
+          "text": "Note: Post-processing requires DirectX 11 backend support."
+        }
+      ]
+    }
+  ]
+}

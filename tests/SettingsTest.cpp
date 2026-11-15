@@ -764,6 +764,87 @@ void TestHotkeysAndConflictResolution() {
     std::cout << "  -> Passed TestHotkeysAndConflictResolution" << std::endl;
 }
 
+void TestBenchmarks() {
+    std::cout << "[Benchmark] Running SettingsStore Performance Benchmarks..." << std::endl;
+
+    auto tempDir = std::filesystem::temp_directory_path() / "PerfUI_Benchmark";
+    std::filesystem::create_directories(tempDir);
+
+    auto& store = SettingsStore::GetSingleton();
+    store.setSettingsDirectory(tempDir);
+
+    // 1. Benchmark: Register 50 mods x 100 settings (5,000 settings total)
+    auto t0 = std::chrono::high_resolution_clock::now();
+    for (int m = 0; m < 50; ++m) {
+        std::string modId = "BenchMod_" + std::to_string(m);
+        for (int s = 0; s < 100; ++s) {
+            SettingDef def;
+            def.key = "setting_" + std::to_string(s);
+            if (s % 4 == 0) {
+                def.type = SettingType::Bool;
+                def.defaultValue = (s % 2 == 0);
+            } else if (s % 4 == 1) {
+                def.type = SettingType::Float;
+                def.defaultValue = static_cast<float>(s) * 1.5f;
+                def.minValue = 0.0f;
+                def.maxValue = 500.0f;
+            } else if (s % 4 == 2) {
+                def.type = SettingType::String;
+                def.defaultValue = std::string("default_str_val");
+            } else {
+                def.type = SettingType::KeyCode;
+                def.defaultValue = static_cast<uint32_t>(s);
+            }
+            store.registerSetting(modId, def);
+        }
+    }
+    auto t1 = std::chrono::high_resolution_clock::now();
+    double regMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    std::cout << "  * Registered 5,000 settings (50 mods x 100 settings): " << regMs << " ms ("
+              << (regMs / 50.0) << " ms/mod)" << std::endl;
+
+    // 2. Benchmark: 100,000 read queries (cache hits)
+    auto t2 = std::chrono::high_resolution_clock::now();
+    double accum = 0.0;
+    for (int i = 0; i < 100000; ++i) {
+        std::string modId = "BenchMod_" + std::to_string(i % 50);
+        std::string key = "setting_" + std::to_string(i % 100);
+        accum += store.getFloat(modId, key, 0.0f);
+    }
+    auto t3 = std::chrono::high_resolution_clock::now();
+    double readMs = std::chrono::duration<double, std::milli>(t3 - t2).count();
+    std::cout << "  * 100,000 read queries across 5,000 settings: " << readMs << " ms ("
+              << (readMs / 100.0) << " ns/query, checksum=" << accum << ")" << std::endl;
+
+    // 3. Benchmark: Save 50 mods to disk (atomic JSON serialization & flush)
+    auto t4 = std::chrono::high_resolution_clock::now();
+    for (int m = 0; m < 50; ++m) {
+        std::string modId = "BenchMod_" + std::to_string(m);
+        store.saveToFile(modId, true);
+    }
+    auto t5 = std::chrono::high_resolution_clock::now();
+    double saveMs = std::chrono::duration<double, std::milli>(t5 - t4).count();
+    std::cout << "  * Saved 50 mod JSON files to disk: " << saveMs << " ms ("
+              << (saveMs / 50.0) << " ms/mod)" << std::endl;
+
+    // 4. Benchmark: Load 50 mods from disk
+    auto t6 = std::chrono::high_resolution_clock::now();
+    for (int m = 0; m < 50; ++m) {
+        std::string modId = "BenchMod_" + std::to_string(m);
+        store.loadFromFile(modId);
+    }
+    auto t7 = std::chrono::high_resolution_clock::now();
+    double loadMs = std::chrono::duration<double, std::milli>(t7 - t6).count();
+    std::cout << "  * Loaded 50 mod JSON files from disk: " << loadMs << " ms ("
+              << (loadMs / 50.0) << " ms/mod)" << std::endl;
+
+    // Cleanup
+    std::error_code ec;
+    std::filesystem::remove_all(tempDir, ec);
+
+    std::cout << "  -> Passed TestBenchmarks" << std::endl;
+}
+
 int main() {
     std::cout << "=== Running PerfUI SettingsStore Tests ===" << std::endl;
 
@@ -778,6 +859,7 @@ int main() {
     TestDeclarativeSettingsSchema();
     TestModSettingsManagerAndApiV4();
     TestHotkeysAndConflictResolution();
+    TestBenchmarks();
 
     std::cout << "=== ALL SETTINGS TESTS PASSED ===" << std::endl;
     return 0;
