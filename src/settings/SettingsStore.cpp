@@ -270,6 +270,143 @@ SettingsStore::SettingsStore() {
 
 SettingsStore::~SettingsStore() {
     flushAll();
+    m_stopWorker.store(true);
+    m_saveCv.notify_all();
+    if (m_workerThread.joinable()) {
+        m_workerThread.join();
+    }
+}
+
+void SettingsStore::ensureWorkerRunning() {
+    if (!m_workerStarted.load(std::memory_order_relaxed)) {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        if (!m_workerStarted.load(std::memory_order_relaxed)) {
+            m_stopWorker.store(false);
+            m_workerThread = std::thread(&SettingsStore::workerLoop, this);
+            m_workerStarted.store(true, std::memory_order_release);
+        }
+    }
+}
+
+void SettingsStore::workerLoop() {
+    while (true) {
+        SaveTask task;
+        {
+            std::unique_lock<std::mutex> lock(m_queueMutex);
+            m_saveCv.wait(lock, [this]() {
+                return m_stopWorker.load() || !m_pendingSaves.empty();
+            });
+
+            if (m_stopWorker.load() && m_pendingSaves.empty()) {
+                break;
+            }
+
+            auto it = m_pendingSaves.begin();
+            task = std::move(it->second);
+            m_pendingSaves.erase(it);
+            m_activeSavesCount++;
+        }
+
+        bool success = executeDiskSave(task);
+        if (!success && task.retryCount < 3) {
+            task.retryCount++;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::unique_lock<std::mutex> lock(m_queueMutex);
+            if (m_pendingSaves.find(task.modId) == m_pendingSaves.end()) {
+                m_pendingSaves[task.modId] = std::move(task);
+            }
+            m_activeSavesCount--;
+            continue;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(m_queueMutex);
+            m_activeSavesCount--;
+            if (m_pendingSaves.empty() && m_activeSavesCount == 0) {
+                m_flushCv.notify_all();
+            }
+        }
+    }
+}
+
+void SettingsStore::enqueueSaveSnapshot(const std::string& modId) {
+    SaveTask task;
+    task.modId = modId;
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+        auto it = m_mods.find(modId);
+        if (it == m_mods.end()) return;
+        task.values = it->second.values;
+        task.unknownRawValues = it->second.unknownRawValues;
+        task.finalPath = getSettingsFilePath(modId);
+        it->second.dirty = false;
+        it->second.debounceTimer = -1.0f;
+    }
+
+    ensureWorkerRunning();
+
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        m_pendingSaves[modId] = std::move(task);
+    }
+    m_saveCv.notify_one();
+}
+
+bool SettingsStore::executeDiskSave(const SaveTask& task) {
+    try {
+        std::error_code ec;
+        std::filesystem::create_directories(task.finalPath.parent_path(), ec);
+
+        auto tmpPath = task.finalPath;
+        tmpPath.replace_extension(".json.tmp." + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+
+        JsonValue root = JsonValue::Object{};
+        root["version"] = 1;
+        JsonValue& settingsObj = root["settings"];
+        settingsObj = JsonValue::Object{};
+
+        for (const auto& [k, v] : task.values) {
+            std::visit([&settingsObj, &k](auto&& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, bool>) settingsObj[k] = arg;
+                else if constexpr (std::is_same_v<T, int32_t>) settingsObj[k] = arg;
+                else if constexpr (std::is_same_v<T, float>) settingsObj[k] = arg;
+                else if constexpr (std::is_same_v<T, std::string>) settingsObj[k] = arg;
+                else if constexpr (std::is_same_v<T, Color>) settingsObj[k] = FormatColorHex(arg);
+                else if constexpr (std::is_same_v<T, uint32_t>) settingsObj[k] = static_cast<int64_t>(arg);
+            }, v);
+        }
+
+        for (const auto& [k, rawJson] : task.unknownRawValues) {
+            auto parsed = JsonValue::parse(rawJson);
+            settingsObj[k] = parsed;
+        }
+
+        std::string serialized = root.serialize(2);
+        std::ofstream file(tmpPath, std::ios::binary);
+        if (!file.is_open()) {
+            std::cerr << "[PerfUI] Failed to open temp file for writing: " << tmpPath.string() << std::endl;
+            return false;
+        }
+        file << serialized;
+        file.flush();
+        file.close();
+
+        // Atomic replace
+#ifdef _WIN32
+        std::wstring wTmp = tmpPath.wstring();
+        std::wstring wFinal = task.finalPath.wstring();
+        if (!MoveFileExW(wTmp.c_str(), wFinal.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+            std::filesystem::rename(tmpPath, task.finalPath, ec);
+        }
+#else
+        std::filesystem::rename(tmpPath, task.finalPath, ec);
+#endif
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "[PerfUI] Error saving settings for " << task.modId << ": " << e.what() << std::endl;
+        return false;
+    }
 }
 
 std::string SettingsStore::makeKeyTag(const std::string& modId, const std::string& key) const {
@@ -653,100 +790,67 @@ bool SettingsStore::loadFromFile(const std::string& modId) {
 }
 
 bool SettingsStore::saveToFile(const std::string& modId, bool immediate) {
-    std::lock_guard<std::recursive_mutex> lock(m_mutex);
-    auto it = m_mods.find(modId);
-    if (it == m_mods.end()) return false;
-    auto& modData = it->second;
-
-    if (!immediate) {
-        modData.dirty = true;
-        modData.debounceTimer = 0.4f;
-        return true;
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+        auto it = m_mods.find(modId);
+        if (it == m_mods.end()) return false;
+        if (!immediate) {
+            it->second.dirty = true;
+            it->second.debounceTimer = 0.4f;
+            return true;
+        }
     }
 
-    try {
-        std::filesystem::create_directories(m_settingsDir);
-        auto finalPath = getSettingsFilePath(modId);
-        auto tmpPath = finalPath;
-        tmpPath.replace_extension(".json.tmp");
-
-        JsonValue root = JsonValue::Object{};
-        root["version"] = 1;
-        JsonValue& settingsObj = root["settings"];
-        settingsObj = JsonValue::Object{};
-
-        for (const auto& [k, v] : modData.values) {
-            std::visit([&settingsObj, &k](auto&& arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, bool>) settingsObj[k] = arg;
-                else if constexpr (std::is_same_v<T, int32_t>) settingsObj[k] = arg;
-                else if constexpr (std::is_same_v<T, float>) settingsObj[k] = arg;
-                else if constexpr (std::is_same_v<T, std::string>) settingsObj[k] = arg;
-                else if constexpr (std::is_same_v<T, Color>) settingsObj[k] = FormatColorHex(arg);
-                else if constexpr (std::is_same_v<T, uint32_t>) settingsObj[k] = static_cast<int64_t>(arg);
-            }, v);
-        }
-
-        // Add unknown raw values
-        for (const auto& [k, rawJson] : modData.unknownRawValues) {
-            auto parsed = JsonValue::parse(rawJson);
-            settingsObj[k] = parsed;
-        }
-
-        std::string serialized = root.serialize(2);
-        std::ofstream file(tmpPath, std::ios::binary);
-        if (!file.is_open()) {
-            return false;
-        }
-        file << serialized;
-        file.flush();
-        file.close();
-
-        // Atomic replace
-#ifdef _WIN32
-        std::wstring wTmp = tmpPath.wstring();
-        std::wstring wFinal = finalPath.wstring();
-        if (!MoveFileExW(wTmp.c_str(), wFinal.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-            // Fallback to std::filesystem::rename
-            std::error_code ec;
-            std::filesystem::rename(tmpPath, finalPath, ec);
-        }
-#else
-        std::error_code ec;
-        std::filesystem::rename(tmpPath, finalPath, ec);
-#endif
-
-        modData.dirty = false;
-        modData.debounceTimer = -1.0f;
-        return true;
-    } catch (const std::exception& e) {
-        std::cerr << "[PerfUI] Failed to save settings for " << modId << ": " << e.what() << std::endl;
-        return false;
+    enqueueSaveSnapshot(modId);
+    if (immediate) {
+        std::unique_lock<std::mutex> lock(m_queueMutex);
+        m_flushCv.wait(lock, [this, &modId]() {
+            return m_pendingSaves.find(modId) == m_pendingSaves.end() && m_activeSavesCount == 0;
+        });
     }
+    return true;
 }
 
 void SettingsStore::flushAll() {
-    std::lock_guard<std::recursive_mutex> lock(m_mutex);
-    for (auto& [modId, modData] : m_mods) {
-        if (modData.dirty) {
-            saveToFile(modId, true);
+    std::vector<std::string> dirtyMods;
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+        for (const auto& [modId, modData] : m_mods) {
+            if (modData.dirty) {
+                dirtyMods.push_back(modId);
+            }
         }
     }
+    for (const auto& modId : dirtyMods) {
+        enqueueSaveSnapshot(modId);
+    }
+
+    std::unique_lock<std::mutex> lock(m_queueMutex);
+    m_flushCv.wait(lock, [this]() {
+        return m_pendingSaves.empty() && m_activeSavesCount == 0;
+    });
 }
 
 void SettingsStore::update(float dt) {
-    std::lock_guard<std::recursive_mutex> lock(m_mutex);
-    for (auto& [modId, modData] : m_mods) {
-        if (modData.dirty && modData.debounceTimer > 0.0f) {
-            modData.debounceTimer -= dt;
-            if (modData.debounceTimer <= 0.0f) {
-                saveToFile(modId, true);
+    std::vector<std::string> modsToSave;
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+        for (auto& [modId, modData] : m_mods) {
+            if (modData.dirty && modData.debounceTimer > 0.0f) {
+                modData.debounceTimer -= dt;
+                if (modData.debounceTimer <= 0.0f) {
+                    modsToSave.push_back(modId);
+                }
             }
         }
+    }
+    for (const auto& modId : modsToSave) {
+        enqueueSaveSnapshot(modId);
     }
 }
 
 void SettingsStore::clearAll() {
+    flushAll();
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
     m_mods.clear();
     m_subscriptions.clear();

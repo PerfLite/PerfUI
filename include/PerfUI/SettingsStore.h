@@ -9,6 +9,9 @@
 #include <optional>
 #include <functional>
 #include <mutex>
+#include <thread>
+#include <condition_variable>
+#include <atomic>
 #include <filesystem>
 #include <cstdint>
 
@@ -154,6 +157,29 @@ private:
 
     void notifyListeners(const std::string& modId, const std::string& key, const SettingValue& val);
     std::string makeKeyTag(const std::string& modId, const std::string& key) const;
+
+    // Background asynchronous writer thread (Phase 4 fix)
+    struct SaveTask {
+        std::string modId;
+        std::filesystem::path finalPath;
+        std::unordered_map<std::string, SettingValue> values;
+        std::unordered_map<std::string, std::string> unknownRawValues;
+        int retryCount{ 0 };
+    };
+
+    mutable std::mutex m_queueMutex;
+    std::condition_variable m_saveCv;
+    std::condition_variable m_flushCv;
+    std::unordered_map<std::string, SaveTask> m_pendingSaves;
+    size_t m_activeSavesCount{ 0 };
+    std::thread m_workerThread;
+    std::atomic<bool> m_stopWorker{ false };
+    std::atomic<bool> m_workerStarted{ false };
+
+    void ensureWorkerRunning();
+    void enqueueSaveSnapshot(const std::string& modId);
+    static bool executeDiskSave(const SaveTask& task);
+    void workerLoop();
 };
 
 } // namespace PerfUI

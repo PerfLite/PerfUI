@@ -288,6 +288,7 @@ void TestDebounceSave() {
 
     // Advance another 0.3s (total 0.5s > 0.4s)
     store.update(0.3f);
+    store.flushAll();
     TEST_ASSERT(std::filesystem::exists(filePath), "File saved after debounce timer elapsed");
 
     std::filesystem::remove_all(tempDir);
@@ -990,6 +991,64 @@ void TestApiResolutionRetryAndIsApiReady() {
     std::cout << "  -> Passed TestApiResolutionRetryAndIsApiReady" << std::endl;
 }
 
+void TestBackgroundAsyncSavingAndDebounce() {
+    std::cout << "[Test] Running TestBackgroundAsyncSavingAndDebounce..." << std::endl;
+
+    auto tempDir = std::filesystem::temp_directory_path() / "PerfUI_AsyncSave_Test";
+    std::filesystem::remove_all(tempDir);
+    std::filesystem::create_directories(tempDir);
+
+    auto& store = SettingsStore::GetSingleton();
+    store.clearAll();
+    store.setSettingsDirectory(tempDir);
+
+    std::string mod = "AsyncMod";
+    SettingDef def;
+    def.key = "sliderVal";
+    def.type = SettingType::Float;
+    def.defaultValue = 0.0f;
+    store.registerSetting(mod, def);
+
+    // 1. Rapid slider changes: 500 rapid sets must execute purely in-memory
+    auto t0 = std::chrono::high_resolution_clock::now();
+    for (int i = 1; i <= 500; ++i) {
+        store.setFloat(mod, "sliderVal", static_cast<float>(i));
+    }
+    auto t1 = std::chrono::high_resolution_clock::now();
+    double rapidMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    TEST_ASSERT(rapidMs < 10.0, "500 rapid setFloat calls completed under 10ms (pure in-memory)");
+
+    // In-memory value is immediately 500.0f
+    TEST_ASSERT(store.getFloat(mod, "sliderVal") == 500.0f, "In-memory value is immediately 500.0f");
+
+    // File not written yet due to debounce
+    auto filePath = store.getSettingsFilePath(mod);
+    TEST_ASSERT(!std::filesystem::exists(filePath), "File not written before debounce timeout");
+
+    // 2. update(dt) in frame loop: when debounce expires, snapshot is enqueued to background thread without blocking frame!
+    auto tFrameStart = std::chrono::high_resolution_clock::now();
+    store.update(0.5f); // 0.5s > 0.4s debounce
+    auto tFrameEnd = std::chrono::high_resolution_clock::now();
+    double frameMs = std::chrono::duration<double, std::milli>(tFrameEnd - tFrameStart).count();
+    TEST_ASSERT(frameMs < 1.0, "update() frame time < 1ms (non-blocking background enqueue)");
+
+    // 3. flushAll waits for background writer to complete atomic write to disk
+    store.flushAll();
+    TEST_ASSERT(std::filesystem::exists(filePath), "Settings file exists after flushAll");
+
+    // Verify written file contains the final value (500.0f)
+    SettingsStore freshStore;
+    freshStore.setSettingsDirectory(tempDir);
+    freshStore.registerSetting(mod, def);
+    TEST_ASSERT(freshStore.getFloat(mod, "sliderVal") == 500.0f, "Disk file holds final coalesced value 500.0f");
+
+    // Clean up
+    std::error_code ec;
+    std::filesystem::remove_all(tempDir, ec);
+
+    std::cout << "  -> Passed TestBackgroundAsyncSavingAndDebounce (frame dispatch time: " << frameMs << " ms)" << std::endl;
+}
+
 void TestBenchmarks() {
     std::cout << "[Benchmark] Running SettingsStore Performance Benchmarks..." << std::endl;
 
@@ -1088,6 +1147,7 @@ int main() {
     TestAutoLoaderAndSchemaMarker();
     TestSafeStringRetrievalAndApiV5();
     TestApiResolutionRetryAndIsApiReady();
+    TestBackgroundAsyncSavingAndDebounce();
     TestBenchmarks();
 
     std::cout << "=== ALL SETTINGS TESTS PASSED ===" << std::endl;
