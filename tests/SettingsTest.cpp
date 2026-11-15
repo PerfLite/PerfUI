@@ -486,6 +486,7 @@ void TestDeclarativeSettingsSchema() {
 
     // 1. Valid multi-page schema with all types, localization, valueOptions
     std::string validJson = R"({
+        "perfuiSchema": 1,
         "modName": "SurvivalMod",
         "displayName": "$MOD_TITLE",
         "pages": [
@@ -550,6 +551,7 @@ void TestDeclarativeSettingsSchema() {
 
     // 3. Unknown types and missing ID handling (resilience)
     std::string resilientJson = R"({
+        "perfuiSchema": 1,
         "modName": "ResilientMod",
         "displayName": "Resilience Test",
         "content": [
@@ -609,6 +611,7 @@ void TestModSettingsManagerAndApiV4() {
     {
         std::ofstream out(tempJson, std::ios::trunc);
         out << R"({
+            "perfuiSchema": 1,
             "modName": "ModAlpha",
             "displayName": "Alpha Mod",
             "content": [
@@ -764,6 +767,101 @@ void TestHotkeysAndConflictResolution() {
     std::cout << "  -> Passed TestHotkeysAndConflictResolution" << std::endl;
 }
 
+void TestAutoLoaderAndSchemaMarker() {
+    std::cout << "[Test] Running TestAutoLoaderAndSchemaMarker..." << std::endl;
+
+    auto& mgr = ModSettingsManager::GetSingleton();
+    mgr.clear();
+
+    // 1. Explicit schema validation of perfuiSchema marker
+    std::string missingMarkerJson = R"({
+        "modName": "MissingMarkerMod",
+        "displayName": "No Marker",
+        "content": []
+    })";
+    SettingsView view("TestView");
+    auto resMissing = SettingsSchemaLoader::loadFromString(missingMarkerJson, "MissingMarker.json", &view);
+    TEST_ASSERT(!resMissing.success, "Schema missing 'perfuiSchema' must fail");
+    TEST_ASSERT(!resMissing.errors.empty(), "Error message recorded for missing 'perfuiSchema'");
+
+    std::string zeroMarkerJson = R"({
+        "perfuiSchema": 0,
+        "modName": "ZeroMarkerMod",
+        "displayName": "Zero Marker",
+        "content": []
+    })";
+    auto resZero = SettingsSchemaLoader::loadFromString(zeroMarkerJson, "ZeroMarker.json", &view);
+    TEST_ASSERT(!resZero.success, "Schema with 'perfuiSchema: 0' must fail");
+
+    std::string validMarkerJson = R"({
+        "perfuiSchema": 1,
+        "modName": "ValidMarkerMod",
+        "displayName": "Valid Marker",
+        "content": []
+    })";
+    auto resValid = SettingsSchemaLoader::loadFromString(validMarkerJson, "ValidMarker.json", &view);
+    TEST_ASSERT(resValid.success, "Schema with 'perfuiSchema: 1' must succeed");
+
+    // 2. Directory scan with alien config.json, unmarked files, broken files, and valid files
+    auto tempScanDir = std::filesystem::temp_directory_path() / "PerfUI_AutoLoad_Test";
+    std::filesystem::remove_all(tempScanDir);
+    std::filesystem::create_directories(tempScanDir);
+
+    // Folder 1: Alien mod with config.json -> Must be completely ignored
+    auto alienDir = tempScanDir / "AlienMod";
+    std::filesystem::create_directories(alienDir);
+    {
+        std::ofstream f(alienDir / "config.json");
+        f << "{ \"alienProperty\": 42, \"anotherMod\": true }";
+    }
+
+    // Folder 2: Unmarked perfui.settings.json -> Must be skipped
+    auto unmarkedDir = tempScanDir / "UnmarkedMod";
+    std::filesystem::create_directories(unmarkedDir);
+    {
+        std::ofstream f(unmarkedDir / "perfui.settings.json");
+        f << "{ \"modName\": \"UnmarkedMod\", \"content\": [] }";
+    }
+
+    // Folder 3: Valid Mod Alpha with perfui.settings.json
+    auto modADir = tempScanDir / "ModA";
+    std::filesystem::create_directories(modADir);
+    {
+        std::ofstream f(modADir / "perfui.settings.json");
+        f << "{ \"perfuiSchema\": 1, \"modName\": \"ModA\", \"displayName\": \"Mod A Title\", \"content\": [] }";
+    }
+
+    // Folder 4: Corrupted JSON file -> Must log and continue, NOT blocking ModB
+    auto brokenDir = tempScanDir / "BrokenMod";
+    std::filesystem::create_directories(brokenDir);
+    {
+        std::ofstream f(brokenDir / "perfui.settings.json");
+        f << "{ \"perfuiSchema\": 1, unquoted_garbage_here ";
+    }
+
+    // Folder 5: Valid Mod Beta with perfui.settings.json
+    auto modBDir = tempScanDir / "ModB";
+    std::filesystem::create_directories(modBDir);
+    {
+        std::ofstream f(modBDir / "perfui.settings.json");
+        f << "{ \"perfuiSchema\": 1, \"modName\": \"ModB\", \"displayName\": \"Mod B Title\", \"content\": [] }";
+    }
+
+    size_t loadedCount = mgr.scanAndRegisterSettings(tempScanDir);
+    TEST_ASSERT(loadedCount == 2, "Scanned 2 valid mods (ModA and ModB)");
+    TEST_ASSERT(mgr.getMod("ModA") != nullptr, "ModA was registered");
+    TEST_ASSERT(mgr.getMod("ModB") != nullptr, "ModB was registered despite BrokenMod error");
+    TEST_ASSERT(mgr.getMod("AlienMod") == nullptr, "Alien config.json was not registered");
+    TEST_ASSERT(mgr.getMod("UnmarkedMod") == nullptr, "Unmarked file was not registered");
+    TEST_ASSERT(mgr.getMod("BrokenMod") == nullptr, "Broken file was not registered");
+
+    // Clean up temp directory
+    std::error_code ec;
+    std::filesystem::remove_all(tempScanDir, ec);
+
+    std::cout << "  -> Passed TestAutoLoaderAndSchemaMarker" << std::endl;
+}
+
 void TestBenchmarks() {
     std::cout << "[Benchmark] Running SettingsStore Performance Benchmarks..." << std::endl;
 
@@ -859,6 +957,7 @@ int main() {
     TestDeclarativeSettingsSchema();
     TestModSettingsManagerAndApiV4();
     TestHotkeysAndConflictResolution();
+    TestAutoLoaderAndSchemaMarker();
     TestBenchmarks();
 
     std::cout << "=== ALL SETTINGS TESTS PASSED ===" << std::endl;

@@ -346,6 +346,10 @@ void WidgetAutoLoader::Initialize(UIContext* ctx) {
 void WidgetAutoLoader::ScanAndLoad() {
     if (!m_context) return;
 
+    // Discover settings schemas in Data/SKSE/Plugins and SKSE/Plugins
+    ModSettingsManager::GetSingleton().scanAndRegisterSettings("Data/SKSE/Plugins");
+    ModSettingsManager::GetSingleton().scanAndRegisterSettings("SKSE/Plugins");
+
     const std::vector<std::filesystem::path> searchRoots = {
         "Data/Interface/widgets",
         "Interface/widgets",

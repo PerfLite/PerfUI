@@ -36,6 +36,9 @@ public:
     bool registerJson(const std::string& modId, const std::string& displayName, const std::string& jsonPath);
     bool registerPage(const std::string& modId, const std::string& displayName, void (*build)(void*, API::SettingsPageBuilder*), void* userData);
 
+    // Auto-discover and register mods containing perfui.settings.json
+    size_t scanAndRegisterSettings(const std::filesystem::path& pluginsRoot);
+
     const std::vector<ModSettingsEntry>& getRegisteredMods() const { return m_mods; }
     const ModSettingsEntry* getMod(const std::string& modId) const;
 

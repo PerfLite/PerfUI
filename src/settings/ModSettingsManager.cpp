@@ -3,7 +3,10 @@
 #include "PerfUI/SettingsView.h"
 #include "PerfUI/SettingsSchema.h"
 #include "PerfUI/PerfUIApi.h"
+#include "SimpleJson.h"
 #include <algorithm>
+#include <iostream>
+#include <fstream>
 
 namespace PerfUI {
 
@@ -29,7 +32,12 @@ bool ModSettingsManager::registerJson(
 
     // Eagerly parse schema and register definitions in store
     if (!jsonPath.empty()) {
-        SettingsSchemaLoader::loadFromFile(jsonPath, nullptr, &SettingsStore::GetSingleton());
+        auto res = SettingsSchemaLoader::loadFromFile(jsonPath, nullptr, &SettingsStore::GetSingleton());
+        if (!res.success) {
+            std::string reason = res.errors.empty() ? "Unknown parse error" : res.errors.front();
+            std::cerr << "[PerfUI] Failed to register mod settings JSON at \"" << jsonPath << "\": " << reason << std::endl;
+            return false;
+        }
     }
 
     auto it = m_modIndex.find(modId);
@@ -55,6 +63,54 @@ bool ModSettingsManager::registerJson(
         attachToWindow(m_window);
     }
     return true;
+}
+
+size_t ModSettingsManager::scanAndRegisterSettings(const std::filesystem::path& pluginsRoot) {
+    std::error_code ec;
+    if (!std::filesystem::exists(pluginsRoot, ec) || !std::filesystem::is_directory(pluginsRoot, ec)) {
+        return 0;
+    }
+
+    size_t registeredCount = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(pluginsRoot, ec)) {
+        if (!entry.is_directory(ec)) continue;
+
+        auto settingsPath = entry.path() / "perfui.settings.json";
+        // Explicit rule: alien config.json is completely ignored!
+        if (!std::filesystem::exists(settingsPath, ec) || !std::filesystem::is_regular_file(settingsPath, ec)) {
+            continue;
+        }
+
+        // Parse file to check schema marker and modName
+        std::ifstream f(settingsPath, std::ios::binary);
+        if (!f.is_open()) continue;
+        std::string content((std::istreambuf_iterator<char>(f)), (std::istreambuf_iterator<char>()));
+        f.close();
+
+        std::string parseErr;
+        JsonValue root = JsonValue::parse(content, &parseErr);
+        if (!parseErr.empty() || !root.isObject()) {
+            std::cerr << "[PerfUI] Error parsing " << settingsPath.string() << ": " << parseErr << std::endl;
+            continue; // One malformed file does not block other mods
+        }
+
+        if (!root.has("perfuiSchema") || root.get("perfuiSchema").asInt(0) < 1) {
+            // Unmarked or unsupported file skipped silently/with debug log
+            continue;
+        }
+
+        std::string modName = root.get("modName").asString();
+        if (modName.empty()) {
+            modName = entry.path().filename().string();
+        }
+        std::string dispName = root.get("displayName").asString(modName);
+
+        if (registerJson(modName, dispName, settingsPath.string())) {
+            ++registeredCount;
+        }
+    }
+
+    return registeredCount;
 }
 
 bool ModSettingsManager::registerPage(

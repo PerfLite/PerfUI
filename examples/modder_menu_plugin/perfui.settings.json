@@ -1,4 +1,5 @@
 {
+  "perfuiSchema": 1,
   "modName": "MyAwesomeMod",
   "displayName": "$MY_MOD_TITLE",
   "pages": [

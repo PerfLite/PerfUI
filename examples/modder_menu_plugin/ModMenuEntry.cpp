@@ -47,11 +47,11 @@ static void BuildCustomSettingsPage(void* userData, PerfUI::API::SettingsPageBui
  */
 void InitializeModSettings() {
     // 1. Declarative JSON Schema Registration
-    // Automatically parses config.json, registers definitions, and mounts page to SettingsWindow.
+    // Automatically parses perfui.settings.json, registers definitions, and mounts page to SettingsWindow.
     bool jsonOk = PerfUI::Client::RegisterModSettingsJson(
         MOD_ID,
         "My Awesome Mod",
-        "Data/SKSE/Plugins/MyAwesomeMod/config.json"
+        "Data/SKSE/Plugins/MyAwesomeMod/perfui.settings.json"
     );
 
     if (jsonOk) {

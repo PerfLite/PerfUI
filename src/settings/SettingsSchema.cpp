@@ -117,6 +117,18 @@ SchemaParseResult SettingsSchemaLoader::loadFromString(
         return res;
     }
 
+    if (!root.has("perfuiSchema")) {
+        res.success = false;
+        res.errors.push_back("[" + sourceName + "] Missing required 'perfuiSchema' marker field");
+        return res;
+    }
+    int64_t schemaVer = root.get("perfuiSchema").asInt(0);
+    if (schemaVer < 1) {
+        res.success = false;
+        res.errors.push_back("[" + sourceName + "] Unsupported 'perfuiSchema' version: " + std::to_string(schemaVer));
+        return res;
+    }
+
     res.modId = root.get("modName").asString();
     if (res.modId.empty()) {
         res.modId = root.get("id").asString();
