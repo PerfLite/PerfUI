@@ -687,18 +687,27 @@ void SettingsStore::notifyListeners(const std::string& modId, const std::string&
     }
     m_notifyingKeys[tag] = true;
 
-    // Snapshot callbacks matching this key/mod to allow unsubscribe/subscribe during execution
-    std::vector<ChangeCallback> callbacksToCall;
+    // Snapshot callbacks matching this key/mod to allow safe unsubscribe/subscribe during execution
+    struct SubInvocation {
+        uint64_t id;
+        ChangeCallback cb;
+    };
+    std::vector<SubInvocation> callbacksToCall;
     for (const auto& [id, sub] : m_subscriptions) {
         if (sub.modId == modId && (sub.key.empty() || sub.key == key)) {
-            callbacksToCall.push_back(sub.callback);
+            callbacksToCall.push_back({ id, sub.callback });
         }
     }
 
-    for (const auto& cb : callbacksToCall) {
-        if (cb) {
+    for (const auto& item : callbacksToCall) {
+        bool stillValid = false;
+        {
+            std::lock_guard<std::recursive_mutex> lock(m_mutex);
+            stillValid = (m_subscriptions.find(item.id) != m_subscriptions.end());
+        }
+        if (stillValid && item.cb) {
             try {
-                cb(modId, key, val);
+                item.cb(modId, key, val);
             } catch (...) {
                 // Protect against external callback exceptions
             }

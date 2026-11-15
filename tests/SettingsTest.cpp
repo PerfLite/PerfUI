@@ -1049,6 +1049,110 @@ void TestBackgroundAsyncSavingAndDebounce() {
     std::cout << "  -> Passed TestBackgroundAsyncSavingAndDebounce (frame dispatch time: " << frameMs << " ms)" << std::endl;
 }
 
+void TestSubscriptionThreadingAndReentrantCalls() {
+    std::cout << "[Test] Running TestSubscriptionThreadingAndReentrantCalls..." << std::endl;
+
+    auto& store = SettingsStore::GetSingleton();
+    store.clearAll();
+
+    PerfUI::API::IPerfUI_v4 api{};
+    PerfUI::API::PopulateApiV4(api);
+
+    std::string mod = "ReentrantMod";
+
+    // 1. Calling SetSetting from inside a callback (cross-key) must not deadlock
+    bool keyBCalled = false;
+    uint64_t subB = api.SubscribeSettingChanged(mod.c_str(), "keyB", [](void* ud, const char*, const char*) {
+        auto* flag = static_cast<bool*>(ud);
+        *flag = true;
+    }, &keyBCalled);
+
+    struct ContextA {
+        PerfUI::API::IPerfUI_v4* api;
+        std::string mod;
+    } ctxA{ &api, mod };
+
+    uint64_t subA = api.SubscribeSettingChanged(mod.c_str(), "keyA", [](void* ud, const char*, const char*) {
+        auto* ctx = static_cast<ContextA*>(ud);
+        // Mutate keyB from within keyA callback
+        ctx->api->SetSettingFloat(ctx->mod.c_str(), "keyB", 42.0f);
+    }, &ctxA);
+
+    api.SetSettingFloat(mod.c_str(), "keyA", 1.0f);
+    TEST_ASSERT(keyBCalled == true, "Mutating keyB from keyA callback succeeded without deadlock");
+    TEST_ASSERT(api.GetSettingFloat(mod.c_str(), "keyB", 0.0f) == 42.0f, "keyB updated to 42.0f");
+
+    api.UnsubscribeSettingChanged(subA);
+    api.UnsubscribeSettingChanged(subB);
+
+    // 2. Unsubscribing self from inside own callback must not crash or deadlock
+    struct SelfUnsubContext {
+        PerfUI::API::IPerfUI_v4* api;
+        uint64_t subId{ 0 };
+        int callCount{ 0 };
+    } selfCtx{ &api, 0, 0 };
+
+    selfCtx.subId = api.SubscribeSettingChanged(mod.c_str(), "selfUnsubKey", [](void* ud, const char*, const char*) {
+        auto* c = static_cast<SelfUnsubContext*>(ud);
+        c->callCount++;
+        c->api->UnsubscribeSettingChanged(c->subId);
+    }, &selfCtx);
+
+    api.SetSettingInt(mod.c_str(), "selfUnsubKey", 1);
+    TEST_ASSERT(selfCtx.callCount == 1, "Self-unsubscribing callback called first time");
+
+    // Setting again must not fire callback
+    api.SetSettingInt(mod.c_str(), "selfUnsubKey", 2);
+    TEST_ASSERT(selfCtx.callCount == 1, "Self-unsubscribed callback did not fire on subsequent change");
+
+    // 3. Callback 1 unregisters Callback 2: Callback 2 must not fire
+    struct MutualContext {
+        PerfUI::API::IPerfUI_v4* api;
+        uint64_t sub2Id{ 0 };
+        bool cb2Called{ false };
+    } mutCtx{ &api, 0, false };
+
+    uint64_t sub1 = api.SubscribeSettingChanged(mod.c_str(), "mutualKey", [](void* ud, const char*, const char*) {
+        auto* c = static_cast<MutualContext*>(ud);
+        c->api->UnsubscribeSettingChanged(c->sub2Id);
+    }, &mutCtx);
+
+    mutCtx.sub2Id = api.SubscribeSettingChanged(mod.c_str(), "mutualKey", [](void* ud, const char*, const char*) {
+        auto* c = static_cast<MutualContext*>(ud);
+        c->cb2Called = true;
+    }, &mutCtx);
+
+    api.SetSettingInt(mod.c_str(), "mutualKey", 100);
+    TEST_ASSERT(mutCtx.cb2Called == false, "Callback 2 was successfully aborted after Callback 1 unsubscribed it");
+
+    api.UnsubscribeSettingChanged(sub1);
+
+    // 4. Verify thread of execution matches caller thread
+    std::thread::id expectedThreadId;
+    std::thread::id actualThreadId;
+    uint64_t threadSub = api.SubscribeSettingChanged(mod.c_str(), "threadKey", [](void* ud, const char*, const char*) {
+        auto* idPtr = static_cast<std::thread::id*>(ud);
+        *idPtr = std::this_thread::get_id();
+    }, &actualThreadId);
+
+    std::thread workerThread([&]() {
+        expectedThreadId = std::this_thread::get_id();
+        api.SetSettingInt(mod.c_str(), "threadKey", 777);
+    });
+    workerThread.join();
+
+    TEST_ASSERT(actualThreadId == expectedThreadId, "Callback was invoked synchronously in the calling thread");
+    api.UnsubscribeSettingChanged(threadSub);
+
+    // 5. Unregistered mod / key query safety
+    TEST_ASSERT(api.GetSettingBool("NonExistentMod", "noKey", true) == true, "Unregistered mod bool fallback");
+    TEST_ASSERT(api.GetSettingInt("NonExistentMod", "noKey", 123) == 123, "Unregistered mod int fallback");
+    TEST_ASSERT(api.GetSettingFloat("NonExistentMod", "noKey", 3.14f) == 3.14f, "Unregistered mod float fallback");
+    TEST_ASSERT(std::string(api.GetSettingString("NonExistentMod", "noKey", "xyz")) == "xyz", "Unregistered mod string fallback");
+
+    std::cout << "  -> Passed TestSubscriptionThreadingAndReentrantCalls" << std::endl;
+}
+
 void TestBenchmarks() {
     std::cout << "[Benchmark] Running SettingsStore Performance Benchmarks..." << std::endl;
 
@@ -1148,6 +1252,7 @@ int main() {
     TestSafeStringRetrievalAndApiV5();
     TestApiResolutionRetryAndIsApiReady();
     TestBackgroundAsyncSavingAndDebounce();
+    TestSubscriptionThreadingAndReentrantCalls();
     TestBenchmarks();
 
     std::cout << "=== ALL SETTINGS TESTS PASSED ===" << std::endl;
