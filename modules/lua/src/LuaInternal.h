@@ -70,6 +70,12 @@ struct ScriptHost::Impl {
     std::vector<TimerEntry> timers;
     uint32_t nextTimerId{ 1 };
 
+    struct SettingSub {
+        uint64_t id{ 0 };
+        int funcRef{ -2 };
+    };
+    std::vector<SettingSub> settingsSubs;
+
     uint32_t addTimer(float delay, int funcRef, bool repeating);
     bool cancelTimer(uint32_t id);
     void clearTimers();

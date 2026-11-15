@@ -20,6 +20,7 @@
 #include "PerfUI/Image.h"
 #include "PerfUI/SvgImage.h"
 #include "PerfUI/Localization.h"
+#include "PerfUI/SettingsStore.h"
 
 extern "C" {
 #include "lauxlib.h"
@@ -1310,6 +1311,213 @@ void RegisterUiTable(lua_State* L)
     lua_setglobal(L, "ui");
 }
 
+int LL_SettingsGet(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    int top = lua_gettop(L);
+    std::string modId;
+    std::string key;
+    int fallbackIdx = -1;
+
+    auto& store = SettingsStore::GetSingleton();
+
+    if (top >= 3) {
+        modId = luaL_checkstring(L, 1);
+        key = luaL_checkstring(L, 2);
+        fallbackIdx = 3;
+    } else if (top == 2) {
+        if (impl && !impl->name.empty() && store.hasSetting(impl->name, luaL_checkstring(L, 1))) {
+            modId = impl->name;
+            key = luaL_checkstring(L, 1);
+            fallbackIdx = 2;
+        } else {
+            modId = luaL_checkstring(L, 1);
+            key = luaL_checkstring(L, 2);
+        }
+    } else if (top == 1) {
+        if (!impl) { lua_pushnil(L); return 1; }
+        modId = impl->name;
+        key = luaL_checkstring(L, 1);
+    } else {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    if (!store.hasSetting(modId, key)) {
+        auto snap = store.getSnapshot(modId);
+        if (snap.find(key) == snap.end()) {
+            if (fallbackIdx > 0) {
+                lua_pushvalue(L, fallbackIdx);
+            } else {
+                lua_pushnil(L);
+            }
+            return 1;
+        }
+    }
+
+    auto val = store.get(modId, key);
+    std::visit([L](auto&& arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_same_v<T, bool>) {
+            lua_pushboolean(L, arg ? 1 : 0);
+        } else if constexpr (std::is_same_v<T, int32_t>) {
+            lua_pushinteger(L, static_cast<lua_Integer>(arg));
+        } else if constexpr (std::is_same_v<T, float>) {
+            lua_pushnumber(L, static_cast<lua_Number>(arg));
+        } else if constexpr (std::is_same_v<T, std::string>) {
+            lua_pushstring(L, arg.c_str());
+        } else if constexpr (std::is_same_v<T, Color>) {
+            uint32_t u = (static_cast<uint32_t>(arg.r) << 24) |
+                         (static_cast<uint32_t>(arg.g) << 16) |
+                         (static_cast<uint32_t>(arg.b) << 8) |
+                         static_cast<uint32_t>(arg.a);
+            lua_pushinteger(L, static_cast<lua_Integer>(u));
+        } else if constexpr (std::is_same_v<T, uint32_t>) {
+            lua_pushinteger(L, static_cast<lua_Integer>(arg));
+        } else {
+            lua_pushnil(L);
+        }
+    }, val);
+    return 1;
+}
+
+int LL_SettingsSet(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    int top = lua_gettop(L);
+    std::string modId;
+    std::string key;
+    int valIdx = -1;
+
+    if (top >= 3) {
+        modId = luaL_checkstring(L, 1);
+        key = luaL_checkstring(L, 2);
+        valIdx = 3;
+    } else if (top == 2) {
+        if (!impl) { lua_pushboolean(L, 0); return 1; }
+        modId = impl->name;
+        key = luaL_checkstring(L, 1);
+        valIdx = 2;
+    } else {
+        return luaL_error(L, "perfui.settings.set requires (modId, key, value) or (key, value)");
+    }
+
+    // MOD ISOLATION: A script cannot modify settings belonging to another mod
+    if (impl && !impl->name.empty() && modId != impl->name) {
+        return luaL_error(L, "settings access denied: script '%s' cannot modify settings of mod '%s'",
+                          impl->name.c_str(), modId.c_str());
+    }
+
+    auto& store = SettingsStore::GetSingleton();
+    bool changed = false;
+    if (lua_isboolean(L, valIdx)) {
+        changed = store.setBool(modId, key, lua_toboolean(L, valIdx) != 0);
+    } else if (lua_isinteger(L, valIdx)) {
+        changed = store.setInt(modId, key, static_cast<int32_t>(lua_tointeger(L, valIdx)));
+    } else if (lua_isnumber(L, valIdx)) {
+        changed = store.setFloat(modId, key, static_cast<float>(lua_tonumber(L, valIdx)));
+    } else if (lua_isstring(L, valIdx)) {
+        changed = store.setString(modId, key, lua_tostring(L, valIdx));
+    } else {
+        return luaL_error(L, "perfui.settings.set: unsupported setting value type");
+    }
+
+    lua_pushboolean(L, changed ? 1 : 0);
+    return 1;
+}
+
+int LL_SettingsOnChanged(lua_State* L)
+{
+    ScriptHost::Impl* impl = ScriptHost::Impl::FromState(L);
+    if (!impl || !impl->L) return 0;
+
+    int top = lua_gettop(L);
+    std::string modId;
+    std::string key;
+    int fnIdx = -1;
+
+    if (top >= 3) {
+        modId = luaL_checkstring(L, 1);
+        key = luaL_checkstring(L, 2);
+        fnIdx = 3;
+    } else if (top == 2) {
+        modId = impl->name;
+        key = luaL_checkstring(L, 1);
+        fnIdx = 2;
+    } else {
+        return luaL_error(L, "perfui.settings.onChanged requires (modId, key, callback) or (key, callback)");
+    }
+
+    luaL_checktype(L, fnIdx, LUA_TFUNCTION);
+    lua_pushvalue(L, fnIdx);
+    int funcRef = luaL_ref(L, LUA_REGISTRYINDEX);
+
+    auto& store = SettingsStore::GetSingleton();
+    uint64_t subId = store.onChanged(modId, key, [impl, funcRef](const std::string& m, const std::string& k, const SettingValue& val) {
+        if (!impl || !impl->L || impl->disabled) return;
+        lua_State* L = impl->L;
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, funcRef);
+        if (!lua_isfunction(L, -1)) {
+            lua_pop(L, 1);
+            return;
+        }
+
+        lua_pushstring(L, m.c_str());
+        lua_pushstring(L, k.c_str());
+        std::visit([L](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, bool>) {
+                lua_pushboolean(L, arg ? 1 : 0);
+            } else if constexpr (std::is_same_v<T, int32_t>) {
+                lua_pushinteger(L, static_cast<lua_Integer>(arg));
+            } else if constexpr (std::is_same_v<T, float>) {
+                lua_pushnumber(L, static_cast<lua_Number>(arg));
+            } else if constexpr (std::is_same_v<T, std::string>) {
+                lua_pushstring(L, arg.c_str());
+            } else if constexpr (std::is_same_v<T, Color>) {
+                uint32_t u = (static_cast<uint32_t>(arg.r) << 24) |
+                             (static_cast<uint32_t>(arg.g) << 16) |
+                             (static_cast<uint32_t>(arg.b) << 8) |
+                             static_cast<uint32_t>(arg.a);
+                lua_pushinteger(L, static_cast<lua_Integer>(u));
+            } else if constexpr (std::is_same_v<T, uint32_t>) {
+                lua_pushinteger(L, static_cast<lua_Integer>(arg));
+            } else {
+                lua_pushnil(L);
+            }
+        }, val);
+
+        impl->protectedCall(3, 0);
+    });
+
+    impl->settingsSubs.push_back({ subId, funcRef });
+    lua_pushinteger(L, static_cast<lua_Integer>(subId));
+    return 1;
+}
+
+void RegisterSettingsTable(lua_State* L)
+{
+    lua_getglobal(L, "perfui");
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);
+        lua_newtable(L);
+        lua_pushvalue(L, -1);
+        lua_setglobal(L, "perfui");
+    }
+
+    lua_newtable(L);
+    lua_pushcfunction(L, LL_SettingsGet);
+    lua_setfield(L, -2, "get");
+    lua_pushcfunction(L, LL_SettingsSet);
+    lua_setfield(L, -2, "set");
+    lua_pushcfunction(L, LL_SettingsOnChanged);
+    lua_setfield(L, -2, "onChanged");
+
+    lua_setfield(L, -2, "settings");
+    lua_pop(L, 1);
+}
+
 UIElement* FindElementRecursive(UIElement* current, std::string_view name)
 {
     if (!current) return nullptr;
@@ -1391,6 +1599,14 @@ bool ScriptHost::Impl::createState()
 
 void ScriptHost::Impl::destroyState()
 {
+    for (const auto& sub : settingsSubs) {
+        SettingsStore::GetSingleton().unsubscribe(sub.id);
+        if (L && sub.funcRef >= 0) {
+            luaL_unref(L, LUA_REGISTRYINDEX, sub.funcRef);
+        }
+    }
+    settingsSubs.clear();
+
     clearTimers();
     if (L) {
         lua_close(L);
@@ -1677,6 +1893,7 @@ void ScriptHost::Impl::registerUiLibrary()
 {
     if (L) {
         RegisterUiTable(L);
+        RegisterSettingsTable(L);
     }
 }
 

@@ -11,6 +11,7 @@
 #include "PerfUI/WorldAnchor.h"
 #include "PerfUI/Image.h"
 #include "PerfUI/Localization.h"
+#include "PerfUI/SettingsStore.h"
 #include "MockRenderBackend.h"
 
 #include <cmath>
@@ -523,6 +524,91 @@ void Test9_LuaLocalization()
     TEST_ASSERT(resultLang == "ru", "ui.getLanguage returned 'ru'");
 }
 
+void Test10_LuaSettingsAndIsolation()
+{
+    std::cout << "\nTest 10: Lua Settings & Mod Isolation...\n";
+
+    auto& store = SettingsStore::GetSingleton();
+    store.clearAll();
+
+    store.registerSetting("OwnMod", SettingDef{ "volume", SettingType::Float, 50.0f });
+    store.registerSetting("OwnMod", SettingDef{ "playerName", SettingType::String, std::string("Dragonborn") });
+    store.registerSetting("ForeignMod", SettingDef{ "secret", SettingType::Int, 777 });
+
+    ScriptHost host("OwnMod");
+
+    bool readResultsOk = false;
+    bool writeForeignRejected = false;
+    std::string isolationErrMsg;
+    bool onChangedFired = false;
+    float changedValue = 0.0f;
+
+    host.registerModule("test10", [&](ModuleBuilder& m) {
+        m.function("recordRead", [&](bool ok) {
+            readResultsOk = ok;
+        });
+        m.function("recordForeignRejected", [&](bool rejected, std::string msg) {
+            writeForeignRejected = rejected;
+            isolationErrMsg = std::move(msg);
+        });
+        m.function("recordChanged", [&](float v) {
+            onChangedFired = true;
+            changedValue = v;
+        });
+    });
+
+    const char* script = R"(
+        -- 1. Read own settings
+        local ownVol = perfui.settings.get("OwnMod", "volume", 0.0)
+        local ownVolShort = perfui.settings.get("volume", 0.0)
+        local ownName = perfui.settings.get("OwnMod", "playerName", "")
+
+        -- 2. Read foreign settings (allowed)
+        local foreignSecret = perfui.settings.get("ForeignMod", "secret", 0)
+        local fallbackVal = perfui.settings.get("NonExistentMod", "foo", 404)
+
+        local readsOk = (ownVol == 50.0) and (ownVolShort == 50.0) and (ownName == "Dragonborn")
+                        and (foreignSecret == 777) and (fallbackVal == 404)
+        test10.recordRead(readsOk)
+
+        -- 3. Write own settings (allowed)
+        perfui.settings.set("OwnMod", "volume", 85.0)
+        perfui.settings.set("playerName", "Dovahkiin")
+
+        -- 4. Write foreign settings (MUST BE REJECTED WITH LUA ERROR)
+        local ok, err = pcall(function()
+            perfui.settings.set("ForeignMod", "secret", 9999)
+        end)
+        test10.recordForeignRejected(not ok, tostring(err))
+
+        -- 5. Subscribe to setting changes
+        perfui.settings.onChanged("OwnMod", "volume", function(mod, key, val)
+            test10.recordChanged(val)
+        end)
+    )";
+
+    bool ok = host.loadString(script, "test10");
+    TEST_ASSERT(ok, "Test 10 script executed successfully");
+    TEST_ASSERT(readResultsOk, "perfui.settings.get read own and foreign settings and fallback correctly");
+
+    // Verify own settings modified in C++
+    TEST_ASSERT(store.getFloat("OwnMod", "volume") == 85.0f, "OwnMod volume updated to 85.0 from Lua");
+    TEST_ASSERT(store.getString("OwnMod", "playerName") == "Dovahkiin", "OwnMod playerName updated from Lua");
+
+    // Verify foreign setting NOT modified in C++
+    TEST_ASSERT(store.getInt("ForeignMod", "secret") == 777, "ForeignMod setting remained untouched");
+    TEST_ASSERT(writeForeignRejected, "Attempt to set ForeignMod setting was rejected by Lua isolation");
+    TEST_ASSERT(isolationErrMsg.find("settings access denied") != std::string::npos, "Isolation error message contains 'settings access denied'");
+    TEST_ASSERT(isolationErrMsg.find("ForeignMod") != std::string::npos, "Isolation error message mentions foreign mod name");
+
+    // Trigger onChanged callback
+    store.setFloat("OwnMod", "volume", 95.0f);
+    TEST_ASSERT(onChangedFired, "perfui.settings.onChanged callback fired on store change");
+    TEST_ASSERT(changedValue == 95.0f, "perfui.settings.onChanged callback received new value 95.0");
+
+    store.clearAll();
+}
+
 } // namespace
 
 int main()
@@ -538,6 +624,7 @@ int main()
     Test7_InvalidArguments();
     Test8_WorldAnchorAndImageHandles();
     Test9_LuaLocalization();
+    Test10_LuaSettingsAndIsolation();
 
     std::cout << "\n========================================\n";
     std::cout << "Tests Passed: " << g_testsPassed << "\n";

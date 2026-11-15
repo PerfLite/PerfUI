@@ -1095,6 +1095,31 @@ void TestApiResolutionRetryAndIsApiReady() {
     auto* api5 = PerfUI::Client::GetApiV5();
     TEST_ASSERT(api5 != nullptr, "GetApiV5 returns non-null after host load");
 
+    // 4. Distinction between "DLL not loaded" (retry) vs "DLL loaded but version unsupported" (permanent cache)
+    PerfUI::Client::Detail::ResetCachedApisForTesting();
+    PerfUI::Client::Detail::s_customHostLoaded.store(true); // DLL IS loaded!
+    static std::atomic<int> s_unsupportedQueryCount{ 0 };
+    s_unsupportedQueryCount.store(0);
+    PerfUI::Client::Detail::s_customRequestFn.store([](unsigned long ver, const PerfUI::API::ClientABIInfo*) -> void* {
+        s_unsupportedQueryCount++;
+        if (ver <= 3) return &hostApiV5; // Old DLL: supports only v1..v3
+        return nullptr; // Refuses v4 and v5
+    });
+
+    TEST_ASSERT(PerfUI::Client::IsApiReady(1), "IsApiReady(1) supported on older DLL");
+    TEST_ASSERT(!PerfUI::Client::IsApiReady(4), "IsApiReady(4) unsupported on older DLL");
+    TEST_ASSERT(!PerfUI::Client::IsApiReady(5), "IsApiReady(5) unsupported on older DLL");
+    TEST_ASSERT(PerfUI::Client::GetApiV4() == nullptr, "GetApiV4 returns null on older DLL");
+    TEST_ASSERT(PerfUI::Client::GetApiV5() == nullptr, "GetApiV5 returns null on older DLL");
+
+    int queriesSoFar = s_unsupportedQueryCount.load();
+    // Subsequent calls to GetApiV4 / GetApiV5 must NOT re-query host function (cached rejection)
+    for (int i = 0; i < 10; ++i) {
+        TEST_ASSERT(PerfUI::Client::GetApiV4() == nullptr, "Cached rejection v4");
+        TEST_ASSERT(PerfUI::Client::GetApiV5() == nullptr, "Cached rejection v5");
+    }
+    TEST_ASSERT(s_unsupportedQueryCount.load() == queriesSoFar, "No repeated host queries sent after unsupported version cached");
+
     // Clean up hook
     PerfUI::Client::Detail::s_customRequestFn.store(nullptr);
 
