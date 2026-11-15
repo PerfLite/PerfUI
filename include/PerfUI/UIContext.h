@@ -263,6 +263,7 @@ private:
     struct HotkeyItem {
         uint32_t keyCode{ 0 };
         std::function<void()> callback;
+        uint64_t subscriptionId{ 0 };
     };
     mutable std::mutex m_hotkeyMutex;
     std::unordered_map<std::string, HotkeyItem> m_hotkeys;

@@ -5,6 +5,7 @@
 #include "PerfUI/Diagnostics.h"
 #include "PerfUI/WorldAnchor.h"
 #include "PerfUI/Style/StyleSheet.h"
+#include "PerfUI/SettingsStore.h"
 #include <algorithm>
 #include <chrono>
 
@@ -16,7 +17,9 @@ UIContext::UIContext() {
     m_styleSheet = std::make_unique<StyleSheet>();
 }
 
-UIContext::~UIContext() = default;
+UIContext::~UIContext() {
+    clearHotkeys();
+}
 
 void UIContext::setViewportSize(Dimensions size) {
     if (m_viewportSize.width != size.width || m_viewportSize.height != size.height) {
@@ -606,14 +609,67 @@ void UIContext::assertUIThread() const {
 
 bool UIContext::registerHotkey(std::string id, uint32_t keyCode, std::function<void()> callback) {
     if (id.empty() || !callback) return false;
-    std::lock_guard<std::mutex> lock(m_hotkeyMutex);
-    m_hotkeys[std::move(id)] = HotkeyItem{ keyCode, std::move(callback) };
+
+    std::string modId = "Hotkeys";
+    std::string key = id;
+    auto colon = id.find(':');
+    if (colon != std::string::npos) {
+        modId = id.substr(0, colon);
+        key = id.substr(colon + 1);
+    }
+
+    auto& store = SettingsStore::GetSingleton();
+    if (!store.hasSetting(modId, key)) {
+        SettingDef def;
+        def.key = key;
+        def.type = SettingType::KeyCode;
+        def.defaultValue = keyCode;
+        def.displayName = id;
+        store.registerSetting(modId, def);
+    }
+
+    // Active key: user override or default
+    uint32_t activeKey = store.getKeyCode(modId, key, keyCode);
+
+    // Subscribe to store updates so rebind in Settings updates hotkey immediately
+    uint64_t subId = store.subscribe(modId, key, [this, id](const std::string&, const std::string&, const SettingValue& val) {
+        uint32_t updatedKey = SettingValueToKeyCode(val);
+        std::lock_guard<std::mutex> lock(m_hotkeyMutex);
+        auto it = m_hotkeys.find(id);
+        if (it != m_hotkeys.end()) {
+            it->second.keyCode = updatedKey;
+        }
+    });
+
+    uint64_t oldSub = 0;
+    {
+        std::lock_guard<std::mutex> lock(m_hotkeyMutex);
+        auto it = m_hotkeys.find(id);
+        if (it != m_hotkeys.end()) {
+            oldSub = it->second.subscriptionId;
+        }
+        m_hotkeys[id] = HotkeyItem{ activeKey, std::move(callback), subId };
+    }
+    if (oldSub != 0) {
+        store.unsubscribe(oldSub);
+    }
+
     return true;
 }
 
 void UIContext::unregisterHotkey(const std::string& id) {
-    std::lock_guard<std::mutex> lock(m_hotkeyMutex);
-    m_hotkeys.erase(id);
+    uint64_t subToUnsub = 0;
+    {
+        std::lock_guard<std::mutex> lock(m_hotkeyMutex);
+        auto it = m_hotkeys.find(id);
+        if (it != m_hotkeys.end()) {
+            subToUnsub = it->second.subscriptionId;
+            m_hotkeys.erase(it);
+        }
+    }
+    if (subToUnsub != 0) {
+        SettingsStore::GetSingleton().unsubscribe(subToUnsub);
+    }
 }
 
 bool UIContext::triggerHotkey(uint32_t keyCode) {
@@ -658,8 +714,20 @@ size_t UIContext::hotkeyCount() const {
 }
 
 void UIContext::clearHotkeys() {
-    std::lock_guard<std::mutex> lock(m_hotkeyMutex);
-    m_hotkeys.clear();
+    std::vector<uint64_t> subs;
+    {
+        std::lock_guard<std::mutex> lock(m_hotkeyMutex);
+        for (const auto& [id, item] : m_hotkeys) {
+            if (item.subscriptionId != 0) {
+                subs.push_back(item.subscriptionId);
+            }
+        }
+        m_hotkeys.clear();
+    }
+    auto& store = SettingsStore::GetSingleton();
+    for (uint64_t subId : subs) {
+        store.unsubscribe(subId);
+    }
 }
 
 std::shared_ptr<Timeline> UIContext::createTimeline() {

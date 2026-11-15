@@ -704,6 +704,66 @@ void TestModSettingsManagerAndApiV4() {
     std::cout << "  -> Passed TestModSettingsManagerAndApiV4" << std::endl;
 }
 
+void TestHotkeysAndConflictResolution() {
+    std::cout << "[Test] Running TestHotkeysAndConflictResolution..." << std::endl;
+
+    auto& store = SettingsStore::GetSingleton();
+    auto& mgr = ModSettingsManager::GetSingleton();
+    mgr.clear();
+
+    // 1. Hotkey persistence & reactive update
+    UIContext ctx;
+    bool hotkeyTriggered = false;
+    ctx.registerHotkey("TestMod:menuKey", 0x48, [&hotkeyTriggered]() {
+        hotkeyTriggered = true;
+    });
+
+    TEST_ASSERT(ctx.hasHotkey(0x48), "Context initially has hotkey 0x48");
+    ctx.triggerHotkey(0x48);
+    TEST_ASSERT(hotkeyTriggered == true, "Hotkey 0x48 triggered callback");
+
+    // Change key in store
+    hotkeyTriggered = false;
+    store.setKeyCode("TestMod", "menuKey", 0x49);
+    TEST_ASSERT(!ctx.hasHotkey(0x48), "Context no longer has hotkey 0x48 after store update");
+    TEST_ASSERT(ctx.hasHotkey(0x49), "Context now has hotkey 0x49");
+
+    ctx.triggerHotkey(0x49);
+    TEST_ASSERT(hotkeyTriggered == true, "Hotkey 0x49 triggered callback");
+
+    // Re-register (e.g. game reload) with old default 0x48
+    UIContext freshCtx;
+    freshCtx.registerHotkey("TestMod:menuKey", 0x48, [&hotkeyTriggered]() {
+        hotkeyTriggered = true;
+    });
+    TEST_ASSERT(freshCtx.hasHotkey(0x49), "Fresh context used persisted user override 0x49 instead of default 0x48");
+
+    // 2. Conflict detection & unbinding
+    mgr.registerPage("ModA", "Mod A", [](void*, API::SettingsPageBuilder* b) {
+        b->AddKeybind(b, "Quick Save", "quickSave", "", 57);
+    }, nullptr);
+
+    mgr.registerPage("ModB", "Mod B", [](void*, API::SettingsPageBuilder* b) {
+        b->AddKeybind(b, "Jump", "jumpKey", "", 57);
+    }, nullptr);
+
+    SettingsWindow win("Win");
+    mgr.attachToWindow(&win);
+
+    auto conflicts = mgr.findKeybindConflicts("ModA", "quickSave", 57);
+    TEST_ASSERT(conflicts.size() == 1, "Found 1 conflict for key 57");
+    TEST_ASSERT(conflicts[0].modId == "ModB" && conflicts[0].key == "jumpKey", "Conflict is ModB::jumpKey");
+
+    // Unbind conflicting keys
+    mgr.unbindConflictingKeybinds("ModA", "quickSave", 57);
+    TEST_ASSERT(store.getKeyCode("ModB", "jumpKey") == 0, "ModB jumpKey successfully unbound to 0");
+
+    auto conflictsAfter = mgr.findKeybindConflicts("ModA", "quickSave", 57);
+    TEST_ASSERT(conflictsAfter.empty(), "No more conflicts after unbind");
+
+    std::cout << "  -> Passed TestHotkeysAndConflictResolution" << std::endl;
+}
+
 int main() {
     std::cout << "=== Running PerfUI SettingsStore Tests ===" << std::endl;
 
@@ -717,6 +777,7 @@ int main() {
     TestWidgetBindingAndTwoWaySync();
     TestDeclarativeSettingsSchema();
     TestModSettingsManagerAndApiV4();
+    TestHotkeysAndConflictResolution();
 
     std::cout << "=== ALL SETTINGS TESTS PASSED ===" << std::endl;
     return 0;

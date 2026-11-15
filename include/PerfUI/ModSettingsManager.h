@@ -53,6 +53,14 @@ public:
     uint32_t getHotkey() const { return m_hotkey; }
     void setHotkey(uint32_t key) { m_hotkey = key; }
 
+    // Conflict detection & unbinding (Phase 5)
+    struct KeyConflict {
+        std::string modId;
+        std::string key;
+    };
+    std::vector<KeyConflict> findKeybindConflicts(const std::string& currentModId, const std::string& currentKey, uint32_t keyCode) const;
+    void unbindConflictingKeybinds(const std::string& currentModId, const std::string& currentKey, uint32_t keyCode);
+
     void clear();
 
 private:

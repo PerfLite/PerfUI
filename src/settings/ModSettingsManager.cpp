@@ -344,9 +344,49 @@ void ModSettingsManager::setSettingsWindow(SettingsWindow* win) {
     }
 }
 
+std::vector<ModSettingsManager::KeyConflict> ModSettingsManager::findKeybindConflicts(
+    const std::string& currentModId,
+    const std::string& currentKey,
+    uint32_t keyCode
+) const {
+    std::vector<KeyConflict> conflicts;
+    if (keyCode == 0) return conflicts; // 0 is "Unbound", no conflict
+
+    auto& store = SettingsStore::GetSingleton();
+    for (const auto& entry : m_mods) {
+        auto defs = store.getDefinitions(entry.modId);
+        for (const auto& def : defs) {
+            if (def.type == SettingType::KeyCode) {
+                if (entry.modId == currentModId && def.key == currentKey) {
+                    continue; // Skip self
+                }
+                uint32_t k = store.getKeyCode(entry.modId, def.key);
+                if (k == keyCode) {
+                    conflicts.push_back(KeyConflict{ entry.modId, def.key });
+                }
+            }
+        }
+    }
+    return conflicts;
+}
+
+void ModSettingsManager::unbindConflictingKeybinds(
+    const std::string& currentModId,
+    const std::string& currentKey,
+    uint32_t keyCode
+) {
+    if (keyCode == 0) return;
+    auto conflicts = findKeybindConflicts(currentModId, currentKey, keyCode);
+    auto& store = SettingsStore::GetSingleton();
+    for (const auto& c : conflicts) {
+        store.setKeyCode(c.modId, c.key, 0); // Unbind to None
+    }
+}
+
 void ModSettingsManager::clear() {
     m_mods.clear();
     m_modIndex.clear();
+    m_window = nullptr;
 }
 
 namespace API {
