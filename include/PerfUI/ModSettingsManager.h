@@ -17,7 +17,9 @@ class SettingsSection;
 namespace API {
 struct SettingsPageBuilder;
 struct IPerfUI_v4;
+struct IPerfUI_v5;
 PERFUI_API void PopulateApiV4(IPerfUI_v4& api);
+PERFUI_API void PopulateApiV5(IPerfUI_v5& api);
 }
 
 struct ModSettingsEntry {

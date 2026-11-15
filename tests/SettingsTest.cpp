@@ -862,6 +862,94 @@ void TestAutoLoaderAndSchemaMarker() {
     std::cout << "  -> Passed TestAutoLoaderAndSchemaMarker" << std::endl;
 }
 
+void TestSafeStringRetrievalAndApiV5() {
+    std::cout << "[Test] Running TestSafeStringRetrievalAndApiV5..." << std::endl;
+
+    // 1. ABI Verification for v5
+    static_assert(sizeof(PerfUI::API::IPerfUI_v5) == 384, "IPerfUI_v5 size mismatch");
+    static_assert(offsetof(PerfUI::API::IPerfUI_v5, v4) == 0, "IPerfUI_v5::v4 offset mismatch");
+
+    PerfUI::API::IPerfUI_v5 api5{};
+    PerfUI::API::PopulateApiV5(api5);
+
+    auto& store = SettingsStore::GetSingleton();
+    std::string mod = "StringMod";
+
+    // 2. Unknown key returns default
+    const char* strDef = api5.v4.GetSettingString(mod.c_str(), "missingKey", "fallback_default");
+    TEST_ASSERT(std::string(strDef) == "fallback_default", "GetSettingString returns fallback for missing key");
+
+    char buf[128];
+    size_t written = api5.GetSettingStringCopy(mod.c_str(), "missingKey", buf, sizeof(buf), "copy_fallback");
+    TEST_ASSERT(std::string(buf) == "copy_fallback", "GetSettingStringCopy returns copy_fallback for missing key");
+    TEST_ASSERT(written == std::string("copy_fallback").size(), "GetSettingStringCopy returns correct copied length");
+
+    // 3. Empty string test
+    api5.v4.SetSettingString(mod.c_str(), "emptyStr", "");
+    TEST_ASSERT(std::string(api5.v4.GetSettingString(mod.c_str(), "emptyStr", "def")) == "", "Empty string retrieved correctly");
+    written = api5.GetSettingStringCopy(mod.c_str(), "emptyStr", buf, sizeof(buf), "def");
+    TEST_ASSERT(written == 0, "Empty string returns length 0");
+    TEST_ASSERT(buf[0] == '\0', "Buffer is null terminated");
+
+    // 4. Large string (> 4 KB) test
+    std::string largeStr(5000, 'X');
+    largeStr[2500] = 'Y';
+    api5.v4.SetSettingString(mod.c_str(), "largeStr", largeStr.c_str());
+
+    const char* retrievedLarge = api5.v4.GetSettingString(mod.c_str(), "largeStr", "");
+    TEST_ASSERT(retrievedLarge != nullptr, "Retrieved large string is non-null");
+    TEST_ASSERT(std::string(retrievedLarge) == largeStr, "Large string (>4KB) matches original content");
+
+    // Buffer query (nullptr buffer) returns required size
+    size_t reqSize = api5.GetSettingStringCopy(mod.c_str(), "largeStr", nullptr, 0, "");
+    TEST_ASSERT(reqSize == largeStr.size() + 1, "Querying with null buffer returns full required size");
+
+    // Truncated buffer test
+    char smallBuf[10];
+    written = api5.GetSettingStringCopy(mod.c_str(), "largeStr", smallBuf, sizeof(smallBuf), "");
+    TEST_ASSERT(written == 9, "Truncated buffer writes sizeof-1 bytes");
+    TEST_ASSERT(smallBuf[9] == '\0', "Truncated buffer is null terminated");
+    TEST_ASSERT(std::string(smallBuf) == "XXXXXXXXX", "Truncated buffer contains first 9 chars");
+
+    // 5. Multithreaded stress test: thread 1 writes, thread 2 reads
+    std::atomic<bool> stopStress{ false };
+    std::atomic<int> readCount{ 0 };
+
+    std::thread writer([&]() {
+        int counter = 0;
+        while (!stopStress.load()) {
+            std::string val = "dynamic_string_value_" + std::to_string(counter++);
+            api5.v4.SetSettingString(mod.c_str(), "raceKey", val.c_str());
+            std::this_thread::yield();
+        }
+    });
+
+    std::thread reader([&]() {
+        char localBuf[256];
+        while (!stopStress.load()) {
+            const char* s = api5.v4.GetSettingString(mod.c_str(), "raceKey", "def");
+            TEST_ASSERT(s != nullptr, "s is non-null");
+            TEST_ASSERT(std::string_view(s).rfind("dynamic_string_value_", 0) == 0 || std::string_view(s) == "def", "Valid string read");
+
+            size_t copied = api5.GetSettingStringCopy(mod.c_str(), "raceKey", localBuf, sizeof(localBuf), "def");
+            TEST_ASSERT(copied > 0, "Copied positive length");
+            TEST_ASSERT(std::string_view(localBuf).rfind("dynamic_string_value_", 0) == 0 || std::string_view(localBuf) == "def", "Valid copy read");
+
+            readCount.fetch_add(1);
+            std::this_thread::yield();
+        }
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    stopStress.store(true);
+    writer.join();
+    reader.join();
+
+    TEST_ASSERT(readCount.load() > 100, "Multithreaded stress test completed hundreds of reads without crash or corruption");
+
+    std::cout << "  -> Passed TestSafeStringRetrievalAndApiV5 (" << readCount.load() << " concurrent reads verified)" << std::endl;
+}
+
 void TestBenchmarks() {
     std::cout << "[Benchmark] Running SettingsStore Performance Benchmarks..." << std::endl;
 
@@ -958,6 +1046,7 @@ int main() {
     TestModSettingsManagerAndApiV4();
     TestHotkeysAndConflictResolution();
     TestAutoLoaderAndSchemaMarker();
+    TestSafeStringRetrievalAndApiV5();
     TestBenchmarks();
 
     std::cout << "=== ALL SETTINGS TESTS PASSED ===" << std::endl;

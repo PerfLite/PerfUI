@@ -550,6 +550,22 @@ void PopulateApiV4(IPerfUI_v4& api) {
     api.CloseSettings = API_CloseSettings;
 }
 
+static size_t API_GetSettingStringCopy(const char* modId, const char* key, char* outBuf, size_t outBufSize, const char* defaultVal) {
+    std::string val = SettingsStore::GetSingleton().getString(modId ? modId : "", key ? key : "", defaultVal ? defaultVal : "");
+    if (!outBuf || outBufSize == 0) {
+        return val.size() + 1;
+    }
+    size_t toCopy = (std::min)(val.size(), outBufSize - 1);
+    std::memcpy(outBuf, val.data(), toCopy);
+    outBuf[toCopy] = '\0';
+    return toCopy;
+}
+
+void PopulateApiV5(IPerfUI_v5& api) {
+    PopulateApiV4(api.v4);
+    api.GetSettingStringCopy = API_GetSettingStringCopy;
+}
+
 } // namespace API
 
 } // namespace PerfUI

@@ -360,27 +360,75 @@ SettingValue SettingsStore::get(const std::string& modId, const std::string& key
 }
 
 bool SettingsStore::getBool(const std::string& modId, const std::string& key, bool fallback) const {
-    return SettingValueToBool(get(modId, key), fallback);
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    auto it = m_mods.find(modId);
+    if (it != m_mods.end()) {
+        auto vIt = it->second.values.find(key);
+        if (vIt != it->second.values.end()) return SettingValueToBool(vIt->second, fallback);
+        auto dIt = it->second.definitions.find(key);
+        if (dIt != it->second.definitions.end()) return SettingValueToBool(dIt->second.defaultValue, fallback);
+    }
+    return fallback;
 }
 
 int32_t SettingsStore::getInt(const std::string& modId, const std::string& key, int32_t fallback) const {
-    return SettingValueToInt(get(modId, key), fallback);
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    auto it = m_mods.find(modId);
+    if (it != m_mods.end()) {
+        auto vIt = it->second.values.find(key);
+        if (vIt != it->second.values.end()) return SettingValueToInt(vIt->second, fallback);
+        auto dIt = it->second.definitions.find(key);
+        if (dIt != it->second.definitions.end()) return SettingValueToInt(dIt->second.defaultValue, fallback);
+    }
+    return fallback;
 }
 
 float SettingsStore::getFloat(const std::string& modId, const std::string& key, float fallback) const {
-    return SettingValueToFloat(get(modId, key), fallback);
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    auto it = m_mods.find(modId);
+    if (it != m_mods.end()) {
+        auto vIt = it->second.values.find(key);
+        if (vIt != it->second.values.end()) return SettingValueToFloat(vIt->second, fallback);
+        auto dIt = it->second.definitions.find(key);
+        if (dIt != it->second.definitions.end()) return SettingValueToFloat(dIt->second.defaultValue, fallback);
+    }
+    return fallback;
 }
 
 std::string SettingsStore::getString(const std::string& modId, const std::string& key, const std::string& fallback) const {
-    return SettingValueToString(get(modId, key), fallback);
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    auto it = m_mods.find(modId);
+    if (it != m_mods.end()) {
+        auto vIt = it->second.values.find(key);
+        if (vIt != it->second.values.end()) return SettingValueToString(vIt->second, fallback);
+        auto dIt = it->second.definitions.find(key);
+        if (dIt != it->second.definitions.end()) return SettingValueToString(dIt->second.defaultValue, fallback);
+    }
+    return fallback;
 }
 
 Color SettingsStore::getColor(const std::string& modId, const std::string& key, Color fallback) const {
-    return SettingValueToColor(get(modId, key), fallback);
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    auto it = m_mods.find(modId);
+    if (it != m_mods.end()) {
+        auto vIt = it->second.values.find(key);
+        if (vIt != it->second.values.end()) return SettingValueToColor(vIt->second, fallback);
+        auto dIt = it->second.definitions.find(key);
+        if (dIt != it->second.definitions.end()) return SettingValueToColor(dIt->second.defaultValue, fallback);
+    }
+    return fallback;
 }
 
 uint32_t SettingsStore::getKeyCode(const std::string& modId, const std::string& key, uint32_t fallback) const {
-    return SettingValueToKeyCode(get(modId, key), fallback);
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    auto it = m_mods.find(modId);
+    if (it != m_mods.end()) {
+        auto vIt = it->second.values.find(key);
+        if (vIt != it->second.values.end()) return SettingValueToKeyCode(vIt->second, fallback);
+        auto dIt = it->second.definitions.find(key);
+        if (dIt != it->second.definitions.end()) return SettingValueToKeyCode(dIt->second.defaultValue, fallback);
+    }
+    return fallback;
 }
 
 bool SettingsStore::set(const std::string& modId, const std::string& key, const SettingValue& val, bool notify) {

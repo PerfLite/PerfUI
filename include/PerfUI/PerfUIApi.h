@@ -22,6 +22,7 @@ constexpr unsigned long InterfaceVersion_1 = 1;
 constexpr unsigned long InterfaceVersion_2 = 2;
 constexpr unsigned long InterfaceVersion_3 = 3;
 constexpr unsigned long InterfaceVersion_4 = 4;
+constexpr unsigned long InterfaceVersion_5 = 5;
 
 constexpr unsigned long LuaApiVersion_1 = 1;
 constexpr unsigned long PERFUI_LUA_API_VERSION = LuaApiVersion_1;
@@ -140,14 +141,35 @@ struct IPerfUI_v4 {
     void        (*CloseSettings)();
 };
 
+/**
+ * @brief PerfUI Interface Version 5.
+ * Extends v4 with thread-safe caller-buffered string access.
+ */
+struct IPerfUI_v5 {
+    IPerfUI_v4 v4;
+
+    /**
+     * @brief Thread-safe string copying into a caller-provided buffer.
+     * @param modId Target mod identifier.
+     * @param key Setting key.
+     * @param outBuf Pointer to user buffer where the string will be written.
+     * @param outBufSize Size of outBuf in bytes.
+     * @param defaultVal Fallback string if key does not exist.
+     * @return Number of characters copied (excluding null-terminator), or total required buffer size (including null-terminator) if outBuf is nullptr or outBufSize is 0.
+     */
+    size_t      (*GetSettingStringCopy)(const char* modId, const char* key, char* outBuf, size_t outBufSize, const char* defaultVal);
+};
+
 #if defined(_MSC_VER) && defined(_M_X64)
 static_assert(sizeof(IPerfUI_v1) == 168, "IPerfUI_v1 ABI size mismatch");
 static_assert(sizeof(IPerfUI_v2) == 176, "IPerfUI_v2 ABI size mismatch");
 static_assert(sizeof(IPerfUI_v3) == 232, "IPerfUI_v3 ABI size mismatch");
 static_assert(sizeof(IPerfUI_v4) == 376, "IPerfUI_v4 ABI size mismatch");
+static_assert(sizeof(IPerfUI_v5) == 384, "IPerfUI_v5 ABI size mismatch");
 static_assert(offsetof(IPerfUI_v2, v1) == 0, "IPerfUI_v2::v1 offset mismatch");
 static_assert(offsetof(IPerfUI_v3, v2) == 0, "IPerfUI_v3::v2 offset mismatch");
 static_assert(offsetof(IPerfUI_v4, v3) == 0, "IPerfUI_v4::v3 offset mismatch");
+static_assert(offsetof(IPerfUI_v5, v4) == 0, "IPerfUI_v5::v4 offset mismatch");
 #endif
 
 struct ClientABIInfo {
@@ -261,6 +283,26 @@ inline API::IPerfUI_v4* GetApiV4() {
     return s_api;
 }
 
+// Returns nullptr when the loaded PerfUI.dll predates interface v5.
+inline API::IPerfUI_v5* GetApiV5() {
+    static API::IPerfUI_v5* s_api = nullptr;
+    static bool s_requested = false;
+    if (!s_requested) {
+        s_requested = true;
+        auto hModule = ::GetModuleHandleW(L"PerfUI.dll");
+        if (hModule) {
+            typedef void* (*RequestPluginAPIExFn)(unsigned long, const API::ClientABIInfo*);
+            auto fnEx = reinterpret_cast<RequestPluginAPIExFn>(::GetProcAddress(hModule, "RequestPluginAPIEx"));
+            if (fnEx) {
+                API::ClientABIInfo abi;
+                abi.apiStructSize = sizeof(API::IPerfUI_v5);
+                s_api = static_cast<API::IPerfUI_v5*>(fnEx(API::InterfaceVersion_5, &abi));
+            }
+        }
+    }
+    return s_api;
+}
+
 inline bool RegisterModSettingsJson(const char* modId, const char* displayName, const char* jsonPath) {
     auto* api = GetApiV4();
     return api && api->RegisterModSettingsJson ? api->RegisterModSettingsJson(modId, displayName, jsonPath) : false;
@@ -283,6 +325,113 @@ inline void CloseSettings() {
     if (api && api->CloseSettings) {
         api->CloseSettings();
     }
+}
+
+inline bool GetSettingBool(const char* modId, const char* key, bool defaultVal = false) {
+    auto* api = GetApiV4();
+    return api && api->GetSettingBool ? api->GetSettingBool(modId, key, defaultVal) : defaultVal;
+}
+
+inline void SetSettingBool(const char* modId, const char* key, bool val) {
+    auto* api = GetApiV4();
+    if (api && api->SetSettingBool) api->SetSettingBool(modId, key, val);
+}
+
+inline int32_t GetSettingInt(const char* modId, const char* key, int32_t defaultVal = 0) {
+    auto* api = GetApiV4();
+    return api && api->GetSettingInt ? api->GetSettingInt(modId, key, defaultVal) : defaultVal;
+}
+
+inline void SetSettingInt(const char* modId, const char* key, int32_t val) {
+    auto* api = GetApiV4();
+    if (api && api->SetSettingInt) api->SetSettingInt(modId, key, val);
+}
+
+inline float GetSettingFloat(const char* modId, const char* key, float defaultVal = 0.0f) {
+    auto* api = GetApiV4();
+    return api && api->GetSettingFloat ? api->GetSettingFloat(modId, key, defaultVal) : defaultVal;
+}
+
+inline void SetSettingFloat(const char* modId, const char* key, float val) {
+    auto* api = GetApiV4();
+    if (api && api->SetSettingFloat) api->SetSettingFloat(modId, key, val);
+}
+
+inline size_t GetSettingStringCopy(const char* modId, const char* key, char* outBuf, size_t outBufSize, const char* defaultVal = "") {
+    auto* api5 = GetApiV5();
+    if (api5 && api5->GetSettingStringCopy) {
+        return api5->GetSettingStringCopy(modId, key, outBuf, outBufSize, defaultVal);
+    }
+    auto* api4 = GetApiV4();
+    if (api4 && api4->GetSettingString) {
+        const char* s = api4->GetSettingString(modId, key, defaultVal);
+        if (!s) return 0;
+        size_t len = std::strlen(s);
+        if (!outBuf || outBufSize == 0) return len + 1;
+        size_t toCopy = (std::min)(len, outBufSize - 1);
+        std::memcpy(outBuf, s, toCopy);
+        outBuf[toCopy] = '\0';
+        return toCopy;
+    }
+    if (outBuf && outBufSize > 0) outBuf[0] = '\0';
+    return 0;
+}
+
+inline std::string GetSettingString(const char* modId, const char* key, const std::string& defaultVal = "") {
+    auto* api5 = GetApiV5();
+    if (api5 && api5->GetSettingStringCopy) {
+        char stackBuf[256];
+        size_t needed = api5->GetSettingStringCopy(modId, key, stackBuf, sizeof(stackBuf), defaultVal.c_str());
+        if (needed < sizeof(stackBuf)) {
+            return std::string(stackBuf);
+        }
+        std::string dynBuf;
+        dynBuf.resize(needed + 1);
+        api5->GetSettingStringCopy(modId, key, dynBuf.data(), dynBuf.size(), defaultVal.c_str());
+        dynBuf.resize(std::strlen(dynBuf.data()));
+        return dynBuf;
+    }
+    auto* api4 = GetApiV4();
+    if (api4 && api4->GetSettingString) {
+        const char* s = api4->GetSettingString(modId, key, defaultVal.c_str());
+        return s ? std::string(s) : defaultVal;
+    }
+    return defaultVal;
+}
+
+inline void SetSettingString(const char* modId, const char* key, const char* val) {
+    auto* api = GetApiV4();
+    if (api && api->SetSettingString) api->SetSettingString(modId, key, val);
+}
+
+inline uint32_t GetSettingColor(const char* modId, const char* key, uint32_t defaultRgba = 0xFFFFFFFF) {
+    auto* api = GetApiV4();
+    return api && api->GetSettingColor ? api->GetSettingColor(modId, key, defaultRgba) : defaultRgba;
+}
+
+inline void SetSettingColor(const char* modId, const char* key, uint32_t rgba) {
+    auto* api = GetApiV4();
+    if (api && api->SetSettingColor) api->SetSettingColor(modId, key, rgba);
+}
+
+inline uint32_t GetSettingKey(const char* modId, const char* key, uint32_t defaultKey = 0) {
+    auto* api = GetApiV4();
+    return api && api->GetSettingKey ? api->GetSettingKey(modId, key, defaultKey) : defaultKey;
+}
+
+inline void SetSettingKey(const char* modId, const char* key, uint32_t keycode) {
+    auto* api = GetApiV4();
+    if (api && api->SetSettingKey) api->SetSettingKey(modId, key, keycode);
+}
+
+inline uint64_t SubscribeSettingChanged(const char* modId, const char* key, void (*cb)(void* userData, const char* modId, const char* key), void* userData) {
+    auto* api = GetApiV4();
+    return api && api->SubscribeSettingChanged ? api->SubscribeSettingChanged(modId, key, cb, userData) : 0;
+}
+
+inline void UnsubscribeSettingChanged(uint64_t subscriptionId) {
+    auto* api = GetApiV4();
+    if (api && api->UnsubscribeSettingChanged) api->UnsubscribeSettingChanged(subscriptionId);
 }
 
 inline ScriptHost* CreateScriptHost(const char* modName) {

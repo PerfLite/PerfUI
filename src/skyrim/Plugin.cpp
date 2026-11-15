@@ -317,6 +317,8 @@ static PerfUI::API::IPerfUI_v3 g_perfUI_API_v3{
 
 static PerfUI::API::IPerfUI_v4 g_perfUI_API_v4{};
 static bool g_perfUI_API_v4_initialized = false;
+static PerfUI::API::IPerfUI_v5 g_perfUI_API_v5{};
+static bool g_perfUI_API_v5_initialized = false;
 
 static PerfUI::API::IPerfUI_v4* GetApiV4Instance() {
     if (!g_perfUI_API_v4_initialized) {
@@ -331,11 +333,21 @@ static PerfUI::API::IPerfUI_v4* GetApiV4Instance() {
     return &g_perfUI_API_v4;
 }
 
+static PerfUI::API::IPerfUI_v5* GetApiV5Instance() {
+    if (!g_perfUI_API_v5_initialized) {
+        g_perfUI_API_v5_initialized = true;
+        g_perfUI_API_v5.v4 = *GetApiV4Instance();
+        PerfUI::API::PopulateApiV5(g_perfUI_API_v5);
+    }
+    return &g_perfUI_API_v5;
+}
+
 extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interfaceVersion, const PerfUI::API::ClientABIInfo* a_clientAbi) {
     if (a_interfaceVersion != PerfUI::API::InterfaceVersion_1 &&
         a_interfaceVersion != PerfUI::API::InterfaceVersion_2 &&
         a_interfaceVersion != PerfUI::API::InterfaceVersion_3 &&
-        a_interfaceVersion != PerfUI::API::InterfaceVersion_4) {
+        a_interfaceVersion != PerfUI::API::InterfaceVersion_4 &&
+        a_interfaceVersion != PerfUI::API::InterfaceVersion_5) {
         SKSE::log::warn("RequestPluginAPIEx called with unsupported version: {}", a_interfaceVersion);
         return nullptr;
     }
@@ -358,6 +370,9 @@ extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interf
 #endif
     else if (a_interfaceVersion == PerfUI::API::InterfaceVersion_4) {
         expectedApiSize = sizeof(PerfUI::API::IPerfUI_v4);
+    }
+    else if (a_interfaceVersion == PerfUI::API::InterfaceVersion_5) {
+        expectedApiSize = sizeof(PerfUI::API::IPerfUI_v5);
     }
 
     if (a_clientAbi) {
@@ -400,6 +415,9 @@ extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interf
     }
 
     SKSE::log::info("RequestPluginAPIEx(v{}) called by external mod - ABI verified, granting API pointer!", a_interfaceVersion);
+    if (a_interfaceVersion == PerfUI::API::InterfaceVersion_5) {
+        return static_cast<void*>(GetApiV5Instance());
+    }
     if (a_interfaceVersion == PerfUI::API::InterfaceVersion_4) {
         return static_cast<void*>(GetApiV4Instance());
     }
