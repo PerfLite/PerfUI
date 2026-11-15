@@ -13,6 +13,8 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <random>
+#include "SimpleJson.h"
 
 #define TEST_ASSERT(cond, msg) \
     do { \
@@ -921,7 +923,7 @@ void TestSafeStringRetrievalAndApiV5() {
         while (!stopStress.load()) {
             std::string val = "dynamic_string_value_" + std::to_string(counter++);
             api5.v4.SetSettingString(mod.c_str(), "raceKey", val.c_str());
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::microseconds(20));
         }
     });
 
@@ -1153,6 +1155,203 @@ void TestSubscriptionThreadingAndReentrantCalls() {
     std::cout << "  -> Passed TestSubscriptionThreadingAndReentrantCalls" << std::endl;
 }
 
+void TestSimpleJsonHardeningAndFuzzing() {
+    std::cout << "[Test] Running TestSimpleJsonHardeningAndFuzzing..." << std::endl;
+
+    // 1. Recursion depth limit
+    {
+        // 50 nested arrays -> ok
+        std::string nestedOk;
+        for (int i = 0; i < 50; ++i) nestedOk += "[";
+        nestedOk += "1";
+        for (int i = 0; i < 50; ++i) nestedOk += "]";
+        std::string err;
+        auto valOk = JsonValue::tryParse(nestedOk, &err);
+        TEST_ASSERT(valOk.has_value(), "50 nested arrays parse within limit");
+
+        // 70 nested arrays -> exceed depth 64
+        std::string nestedExceed;
+        for (int i = 0; i < 70; ++i) nestedExceed += "[";
+        nestedExceed += "1";
+        for (int i = 0; i < 70; ++i) nestedExceed += "]";
+        auto valExceed = JsonValue::tryParse(nestedExceed, &err);
+        TEST_ASSERT(!valExceed.has_value(), "70 nested arrays rejected due to recursion depth limit");
+        TEST_ASSERT(err.find("recursion depth") != std::string::npos, "Error mentions recursion depth");
+
+        // 70 nested objects -> exceed depth 64
+        std::string nestedObj;
+        for (int i = 0; i < 70; ++i) nestedObj += "{\"a\":";
+        nestedObj += "true";
+        for (int i = 0; i < 70; ++i) nestedObj += "}";
+        auto valObj = JsonValue::tryParse(nestedObj, &err);
+        TEST_ASSERT(!valObj.has_value(), "70 nested objects rejected due to recursion depth limit");
+        TEST_ASSERT(err.find("recursion depth") != std::string::npos, "Error mentions recursion depth");
+    }
+
+    // 2. Surrogate pairs in \uXXXX
+    {
+        // \uD83D\uDE00 -> grinning face emoji
+        std::string grinning = "\"\\uD83D\\uDE00\"";
+        std::string err;
+        auto val = JsonValue::tryParse(grinning, &err);
+        TEST_ASSERT(val.has_value(), "Surrogate pair parsed successfully");
+        TEST_ASSERT(val->asString() == "\xF0\x9F\x98\x80", "Surrogate pair converted to 4-byte UTF-8 emoji");
+
+        // Musical note \uD834\uDD1E (U+1D11E)
+        std::string note = "\"\\uD834\\uDD1E\"";
+        auto valNote = JsonValue::tryParse(note, &err);
+        TEST_ASSERT(valNote.has_value(), "Musical note surrogate pair parsed");
+        TEST_ASSERT(valNote->asString() == "\xF0\x9D\x84\x9E", "Musical note converted to UTF-8");
+
+        // Unpaired high surrogate
+        auto valUnpairedHigh = JsonValue::tryParse("\"\\uD83D abc\"", &err);
+        TEST_ASSERT(!valUnpairedHigh.has_value(), "Unpaired high surrogate rejected");
+        TEST_ASSERT(err.find("surrogate") != std::string::npos, "Error mentions surrogate");
+
+        // Unpaired low surrogate
+        auto valUnpairedLow = JsonValue::tryParse("\"\\uDE00\"", &err);
+        TEST_ASSERT(!valUnpairedLow.has_value(), "Unpaired low surrogate rejected");
+        TEST_ASSERT(err.find("surrogate") != std::string::npos, "Error mentions surrogate");
+
+        // High surrogate followed by non-surrogate \u0041 ('A')
+        auto valWrongPair = JsonValue::tryParse("\"\\uD83D\\u0041\"", &err);
+        TEST_ASSERT(!valWrongPair.has_value(), "High surrogate followed by standard character rejected");
+    }
+
+    // 3. Strict numbers, NaN, Infinity, leading zeros
+    {
+        std::string err;
+        // Leading zeros
+        TEST_ASSERT(!JsonValue::tryParse("012", &err).has_value(), "Leading zero rejected (012)");
+        TEST_ASSERT(!JsonValue::tryParse("-05", &err).has_value(), "Leading zero rejected (-05)");
+        TEST_ASSERT(JsonValue::tryParse("0", &err).has_value(), "Single zero accepted (0)");
+        TEST_ASSERT(JsonValue::tryParse("-0", &err).has_value(), "Negative zero accepted (-0)");
+        TEST_ASSERT(JsonValue::tryParse("0.123", &err).has_value(), "Float with 0 integer part accepted (0.123)");
+
+        // NaN and Infinity
+        TEST_ASSERT(!JsonValue::tryParse("NaN", &err).has_value(), "NaN rejected");
+        TEST_ASSERT(!JsonValue::tryParse("Infinity", &err).has_value(), "Infinity rejected");
+        TEST_ASSERT(!JsonValue::tryParse("-Infinity", &err).has_value(), "-Infinity rejected");
+        TEST_ASSERT(!JsonValue::tryParse("{\"val\": NaN}", &err).has_value(), "Object with NaN rejected");
+        TEST_ASSERT(!JsonValue::tryParse("[Infinity]", &err).has_value(), "Array with Infinity rejected");
+
+        // Incomplete numbers
+        TEST_ASSERT(!JsonValue::tryParse("-", &err).has_value(), "Lone minus rejected");
+        TEST_ASSERT(!JsonValue::tryParse("1.", &err).has_value(), "Trailing dot rejected");
+        TEST_ASSERT(!JsonValue::tryParse(".5", &err).has_value(), "Leading dot without zero rejected");
+        TEST_ASSERT(!JsonValue::tryParse("1e", &err).has_value(), "Incomplete exponent rejected");
+        TEST_ASSERT(!JsonValue::tryParse("1e+", &err).has_value(), "Incomplete exponent with sign rejected");
+    }
+
+    // 4. UTF-8 BOM
+    {
+        std::string bomJson = "\xEF\xBB\xBF{\"bomKey\": \"bomValue\"}";
+        std::string err;
+        auto val = JsonValue::tryParse(bomJson, &err);
+        TEST_ASSERT(val.has_value(), "JSON with UTF-8 BOM parsed successfully");
+        TEST_ASSERT(val->get("bomKey").asString() == "bomValue", "BOM value matches");
+    }
+
+    // 5. Duplicate keys in objects ("last key wins")
+    {
+        std::string dupJson = "{\"dup\": 1, \"other\": \"abc\", \"dup\": 2, \"dup\": 99}";
+        std::string err;
+        auto val = JsonValue::tryParse(dupJson, &err);
+        TEST_ASSERT(val.has_value(), "Object with duplicate keys parsed");
+        TEST_ASSERT(val->size() == 2, "Object has 2 unique keys");
+        TEST_ASSERT(val->get("dup").asInt() == 99, "Last key wins for duplicate key");
+        TEST_ASSERT(val->get("other").asString() == "abc", "Non-duplicate key preserved");
+    }
+
+    // 6. Precise line and column in error messages
+    {
+        std::string multiLine = "{\n  \"valid\": 1,\n  \"invalid\": 099\n}";
+        std::string err;
+        auto val = JsonValue::tryParse(multiLine, &err);
+        TEST_ASSERT(!val.has_value(), "Invalid multiline JSON rejected");
+        TEST_ASSERT(err.find("line 3") != std::string::npos, "Error correctly points to line 3");
+    }
+
+    // 7. Fuzzing: 2,000 mutated / random inputs
+    {
+        std::mt19937_64 rng(1337);
+        std::vector<std::string> seedCorpus = {
+            "{}",
+            "[]",
+            "{\"a\": 1, \"b\": [true, false, null], \"c\": \"test\"}",
+            "\"simple string\"",
+            "12345",
+            "-987.654e-2",
+            "\"\\u0041\\u0042\\u0043\"",
+            "{\"nested\": {\"deep\": {\"item\": 100}}}",
+            "   \n\t// comment\n  {\"val\": 1} /* block */ \n"
+        };
+
+        static const char mutationChars[] = "\0\"'\\{}[],:0123456789+-eE. \t\r\n\xEF\xBB\xBF\xD8\x3D\xDE";
+        static const size_t numMutationChars = sizeof(mutationChars) - 1;
+
+        for (int i = 0; i < 2000; ++i) {
+            std::string input;
+            int mode = rng() % 4;
+            if (mode == 0) {
+                // Mutate a corpus item
+                input = seedCorpus[rng() % seedCorpus.size()];
+                int mutations = 1 + (rng() % 5);
+                for (int m = 0; m < mutations; ++m) {
+                    if (input.empty()) {
+                        char c = mutationChars[rng() % numMutationChars];
+                        input.push_back(c);
+                    } else if (rng() % 3 == 0) {
+                        size_t pos = rng() % (input.size() + 1);
+                        char c = mutationChars[rng() % numMutationChars];
+                        input.insert(input.begin() + pos, c);
+                    } else if (rng() % 2 == 0) {
+                        size_t pos = rng() % input.size();
+                        char c = mutationChars[rng() % numMutationChars];
+                        input[pos] = c;
+                    } else {
+                        size_t pos = rng() % input.size();
+                        input.erase(input.begin() + pos);
+                    }
+                }
+            } else if (mode == 1) {
+                // Random string from mutation characters
+                size_t len = rng() % 120;
+                for (size_t l = 0; l < len; ++l) {
+                    input.push_back(mutationChars[rng() % numMutationChars]);
+                }
+            } else if (mode == 2) {
+                // Highly nested structures
+                int depth = 1 + (rng() % 100);
+                for (int d = 0; d < depth; ++d) input += (rng() % 2 == 0) ? "[" : "{\"k\":";
+                input += "0";
+                for (int d = 0; d < depth; ++d) input += (rng() % 2 == 0) ? "]" : "}";
+            } else {
+                // Extreme number formats
+                if (rng() % 2 == 0) input += "-";
+                size_t digits = 1 + (rng() % 350);
+                for (size_t d = 0; d < digits; ++d) input += static_cast<char>('0' + (rng() % 10));
+                if (rng() % 2 == 0) {
+                    input += ".";
+                    for (size_t d = 0; d < 20; ++d) input += static_cast<char>('0' + (rng() % 10));
+                }
+                if (rng() % 2 == 0) {
+                    input += (rng() % 2 == 0) ? "e" : "e+";
+                    for (size_t d = 0; d < 10; ++d) input += static_cast<char>('0' + (rng() % 10));
+                }
+            }
+
+            std::string err;
+            auto parsed = JsonValue::tryParse(input, &err);
+            if (!parsed.has_value()) {
+                TEST_ASSERT(!err.empty(), "Error message must be set when parsing fails");
+            }
+        }
+    }
+
+    std::cout << "  -> Passed TestSimpleJsonHardeningAndFuzzing (2,000 fuzz iterations)" << std::endl;
+}
+
 void TestBenchmarks() {
     std::cout << "[Benchmark] Running SettingsStore Performance Benchmarks..." << std::endl;
 
@@ -1253,6 +1452,7 @@ int main() {
     TestApiResolutionRetryAndIsApiReady();
     TestBackgroundAsyncSavingAndDebounce();
     TestSubscriptionThreadingAndReentrantCalls();
+    TestSimpleJsonHardeningAndFuzzing();
     TestBenchmarks();
 
     std::cout << "=== ALL SETTINGS TESTS PASSED ===" << std::endl;

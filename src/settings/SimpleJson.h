@@ -12,6 +12,7 @@
 #include <cctype>
 #include <charconv>
 #include <cmath>
+#include <optional>
 
 namespace PerfUI {
 
@@ -29,6 +30,8 @@ public:
 
     using Array = std::vector<JsonValue>;
     using Object = std::vector<std::pair<std::string, JsonValue>>;
+
+    static constexpr size_t kMaxDepth = 64;
 
     JsonValue() : m_type(Type::Null) {}
     JsonValue(std::nullptr_t) : m_type(Type::Null) {}
@@ -209,18 +212,40 @@ public:
     // Parsing
     static JsonValue parse(std::string_view json, std::string* error = nullptr) {
         size_t pos = 0;
+        // Skip UTF-8 BOM (\xEF\xBB\xBF)
+        if (json.size() >= 3 &&
+            static_cast<unsigned char>(json[0]) == 0xEF &&
+            static_cast<unsigned char>(json[1]) == 0xBB &&
+            static_cast<unsigned char>(json[2]) == 0xBF) {
+            pos = 3;
+        }
+
         skipWhitespace(json, pos);
         if (pos >= json.size()) {
             if (error) *error = "Empty JSON input";
             return JsonValue();
         }
-        auto res = parseValue(json, pos, error);
+        auto res = parseValue(json, pos, error, 0);
+        if (error && !error->empty()) {
+            return JsonValue();
+        }
+
         skipWhitespace(json, pos);
         if (pos < json.size() && (!error || error->empty())) {
-            // Trailing characters check
-            if (error) *error = "Extra characters after JSON root at pos " + std::to_string(pos);
+            if (error) *error = makeError(json, pos, "Extra characters after JSON root");
+            return JsonValue();
         }
         return res;
+    }
+
+    static std::optional<JsonValue> tryParse(std::string_view json, std::string* error = nullptr) {
+        std::string err;
+        auto val = parse(json, &err);
+        if (!err.empty()) {
+            if (error) *error = std::move(err);
+            return std::nullopt;
+        }
+        return val;
     }
 
 private:
@@ -232,13 +257,27 @@ private:
     std::shared_ptr<Array> m_array;
     std::shared_ptr<Object> m_object;
 
+    static std::string makeError(std::string_view s, size_t pos, const std::string& msg) {
+        size_t line = 1;
+        size_t col = 1;
+        for (size_t i = 0; i < pos && i < s.size(); ++i) {
+            if (s[i] == '\n') {
+                line++;
+                col = 1;
+            } else {
+                col++;
+            }
+        }
+        return msg + " at line " + std::to_string(line) + ", column " + std::to_string(col) + " (position " + std::to_string(pos) + ")";
+    }
+
     static void skipWhitespace(std::string_view s, size_t& pos) {
         while (pos < s.size()) {
             char c = s[pos];
             if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
                 ++pos;
             } else if (c == '/' && pos + 1 < s.size() && s[pos + 1] == '/') {
-                // Line comment support (comments in config)
+                // Line comment support
                 pos += 2;
                 while (pos < s.size() && s[pos] != '\n') ++pos;
             } else if (c == '/' && pos + 1 < s.size() && s[pos + 1] == '*') {
@@ -252,33 +291,43 @@ private:
         }
     }
 
-    static JsonValue parseValue(std::string_view s, size_t& pos, std::string* error) {
+    static JsonValue parseValue(std::string_view s, size_t& pos, std::string* error, size_t depth) {
+        if (depth > kMaxDepth) {
+            if (error) *error = makeError(s, pos, "Exceeded maximum recursion depth (" + std::to_string(kMaxDepth) + ")");
+            return JsonValue();
+        }
+
         skipWhitespace(s, pos);
         if (pos >= s.size()) {
-            if (error) *error = "Unexpected end of input";
+            if (error) *error = makeError(s, pos, "Unexpected end of input");
             return JsonValue();
         }
 
         char c = s[pos];
-        if (c == '{') return parseObject(s, pos, error);
-        if (c == '[') return parseArray(s, pos, error);
+        if (c == '{') return parseObject(s, pos, error, depth + 1);
+        if (c == '[') return parseArray(s, pos, error, depth + 1);
         if (c == '\"') return parseString(s, pos, error);
         if (c == 't' || c == 'f') return parseBool(s, pos, error);
         if (c == 'n') return parseNull(s, pos, error);
         if (c == '-' || (c >= '0' && c <= '9')) return parseNumber(s, pos, error);
 
-        if (error) *error = std::string("Unexpected token '") + c + "' at position " + std::to_string(pos);
+        if (error) *error = makeError(s, pos, std::string("Unexpected token '") + c + "'");
         return JsonValue();
     }
 
-    static JsonValue parseObject(std::string_view s, size_t& pos, std::string* error) {
+    static JsonValue parseObject(std::string_view s, size_t& pos, std::string* error, size_t depth) {
+        if (depth > kMaxDepth) {
+            if (error) *error = makeError(s, pos, "Exceeded maximum recursion depth (" + std::to_string(kMaxDepth) + ")");
+            return JsonValue();
+        }
+
         ++pos; // skip '{'
         Object obj;
 
         while (true) {
             skipWhitespace(s, pos);
             if (pos >= s.size()) {
-                if (error) *error = "Unterminated object";
+                if (error) *error = makeError(s, pos, "Unterminated object");
                 return JsonValue();
             }
             if (s[pos] == '}') {
@@ -287,7 +336,7 @@ private:
             }
 
             if (s[pos] != '\"') {
-                if (error) *error = "Expected string key in object at position " + std::to_string(pos);
+                if (error) *error = makeError(s, pos, "Expected string key in object");
                 return JsonValue();
             }
 
@@ -297,25 +346,36 @@ private:
 
             skipWhitespace(s, pos);
             if (pos >= s.size() || s[pos] != ':') {
-                if (error) *error = "Expected ':' after key in object at position " + std::to_string(pos);
+                if (error) *error = makeError(s, pos, "Expected ':' after key in object");
                 return JsonValue();
             }
             ++pos; // skip ':'
 
-            auto val = parseValue(s, pos, error);
+            auto val = parseValue(s, pos, error, depth);
             if (error && !error->empty()) return JsonValue();
 
-            obj.push_back({ std::move(key), std::move(val) });
+            // Duplicate keys strategy: "last key wins"
+            bool found = false;
+            for (auto& pair : obj) {
+                if (pair.first == key) {
+                    pair.second = std::move(val);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                obj.push_back({ std::move(key), std::move(val) });
+            }
 
             skipWhitespace(s, pos);
             if (pos < s.size() && s[pos] == ',') {
                 ++pos;
-                // Allow trailing comma: if next is '}', will break at top
+                // Allow trailing comma
             } else if (pos < s.size() && s[pos] == '}') {
                 ++pos;
                 break;
             } else {
-                if (error) *error = "Expected ',' or '}' in object at position " + std::to_string(pos);
+                if (error) *error = makeError(s, pos, "Expected ',' or '}' in object");
                 return JsonValue();
             }
         }
@@ -323,14 +383,19 @@ private:
         return JsonValue(std::move(obj));
     }
 
-    static JsonValue parseArray(std::string_view s, size_t& pos, std::string* error) {
+    static JsonValue parseArray(std::string_view s, size_t& pos, std::string* error, size_t depth) {
+        if (depth > kMaxDepth) {
+            if (error) *error = makeError(s, pos, "Exceeded maximum recursion depth (" + std::to_string(kMaxDepth) + ")");
+            return JsonValue();
+        }
+
         ++pos; // skip '['
         Array arr;
 
         while (true) {
             skipWhitespace(s, pos);
             if (pos >= s.size()) {
-                if (error) *error = "Unterminated array";
+                if (error) *error = makeError(s, pos, "Unterminated array");
                 return JsonValue();
             }
             if (s[pos] == ']') {
@@ -338,7 +403,7 @@ private:
                 break;
             }
 
-            auto val = parseValue(s, pos, error);
+            auto val = parseValue(s, pos, error, depth);
             if (error && !error->empty()) return JsonValue();
 
             arr.push_back(std::move(val));
@@ -351,7 +416,7 @@ private:
                 ++pos;
                 break;
             } else {
-                if (error) *error = "Expected ',' or ']' in array at position " + std::to_string(pos);
+                if (error) *error = makeError(s, pos, "Expected ',' or ']' in array");
                 return JsonValue();
             }
         }
@@ -360,6 +425,7 @@ private:
     }
 
     static JsonValue parseString(std::string_view s, size_t& pos, std::string* error) {
+        size_t startPos = pos;
         ++pos; // skip '\"'
         std::string res;
 
@@ -368,7 +434,11 @@ private:
             if (c == '\"') {
                 return JsonValue(std::move(res));
             }
-            if (c == '\\' && pos < s.size()) {
+            if (c == '\\') {
+                if (pos >= s.size()) {
+                    if (error) *error = makeError(s, pos, "Unterminated escape sequence in string");
+                    return JsonValue();
+                }
                 char esc = s[pos++];
                 switch (esc) {
                 case '\"': res.push_back('\"'); break;
@@ -380,80 +450,181 @@ private:
                 case 'r':  res.push_back('\r'); break;
                 case 't':  res.push_back('\t'); break;
                 case 'u': {
-                    if (pos + 4 <= s.size()) {
-                        uint32_t codepoint = 0;
-                        for (int i = 0; i < 4; ++i) {
-                            char h = s[pos++];
-                            codepoint <<= 4;
-                            if (h >= '0' && h <= '9') codepoint |= (h - '0');
-                            else if (h >= 'a' && h <= 'f') codepoint |= (h - 'a' + 10);
-                            else if (h >= 'A' && h <= 'F') codepoint |= (h - 'A' + 10);
+                    if (pos + 4 > s.size()) {
+                        if (error) *error = makeError(s, pos, "Incomplete \\u hex sequence");
+                        return JsonValue();
+                    }
+                    uint32_t codepoint = 0;
+                    for (int i = 0; i < 4; ++i) {
+                        char h = s[pos++];
+                        codepoint <<= 4;
+                        if (h >= '0' && h <= '9') codepoint |= (h - '0');
+                        else if (h >= 'a' && h <= 'f') codepoint |= (h - 'a' + 10);
+                        else if (h >= 'A' && h <= 'F') codepoint |= (h - 'A' + 10);
+                        else {
+                            if (error) *error = makeError(s, pos - 1, std::string("Invalid character '") + h + "' in \\u sequence");
+                            return JsonValue();
                         }
-                        // Simple UTF-8 encode
-                        if (codepoint <= 0x7F) {
-                            res.push_back(static_cast<char>(codepoint));
-                        } else if (codepoint <= 0x7FF) {
-                            res.push_back(static_cast<char>(0xC0 | ((codepoint >> 6) & 0x1F)));
-                            res.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+                    }
+
+                    // Check for UTF-16 surrogate pair
+                    if (codepoint >= 0xD800 && codepoint <= 0xDBFF) {
+                        // High surrogate: must be followed by \uXXXX low surrogate
+                        if (pos + 6 <= s.size() && s[pos] == '\\' && s[pos + 1] == 'u') {
+                            pos += 2;
+                            uint32_t low = 0;
+                            for (int i = 0; i < 4; ++i) {
+                                char h = s[pos++];
+                                low <<= 4;
+                                if (h >= '0' && h <= '9') low |= (h - '0');
+                                else if (h >= 'a' && h <= 'f') low |= (h - 'a' + 10);
+                                else if (h >= 'A' && h <= 'F') low |= (h - 'A' + 10);
+                                else {
+                                    if (error) *error = makeError(s, pos - 1, std::string("Invalid character '") + h + "' in \\u low surrogate");
+                                    return JsonValue();
+                                }
+                            }
+                            if (low < 0xDC00 || low > 0xDFFF) {
+                                if (error) *error = makeError(s, pos, "Expected low surrogate (\\uDC00..\\uDFFF) after high surrogate");
+                                return JsonValue();
+                            }
+                            codepoint = 0x10000 + (((codepoint - 0xD800) << 10) | (low - 0xDC00));
                         } else {
-                            res.push_back(static_cast<char>(0xE0 | ((codepoint >> 12) & 0x0F)));
-                            res.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
-                            res.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+                            if (error) *error = makeError(s, pos, "Unpaired high surrogate in string");
+                            return JsonValue();
                         }
+                    } else if (codepoint >= 0xDC00 && codepoint <= 0xDFFF) {
+                        if (error) *error = makeError(s, pos, "Unpaired low surrogate in string");
+                        return JsonValue();
+                    }
+
+                    // UTF-8 encode
+                    if (codepoint <= 0x7F) {
+                        res.push_back(static_cast<char>(codepoint));
+                    } else if (codepoint <= 0x7FF) {
+                        res.push_back(static_cast<char>(0xC0 | ((codepoint >> 6) & 0x1F)));
+                        res.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+                    } else if (codepoint <= 0xFFFF) {
+                        res.push_back(static_cast<char>(0xE0 | ((codepoint >> 12) & 0x0F)));
+                        res.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+                        res.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+                    } else if (codepoint <= 0x10FFFF) {
+                        res.push_back(static_cast<char>(0xF0 | ((codepoint >> 18) & 0x07)));
+                        res.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+                        res.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+                        res.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+                    } else {
+                        if (error) *error = makeError(s, pos, "Unicode codepoint out of range");
+                        return JsonValue();
                     }
                     break;
                 }
                 default:
-                    res.push_back(esc);
-                    break;
+                    if (error) *error = makeError(s, pos - 1, std::string("Invalid escape sequence '\\") + esc + "' in string");
+                    return JsonValue();
                 }
             } else {
                 res.push_back(c);
             }
         }
 
-        if (error) *error = "Unterminated string";
+        if (error) *error = makeError(s, startPos, "Unterminated string");
         return JsonValue();
     }
 
     static JsonValue parseNumber(std::string_view s, size_t& pos, std::string* error) {
         size_t start = pos;
-        if (pos < s.size() && s[pos] == '-') ++pos;
+        if (pos < s.size() && s[pos] == '-') {
+            ++pos;
+        }
+
+        if (pos >= s.size() || s[pos] < '0' || s[pos] > '9') {
+            if (error) *error = makeError(s, pos, "Invalid number format (expected digits)");
+            return JsonValue();
+        }
+
+        // Strict leading zero validation: '01', '-05' are invalid in JSON
+        if (s[pos] == '0') {
+            ++pos;
+            if (pos < s.size() && s[pos] >= '0' && s[pos] <= '9') {
+                if (error) *error = makeError(s, pos, "Invalid number: leading zeros are not allowed");
+                return JsonValue();
+            }
+        } else {
+            while (pos < s.size() && s[pos] >= '0' && s[pos] <= '9') {
+                ++pos;
+            }
+        }
 
         bool hasDot = false;
         bool hasExp = false;
 
-        while (pos < s.size()) {
-            char c = s[pos];
-            if (c >= '0' && c <= '9') {
+        // Fractional part
+        if (pos < s.size() && s[pos] == '.') {
+            hasDot = true;
+            ++pos;
+            if (pos >= s.size() || s[pos] < '0' || s[pos] > '9') {
+                if (error) *error = makeError(s, pos, "Invalid number: expected digit after decimal point");
+                return JsonValue();
+            }
+            while (pos < s.size() && s[pos] >= '0' && s[pos] <= '9') {
                 ++pos;
-            } else if (c == '.' && !hasDot && !hasExp) {
-                hasDot = true;
+            }
+        }
+
+        // Exponent part
+        if (pos < s.size() && (s[pos] == 'e' || s[pos] == 'E')) {
+            hasExp = true;
+            ++pos;
+            if (pos < s.size() && (s[pos] == '+' || s[pos] == '-')) {
                 ++pos;
-            } else if ((c == 'e' || c == 'E') && !hasExp) {
-                hasExp = true;
+            }
+            if (pos >= s.size() || s[pos] < '0' || s[pos] > '9') {
+                if (error) *error = makeError(s, pos, "Invalid number: expected digit in exponent");
+                return JsonValue();
+            }
+            while (pos < s.size() && s[pos] >= '0' && s[pos] <= '9') {
                 ++pos;
-                if (pos < s.size() && (s[pos] == '+' || s[pos] == '-')) ++pos;
-            } else {
-                break;
             }
         }
 
         std::string_view numStr = s.substr(start, pos - start);
+        std::string str(numStr);
+
         if (hasDot || hasExp) {
             try {
-                double val = std::stod(std::string(numStr));
+                size_t idx = 0;
+                double val = std::stod(str, &idx);
+                if (idx != str.size() || std::isnan(val) || std::isinf(val)) {
+                    if (error) *error = makeError(s, start, "Invalid floating-point number: " + str);
+                    return JsonValue();
+                }
                 return JsonValue(val);
-            } catch (...) {}
+            } catch (...) {
+                if (error) *error = makeError(s, start, "Failed to parse float: " + str);
+                return JsonValue();
+            }
         } else {
             try {
-                int64_t val = std::stoll(std::string(numStr));
+                size_t idx = 0;
+                int64_t val = std::stoll(str, &idx);
+                if (idx != str.size()) {
+                    if (error) *error = makeError(s, start, "Invalid integer number: " + str);
+                    return JsonValue();
+                }
                 return JsonValue(val);
-            } catch (...) {}
+            } catch (...) {
+                try {
+                    size_t idx = 0;
+                    double val = std::stod(str, &idx);
+                    if (idx == str.size() && !std::isnan(val) && !std::isinf(val)) {
+                        return JsonValue(val);
+                    }
+                } catch (...) {}
+                if (error) *error = makeError(s, start, "Number out of range: " + str);
+                return JsonValue();
+            }
         }
-
-        if (error) *error = "Invalid number: " + std::string(numStr);
-        return JsonValue();
     }
 
     static JsonValue parseBool(std::string_view s, size_t& pos, std::string* error) {
@@ -465,7 +636,7 @@ private:
             pos += 5;
             return JsonValue(false);
         }
-        if (error) *error = "Invalid boolean token at position " + std::to_string(pos);
+        if (error) *error = makeError(s, pos, "Invalid boolean token");
         return JsonValue();
     }
 
@@ -474,7 +645,7 @@ private:
             pos += 4;
             return JsonValue(nullptr);
         }
-        if (error) *error = "Invalid null token at position " + std::to_string(pos);
+        if (error) *error = makeError(s, pos, "Invalid null token");
         return JsonValue();
     }
 
