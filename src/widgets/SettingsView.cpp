@@ -414,21 +414,47 @@ void SettingsSection::setupRowBinding(
     auto& store = SettingsStore::GetSingleton();
     bRow.subscriptionId = store.onChanged(m_modId, key, [this, key](const std::string&, const std::string&, const SettingValue& val) {
         if (m_isUpdatingFromStore) return;
-        for (auto& r : m_boundRows) {
-            if (r.key == key && r.updateWidget) {
-                m_isUpdatingFromStore = true;
-                r.updateWidget(val);
-                updateRowModifiedState(r);
-                m_isUpdatingFromStore = false;
-                break;
-            }
+        auto* ctx = context();
+        if (ctx && !ctx->isUIThread()) {
+            std::lock_guard<std::mutex> lock(m_pendingUpdatesMutex);
+            m_pendingUpdates.push_back({ key, val });
+            return;
         }
-        updateConditions();
+        applyStoreUpdate(key, val);
     });
 
     updateRowModifiedState(bRow);
     m_boundRows.push_back(std::move(bRow));
     updateConditions();
+}
+
+void SettingsSection::applyStoreUpdate(const std::string& key, const SettingValue& val) {
+    if (m_isUpdatingFromStore) return;
+    for (auto& r : m_boundRows) {
+        if (r.key == key && r.updateWidget) {
+            m_isUpdatingFromStore = true;
+            r.updateWidget(val);
+            updateRowModifiedState(r);
+            m_isUpdatingFromStore = false;
+            break;
+        }
+    }
+    updateConditions();
+}
+
+void SettingsSection::update(float dt) {
+    Panel::update(dt);
+    std::vector<PendingStoreUpdate> pending;
+    {
+        std::lock_guard<std::mutex> lock(m_pendingUpdatesMutex);
+        if (!m_pendingUpdates.empty()) {
+            pending = std::move(m_pendingUpdates);
+            m_pendingUpdates.clear();
+        }
+    }
+    for (const auto& u : pending) {
+        applyStoreUpdate(u.key, u.val);
+    }
 }
 
 void SettingsSection::updateRowModifiedState(BoundRow& row) {

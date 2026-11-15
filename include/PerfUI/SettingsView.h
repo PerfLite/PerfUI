@@ -157,7 +157,14 @@ public:
 
     Panel* itemsContainer() const { return m_itemsContainer; }
 
+    void update(float dt) override;
+
 private:
+    struct PendingStoreUpdate {
+        std::string key;
+        SettingValue val;
+    };
+
     struct BoundRow {
         std::string key;
         Panel* rowPanel{ nullptr };
@@ -172,6 +179,7 @@ private:
 
     Panel* createRow(const std::string& label, const std::string& tooltip, const std::string& key = "");
     void setupRowBinding(const std::string& key, Panel* row, Text* lbl, UIElement* ctrl, Button* resetBtn, std::function<void(const SettingValue&)> updateWidget);
+    void applyStoreUpdate(const std::string& key, const SettingValue& val);
     void updateRowModifiedState(BoundRow& row);
 
     std::string m_title;
@@ -179,6 +187,8 @@ private:
     Panel* m_itemsContainer{ nullptr };
     std::vector<BoundRow> m_boundRows;
     bool m_isUpdatingFromStore{ false };
+    std::mutex m_pendingUpdatesMutex;
+    std::vector<PendingStoreUpdate> m_pendingUpdates;
 };
 
 class PERFUI_API SettingsView : public ScrollView {

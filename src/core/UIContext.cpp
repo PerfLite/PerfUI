@@ -12,6 +12,7 @@
 namespace PerfUI {
 
 UIContext::UIContext() {
+    m_uiThreadId = std::this_thread::get_id();
     m_root = std::make_unique<UIElement>("Root");
     m_root->setContext(this);
     m_styleSheet = std::make_unique<StyleSheet>();

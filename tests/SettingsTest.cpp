@@ -1263,6 +1263,77 @@ void TestSubscriptionThreadingAndReentrantCalls() {
     std::cout << "  -> Passed TestSubscriptionThreadingAndReentrantCalls" << std::endl;
 }
 
+void TestUIThreadWidgetUpdateAndThreadingModel() {
+    std::cout << "[Test] Running TestUIThreadWidgetUpdateAndThreadingModel..." << std::endl;
+
+    auto& store = SettingsStore::GetSingleton();
+    store.clearAll();
+    std::string mod = "UIThreadMod";
+
+    UIContext ctx;
+    SettingDef def;
+    def.key = "speed";
+    def.type = SettingType::Float;
+    def.defaultValue = 10.0f;
+    def.minValue = 0.0f;
+    def.maxValue = 100.0f;
+    store.registerSetting(mod, def);
+
+    SettingsSection section("Vehicle Settings", mod);
+    section.setContext(&ctx);
+    auto* slider = section.addSlider("Speed", "speed");
+    TEST_ASSERT(slider != nullptr, "Slider created");
+    TEST_ASSERT(slider->value() == 10.0f, "Slider initialized to default 10.0f");
+
+    // 1. Mutate from background thread: update must be queued and NOT touch widget immediately
+    std::thread bgWorker([&]() {
+        store.setFloat(mod, "speed", 75.0f);
+    });
+    bgWorker.join();
+
+    TEST_ASSERT(slider->value() == 10.0f, "Slider value was NOT mutated concurrently on background thread");
+
+    // 2. Main thread runs update(dt): queued store update applies safely
+    section.update(0.016f);
+    TEST_ASSERT(slider->value() == 75.0f, "Slider value updated to 75.0f on UI thread during section.update()");
+
+    // 3. Mutate on UI thread directly: applies immediately
+    store.setFloat(mod, "speed", 33.0f);
+    TEST_ASSERT(slider->value() == 33.0f, "Direct UI-thread store mutation updates widget immediately");
+
+    // 4. Multithreaded stress test: 5 background threads mutating store while UI thread runs update
+    std::atomic<bool> stopStress{ false };
+    std::vector<std::thread> workers;
+    for (int t = 0; t < 5; ++t) {
+        workers.emplace_back([&, t]() {
+            int count = 0;
+            while (!stopStress.load()) {
+                float v = static_cast<float>((count * 7 + t * 13) % 100);
+                store.setFloat(mod, "speed", v);
+                ++count;
+                std::this_thread::yield();
+            }
+        });
+    }
+
+    for (int frame = 0; frame < 100; ++frame) {
+        section.update(0.016f);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    stopStress.store(true);
+    for (auto& w : workers) {
+        w.join();
+    }
+
+    // Final update on UI thread drains all remaining background updates
+    section.update(0.016f);
+    float finalStoreVal = store.getFloat(mod, "speed", 0.0f);
+    TEST_ASSERT(slider->value() == finalStoreVal, "Final slider value matches store value after multithreaded stress");
+
+    std::cout << "  -> Passed TestUIThreadWidgetUpdateAndThreadingModel" << std::endl;
+}
+
 void TestSimpleJsonHardeningAndFuzzing() {
     std::cout << "[Test] Running TestSimpleJsonHardeningAndFuzzing..." << std::endl;
 
@@ -1561,6 +1632,7 @@ int main() {
     TestApiResolutionRetryAndIsApiReady();
     TestBackgroundAsyncSavingAndDebounce();
     TestSubscriptionThreadingAndReentrantCalls();
+    TestUIThreadWidgetUpdateAndThreadingModel();
     TestSimpleJsonHardeningAndFuzzing();
     TestBenchmarks();
 
