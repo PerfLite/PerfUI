@@ -953,10 +953,118 @@ void TestSafeStringRetrievalAndApiV5() {
     std::cout << "  -> Passed TestSafeStringRetrievalAndApiV5 (" << readCount.load() << " concurrent reads verified)" << std::endl;
 }
 
+void TestStringLengthsAndUtf8Boundary() {
+    std::cout << "[Test] Running TestStringLengthsAndUtf8Boundary..." << std::endl;
+
+    auto& store = SettingsStore::GetSingleton();
+    std::string mod = "StringLenMod";
+    store.clearAll();
+
+    static PerfUI::API::IPerfUI_v5 hostApiV5{};
+    PerfUI::API::PopulateApiV5(hostApiV5);
+    PerfUI::Client::Detail::s_customRequestFn.store([](unsigned long ver, const PerfUI::API::ClientABIInfo*) -> void* {
+        if (ver <= 5) return &hostApiV5;
+        return nullptr;
+    });
+
+    // 1. Exact lengths: 0, 1, 255, 256, 257, 4096, 100000
+    std::vector<size_t> testSizes = { 0, 1, 255, 256, 257, 4096, 100000 };
+    for (size_t sz : testSizes) {
+        std::string expected(sz, static_cast<char>('A' + (sz % 26)));
+        std::string key = "len_" + std::to_string(sz);
+        store.setString(mod, key, expected);
+
+        // a) Client::GetSettingString
+        std::string retrieved = PerfUI::Client::GetSettingString(mod.c_str(), key.c_str(), "fallback");
+        TEST_ASSERT(retrieved.size() == sz, "Client::GetSettingString retrieved full size for length " + std::to_string(sz));
+        TEST_ASSERT(retrieved == expected, "Client::GetSettingString retrieved matching content for length " + std::to_string(sz));
+
+        // b) Null buffer returns required size
+        size_t needed = PerfUI::Client::GetSettingStringCopy(mod.c_str(), key.c_str(), nullptr, 0, "fallback");
+        TEST_ASSERT(needed == sz + 1, "GetSettingStringCopy with null buffer returns sz + 1 for length " + std::to_string(sz));
+    }
+
+    // 2. UTF-8 multi-byte truncation by character boundary
+    std::string cyrillic = "Привет"; // 6 characters = 12 bytes
+    store.setString(mod, "cyrillic", cyrillic);
+
+    char buf[16];
+    // Buffer size 4: max 3 bytes to copy -> cuts inside 2nd char. Must truncate to 2 bytes ("П")
+    size_t copied = PerfUI::Client::GetSettingStringCopy(mod.c_str(), "cyrillic", buf, 4, "");
+    TEST_ASSERT(copied == 2, "Cyrillic truncation to 4-byte buffer yielded 2 bytes");
+    TEST_ASSERT(std::string(buf) == "П", "Cyrillic truncation did not break UTF-8 sequence");
+
+    // Buffer size 5: max 4 bytes to copy -> exactly 2 characters ("Пр")
+    copied = PerfUI::Client::GetSettingStringCopy(mod.c_str(), "cyrillic", buf, 5, "");
+    TEST_ASSERT(copied == 4, "Cyrillic truncation to 5-byte buffer yielded 4 bytes");
+    TEST_ASSERT(std::string(buf) == "Пр", "Cyrillic truncation exact 2 characters");
+
+    // Emoji: "A😀B" ('A' 1 byte, emoji 4 bytes, 'B' 1 byte -> total 6 bytes)
+    std::string emoji = "A\xF0\x9F\x98\x80" "B";
+    store.setString(mod, "emoji", emoji);
+
+    // Buffer size 4: max 3 bytes to copy -> 'A' (1 byte) + partial emoji (2 bytes) -> must truncate to 1 byte ("A")
+    copied = PerfUI::Client::GetSettingStringCopy(mod.c_str(), "emoji", buf, 4, "");
+    TEST_ASSERT(copied == 1, "Emoji truncation to 4-byte buffer yielded 1 byte");
+    TEST_ASSERT(std::string(buf) == "A", "Emoji truncation cleanly dropped partial emoji");
+
+    // Buffer size 6: max 5 bytes to copy -> 'A' (1 byte) + full emoji (4 bytes) = 5 bytes ("A😀")
+    copied = PerfUI::Client::GetSettingStringCopy(mod.c_str(), "emoji", buf, 6, "");
+    TEST_ASSERT(copied == 5, "Emoji truncation to 6-byte buffer yielded 5 bytes");
+    TEST_ASSERT(std::string(buf) == "A\xF0\x9F\x98\x80", "Emoji truncation kept full emoji");
+
+    // 3. Multithreaded stress test during active string mutation
+    std::atomic<bool> stopStress{ false };
+    std::atomic<int> readCount{ 0 };
+
+    std::thread writer([&]() {
+        int iter = 0;
+        while (!stopStress.load()) {
+            size_t len = 50 + (iter % 3000);
+            std::string s(len, static_cast<char>('a' + (iter % 26)));
+            s += "Привет\xF0\x9F\x98\x80";
+            store.setString(mod, "raceStr", s);
+            ++iter;
+            std::this_thread::sleep_for(std::chrono::microseconds(30));
+        }
+    });
+
+    std::thread reader([&]() {
+        while (!stopStress.load()) {
+            std::string s = PerfUI::Client::GetSettingString(mod.c_str(), "raceStr", "def");
+            TEST_ASSERT(!s.empty(), "String read is non-empty");
+            readCount.fetch_add(1);
+            std::this_thread::yield();
+        }
+    });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    stopStress.store(true);
+    writer.join();
+    reader.join();
+
+    TEST_ASSERT(readCount.load() > 50, "Multithreaded dynamic string stress completed concurrent reads without crash");
+
+    // 4. Microbenchmark: 100,000 short string queries
+    store.setString(mod, "shortStr", "fast_short_string");
+    auto t0 = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 100000; ++i) {
+        std::string s = PerfUI::Client::GetSettingString(mod.c_str(), "shortStr", "def");
+    }
+    auto t1 = std::chrono::high_resolution_clock::now();
+    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    std::cout << "  * 100,000 Client::GetSettingString short queries: " << ms << " ms ("
+              << (ms / 100.0) << " ns/query)" << std::endl;
+
+    std::cout << "  -> Passed TestStringLengthsAndUtf8Boundary" << std::endl;
+}
+
 void TestApiResolutionRetryAndIsApiReady() {
     std::cout << "[Test] Running TestApiResolutionRetryAndIsApiReady..." << std::endl;
 
     // 1. Initial state: DLL not loaded / returns null
+    PerfUI::Client::Detail::ResetCachedApisForTesting();
+    PerfUI::Client::Detail::s_customHostLoaded.store(false);
     PerfUI::Client::Detail::s_customRequestFn.store([](unsigned long, const PerfUI::API::ClientABIInfo*) -> void* {
         return nullptr;
     });
@@ -1449,6 +1557,7 @@ int main() {
     TestHotkeysAndConflictResolution();
     TestAutoLoaderAndSchemaMarker();
     TestSafeStringRetrievalAndApiV5();
+    TestStringLengthsAndUtf8Boundary();
     TestApiResolutionRetryAndIsApiReady();
     TestBackgroundAsyncSavingAndDebounce();
     TestSubscriptionThreadingAndReentrantCalls();

@@ -199,16 +199,42 @@ namespace PerfUI::Client {
 namespace Detail {
 using RequestApiFn = void* (*)(unsigned long version, const API::ClientABIInfo* abi);
 inline std::atomic<RequestApiFn> s_customRequestFn{ nullptr };
+inline std::atomic<bool> s_customHostLoaded{ false };
 
-inline void* QueryHostApi(unsigned long version, size_t structSize) {
+inline size_t ClampUtf8ToBoundary(const char* s, size_t maxBytes) {
+    if (!s || maxBytes == 0) return 0;
+    size_t i = maxBytes;
+    while (i > 0 && (static_cast<unsigned char>(s[i - 1]) & 0xC0) == 0x80) {
+        --i;
+    }
+    if (i == 0) return 0;
+    unsigned char lead = static_cast<unsigned char>(s[i - 1]);
+    if ((lead & 0x80) == 0) return maxBytes;
+    size_t expectedLen = 0;
+    if ((lead & 0xE0) == 0xC0) expectedLen = 2;
+    else if ((lead & 0xF0) == 0xE0) expectedLen = 3;
+    else if ((lead & 0xF8) == 0xF0) expectedLen = 4;
+    else return i - 1;
+
+    if (maxBytes - (i - 1) >= expectedLen) {
+        return maxBytes;
+    } else {
+        return i - 1;
+    }
+}
+
+inline void* QueryHostApi(unsigned long version, size_t structSize, bool* outHostLoaded = nullptr) {
+    if (outHostLoaded) *outHostLoaded = false;
     auto customFn = s_customRequestFn.load(std::memory_order_relaxed);
     if (customFn) {
+        if (outHostLoaded) *outHostLoaded = s_customHostLoaded.load(std::memory_order_relaxed);
         API::ClientABIInfo abi;
         abi.apiStructSize = static_cast<unsigned long>(structSize);
         return customFn(version, &abi);
     }
     auto hModule = ::GetModuleHandleW(L"PerfUI.dll");
     if (!hModule) return nullptr;
+    if (outHostLoaded) *outHostLoaded = true;
 
     typedef void* (*RequestPluginAPIExFn)(unsigned long, const API::ClientABIInfo*);
     auto fnEx = reinterpret_cast<RequestPluginAPIExFn>(::GetProcAddress(hModule, "RequestPluginAPIEx"));
@@ -224,18 +250,49 @@ inline void* QueryHostApi(unsigned long version, size_t structSize) {
     }
     return nullptr;
 }
+
+inline std::atomic<API::IPerfUI_v1*> s_cachedV1{ nullptr };
+inline std::atomic<API::IPerfUI_v2*> s_cachedV2{ nullptr };
+inline std::atomic<API::IPerfUI_v3*> s_cachedV3{ nullptr };
+inline std::atomic<API::IPerfUI_v4*> s_cachedV4{ nullptr };
+inline std::atomic<API::IPerfUI_v5*> s_cachedV5{ nullptr };
+
+inline std::atomic<bool> s_unsupportedV1{ false };
+inline std::atomic<bool> s_unsupportedV2{ false };
+inline std::atomic<bool> s_unsupportedV3{ false };
+inline std::atomic<bool> s_unsupportedV4{ false };
+inline std::atomic<bool> s_unsupportedV5{ false };
+
+inline void ResetCachedApisForTesting() {
+    s_cachedV1.store(nullptr, std::memory_order_relaxed);
+    s_cachedV2.store(nullptr, std::memory_order_relaxed);
+    s_cachedV3.store(nullptr, std::memory_order_relaxed);
+    s_cachedV4.store(nullptr, std::memory_order_relaxed);
+    s_cachedV5.store(nullptr, std::memory_order_relaxed);
+    s_unsupportedV1.store(false, std::memory_order_relaxed);
+    s_unsupportedV2.store(false, std::memory_order_relaxed);
+    s_unsupportedV3.store(false, std::memory_order_relaxed);
+    s_unsupportedV4.store(false, std::memory_order_relaxed);
+    s_unsupportedV5.store(false, std::memory_order_relaxed);
+    s_customHostLoaded.store(false, std::memory_order_relaxed);
+}
+
 } // namespace Detail
 
 // Function for third-party SKSE modders to obtain the PerfUI API pointer.
 // Retries on subsequent calls if PerfUI.dll was not yet loaded during the first attempt.
+// Caches permanent refusal if the loaded PerfUI.dll predates the requested version.
 inline API::IPerfUI_v1* GetApi() {
-    static std::atomic<API::IPerfUI_v1*> s_cached{ nullptr };
-    auto* ptr = s_cached.load(std::memory_order_acquire);
+    if (Detail::s_unsupportedV1.load(std::memory_order_relaxed)) return nullptr;
+    auto* ptr = Detail::s_cachedV1.load(std::memory_order_acquire);
     if (ptr) return ptr;
 
-    ptr = static_cast<API::IPerfUI_v1*>(Detail::QueryHostApi(API::InterfaceVersion_1, sizeof(API::IPerfUI_v1)));
+    bool hostLoaded = false;
+    ptr = static_cast<API::IPerfUI_v1*>(Detail::QueryHostApi(API::InterfaceVersion_1, sizeof(API::IPerfUI_v1), &hostLoaded));
     if (ptr) {
-        s_cached.store(ptr, std::memory_order_release);
+        Detail::s_cachedV1.store(ptr, std::memory_order_release);
+    } else if (hostLoaded) {
+        Detail::s_unsupportedV1.store(true, std::memory_order_release);
     }
     return ptr;
 }
@@ -247,52 +304,64 @@ inline UIContext* GetContext() {
 
 // Returns nullptr when the loaded PerfUI.dll predates interface v2.
 inline API::IPerfUI_v2* GetApiV2() {
-    static std::atomic<API::IPerfUI_v2*> s_cached{ nullptr };
-    auto* ptr = s_cached.load(std::memory_order_acquire);
+    if (Detail::s_unsupportedV2.load(std::memory_order_relaxed)) return nullptr;
+    auto* ptr = Detail::s_cachedV2.load(std::memory_order_acquire);
     if (ptr) return ptr;
 
-    ptr = static_cast<API::IPerfUI_v2*>(Detail::QueryHostApi(API::InterfaceVersion_2, sizeof(API::IPerfUI_v2)));
+    bool hostLoaded = false;
+    ptr = static_cast<API::IPerfUI_v2*>(Detail::QueryHostApi(API::InterfaceVersion_2, sizeof(API::IPerfUI_v2), &hostLoaded));
     if (ptr) {
-        s_cached.store(ptr, std::memory_order_release);
+        Detail::s_cachedV2.store(ptr, std::memory_order_release);
+    } else if (hostLoaded) {
+        Detail::s_unsupportedV2.store(true, std::memory_order_release);
     }
     return ptr;
 }
 
 // Returns nullptr when the loaded PerfUI.dll predates interface v3 or was built without Lua.
 inline API::IPerfUI_v3* GetApiV3() {
-    static std::atomic<API::IPerfUI_v3*> s_cached{ nullptr };
-    auto* ptr = s_cached.load(std::memory_order_acquire);
+    if (Detail::s_unsupportedV3.load(std::memory_order_relaxed)) return nullptr;
+    auto* ptr = Detail::s_cachedV3.load(std::memory_order_acquire);
     if (ptr) return ptr;
 
-    ptr = static_cast<API::IPerfUI_v3*>(Detail::QueryHostApi(API::InterfaceVersion_3, sizeof(API::IPerfUI_v3)));
+    bool hostLoaded = false;
+    ptr = static_cast<API::IPerfUI_v3*>(Detail::QueryHostApi(API::InterfaceVersion_3, sizeof(API::IPerfUI_v3), &hostLoaded));
     if (ptr) {
-        s_cached.store(ptr, std::memory_order_release);
+        Detail::s_cachedV3.store(ptr, std::memory_order_release);
+    } else if (hostLoaded) {
+        Detail::s_unsupportedV3.store(true, std::memory_order_release);
     }
     return ptr;
 }
 
 // Returns nullptr when the loaded PerfUI.dll predates interface v4.
 inline API::IPerfUI_v4* GetApiV4() {
-    static std::atomic<API::IPerfUI_v4*> s_cached{ nullptr };
-    auto* ptr = s_cached.load(std::memory_order_acquire);
+    if (Detail::s_unsupportedV4.load(std::memory_order_relaxed)) return nullptr;
+    auto* ptr = Detail::s_cachedV4.load(std::memory_order_acquire);
     if (ptr) return ptr;
 
-    ptr = static_cast<API::IPerfUI_v4*>(Detail::QueryHostApi(API::InterfaceVersion_4, sizeof(API::IPerfUI_v4)));
+    bool hostLoaded = false;
+    ptr = static_cast<API::IPerfUI_v4*>(Detail::QueryHostApi(API::InterfaceVersion_4, sizeof(API::IPerfUI_v4), &hostLoaded));
     if (ptr) {
-        s_cached.store(ptr, std::memory_order_release);
+        Detail::s_cachedV4.store(ptr, std::memory_order_release);
+    } else if (hostLoaded) {
+        Detail::s_unsupportedV4.store(true, std::memory_order_release);
     }
     return ptr;
 }
 
 // Returns nullptr when the loaded PerfUI.dll predates interface v5.
 inline API::IPerfUI_v5* GetApiV5() {
-    static std::atomic<API::IPerfUI_v5*> s_cached{ nullptr };
-    auto* ptr = s_cached.load(std::memory_order_acquire);
+    if (Detail::s_unsupportedV5.load(std::memory_order_relaxed)) return nullptr;
+    auto* ptr = Detail::s_cachedV5.load(std::memory_order_acquire);
     if (ptr) return ptr;
 
-    ptr = static_cast<API::IPerfUI_v5*>(Detail::QueryHostApi(API::InterfaceVersion_5, sizeof(API::IPerfUI_v5)));
+    bool hostLoaded = false;
+    ptr = static_cast<API::IPerfUI_v5*>(Detail::QueryHostApi(API::InterfaceVersion_5, sizeof(API::IPerfUI_v5), &hostLoaded));
     if (ptr) {
-        s_cached.store(ptr, std::memory_order_release);
+        Detail::s_cachedV5.store(ptr, std::memory_order_release);
+    } else if (hostLoaded) {
+        Detail::s_unsupportedV5.store(true, std::memory_order_release);
     }
     return ptr;
 }
@@ -379,6 +448,9 @@ inline size_t GetSettingStringCopy(const char* modId, const char* key, char* out
         size_t len = std::strlen(s);
         if (!outBuf || outBufSize == 0) return len + 1;
         size_t toCopy = (std::min)(len, outBufSize - 1);
+        if (toCopy < len) {
+            toCopy = Detail::ClampUtf8ToBoundary(s, toCopy);
+        }
         std::memcpy(outBuf, s, toCopy);
         outBuf[toCopy] = '\0';
         return toCopy;
@@ -391,14 +463,28 @@ inline std::string GetSettingString(const char* modId, const char* key, const st
     auto* api5 = GetApiV5();
     if (api5 && api5->GetSettingStringCopy) {
         char stackBuf[256];
-        size_t needed = api5->GetSettingStringCopy(modId, key, stackBuf, sizeof(stackBuf), defaultVal.c_str());
-        if (needed < sizeof(stackBuf)) {
-            return std::string(stackBuf);
+        size_t copied = api5->GetSettingStringCopy(modId, key, stackBuf, sizeof(stackBuf), defaultVal.c_str());
+        // Fast path: if copied < sizeof(stackBuf) - 4, the string was not truncated
+        if (copied < sizeof(stackBuf) - 4) {
+            return std::string(stackBuf, copied);
         }
-        std::string dynBuf;
-        dynBuf.resize(needed + 1);
-        api5->GetSettingStringCopy(modId, key, dynBuf.data(), dynBuf.size(), defaultVal.c_str());
-        dynBuf.resize(std::strlen(dynBuf.data()));
+
+        // Accurate dynamic path for longer strings with up to 3 retries against concurrent modification
+        for (int retry = 0; retry < 3; ++retry) {
+            size_t needed = api5->GetSettingStringCopy(modId, key, nullptr, 0, defaultVal.c_str());
+            if (needed <= 1) return "";
+            std::string dynBuf;
+            dynBuf.resize(needed);
+            size_t actualCopied = api5->GetSettingStringCopy(modId, key, dynBuf.data(), dynBuf.size(), defaultVal.c_str());
+            if (actualCopied + 1 <= needed) {
+                dynBuf.resize(actualCopied);
+                return dynBuf;
+            }
+        }
+        size_t needed = api5->GetSettingStringCopy(modId, key, nullptr, 0, defaultVal.c_str());
+        std::string dynBuf(needed, '\0');
+        size_t actualCopied = api5->GetSettingStringCopy(modId, key, dynBuf.data(), dynBuf.size(), defaultVal.c_str());
+        dynBuf.resize(actualCopied);
         return dynBuf;
     }
     auto* api4 = GetApiV4();

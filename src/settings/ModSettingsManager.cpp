@@ -556,6 +556,9 @@ static size_t API_GetSettingStringCopy(const char* modId, const char* key, char*
         return val.size() + 1;
     }
     size_t toCopy = (std::min)(val.size(), outBufSize - 1);
+    if (toCopy < val.size()) {
+        toCopy = Client::Detail::ClampUtf8ToBoundary(val.data(), toCopy);
+    }
     std::memcpy(outBuf, val.data(), toCopy);
     outBuf[toCopy] = '\0';
     return toCopy;
