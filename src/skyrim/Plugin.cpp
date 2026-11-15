@@ -6,6 +6,7 @@
 #include "WidgetAutoLoader.h"
 #include "PerfUI/PerfUIApi.h"
 #include "PerfUI/ModSettingsManager.h"
+#include "PerfUI/SettingsStore.h"
 #include <spdlog/sinks/basic_file_sink.h>
 
 namespace {
@@ -50,13 +51,24 @@ void OnMessage(SKSE::MessagingInterface::Message* a_msg) {
     }
     default:
         if (a_msg->type > 8) { // Game shutdown
-            SKSE::log::info("Skyrim shutdown signal received, cleaning up hooks...");
+            SKSE::log::info("Skyrim shutdown signal received, cleaning up hooks and settings worker...");
+            PerfUI::SettingsStore::GetSingleton().shutdown();
             PerfUI::Skyrim::InputHook::GetSingleton().Uninstall();
             PerfUI::Skyrim::D3D11Hook::GetSingleton().Uninstall();
         }
         break;
     }
 }
+
+#if defined(_WIN32)
+extern "C" BOOL WINAPI DllMain(HINSTANCE /*hinstDLL*/, DWORD fdwReason, LPVOID /*lpReserved*/) {
+    if (fdwReason == DLL_PROCESS_DETACH) {
+        PerfUI::SettingsStore::setProcessDetaching(true);
+        PerfUI::SettingsStore::GetSingleton().shutdown();
+    }
+    return TRUE;
+}
+#endif
 
 struct InitD3DHook {
     static void thunk() {

@@ -254,6 +254,16 @@ SettingValue SettingDef::validateAndClamp(const SettingValue& val) const {
 
 // ==================== SettingsStore ====================
 
+static std::atomic<bool> s_processDetaching{ false };
+
+void SettingsStore::setProcessDetaching(bool detaching) {
+    s_processDetaching.store(detaching, std::memory_order_release);
+}
+
+bool SettingsStore::isProcessDetaching() {
+    return s_processDetaching.load(std::memory_order_acquire);
+}
+
 SettingsStore& SettingsStore::GetSingleton() {
     static SettingsStore s_instance;
     return s_instance;
@@ -269,19 +279,60 @@ SettingsStore::SettingsStore() {
 }
 
 SettingsStore::~SettingsStore() {
-    flushAll();
-    m_stopWorker.store(true);
-    m_saveCv.notify_all();
-    if (m_workerThread.joinable()) {
-        m_workerThread.join();
+    shutdown();
+}
+
+bool SettingsStore::isShutdown() const {
+    return m_isShutdown.load(std::memory_order_acquire);
+}
+
+void SettingsStore::shutdown() {
+    bool expected = false;
+    if (!m_isShutdown.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+        return; // Idempotent: already shut down
     }
+
+    // 1. Flush any pending or dirty mod changes
+    flushAll();
+
+    // 2. Request worker thread to stop
+    m_stopWorker.store(true, std::memory_order_release);
+    m_saveCv.notify_all();
+
+    // 3. Wait for worker to exit with a 2-second timeout, or detach to avoid loader lock deadlocks
+    if (m_workerThread.joinable()) {
+        if (s_processDetaching.load(std::memory_order_acquire)) {
+            // Never block on join under loader lock during DLL_PROCESS_DETACH
+            m_workerThread.detach();
+        } else {
+            std::unique_lock<std::mutex> lock(m_queueMutex);
+            bool exited = m_workerExitCv.wait_for(lock, std::chrono::milliseconds(2000), [this]() {
+                return m_workerExited.load(std::memory_order_acquire);
+            });
+            lock.unlock();
+
+            if (exited) {
+                m_workerThread.join();
+            } else {
+                m_workerThread.detach();
+            }
+        }
+    }
+    m_workerStarted.store(false, std::memory_order_release);
 }
 
 void SettingsStore::ensureWorkerRunning() {
+    if (m_isShutdown.load(std::memory_order_acquire)) {
+        return; // In shutdown mode, saves are strictly synchronous
+    }
     if (!m_workerStarted.load(std::memory_order_relaxed)) {
         std::lock_guard<std::mutex> lock(m_queueMutex);
-        if (!m_workerStarted.load(std::memory_order_relaxed)) {
-            m_stopWorker.store(false);
+        if (!m_workerStarted.load(std::memory_order_relaxed) && !m_isShutdown.load(std::memory_order_acquire)) {
+            if (m_workerThread.joinable()) {
+                m_workerThread.join();
+            }
+            m_stopWorker.store(false, std::memory_order_release);
+            m_workerExited.store(false, std::memory_order_release);
             m_workerThread = std::thread(&SettingsStore::workerLoop, this);
             m_workerStarted.store(true, std::memory_order_release);
         }
@@ -327,6 +378,12 @@ void SettingsStore::workerLoop() {
             }
         }
     }
+
+    {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        m_workerExited.store(true, std::memory_order_release);
+        m_workerExitCv.notify_all();
+    }
 }
 
 void SettingsStore::enqueueSaveSnapshot(const std::string& modId) {
@@ -341,6 +398,12 @@ void SettingsStore::enqueueSaveSnapshot(const std::string& modId) {
         task.finalPath = getSettingsFilePath(modId);
         it->second.dirty = false;
         it->second.debounceTimer = -1.0f;
+    }
+
+    if (m_isShutdown.load(std::memory_order_acquire)) {
+        // Fallback: synchronous execution when worker thread is stopped
+        executeDiskSave(task);
+        return;
     }
 
     ensureWorkerRunning();
@@ -590,6 +653,11 @@ bool SettingsStore::set(const std::string& modId, const std::string& key, const 
     if (notify) {
         notifyListeners(modId, key, clampedVal);
     }
+
+    if (m_isShutdown.load(std::memory_order_acquire)) {
+        // Post-shutdown: persist synchronously immediately
+        enqueueSaveSnapshot(modId);
+    }
     return true;
 }
 
@@ -803,7 +871,7 @@ bool SettingsStore::saveToFile(const std::string& modId, bool immediate) {
         std::lock_guard<std::recursive_mutex> lock(m_mutex);
         auto it = m_mods.find(modId);
         if (it == m_mods.end()) return false;
-        if (!immediate) {
+        if (!immediate && !m_isShutdown.load(std::memory_order_acquire)) {
             it->second.dirty = true;
             it->second.debounceTimer = 0.4f;
             return true;
@@ -811,9 +879,9 @@ bool SettingsStore::saveToFile(const std::string& modId, bool immediate) {
     }
 
     enqueueSaveSnapshot(modId);
-    if (immediate) {
+    if (immediate && !m_isShutdown.load(std::memory_order_acquire) && !s_processDetaching.load(std::memory_order_acquire)) {
         std::unique_lock<std::mutex> lock(m_queueMutex);
-        m_flushCv.wait(lock, [this, &modId]() {
+        m_flushCv.wait_for(lock, std::chrono::milliseconds(2000), [this, &modId]() {
             return m_pendingSaves.find(modId) == m_pendingSaves.end() && m_activeSavesCount == 0;
         });
     }
@@ -834,13 +902,18 @@ void SettingsStore::flushAll() {
         enqueueSaveSnapshot(modId);
     }
 
-    std::unique_lock<std::mutex> lock(m_queueMutex);
-    m_flushCv.wait(lock, [this]() {
-        return m_pendingSaves.empty() && m_activeSavesCount == 0;
-    });
+    if (!m_isShutdown.load(std::memory_order_acquire) && !s_processDetaching.load(std::memory_order_acquire)) {
+        std::unique_lock<std::mutex> lock(m_queueMutex);
+        m_flushCv.wait_for(lock, std::chrono::milliseconds(2000), [this]() {
+            return m_pendingSaves.empty() && m_activeSavesCount == 0;
+        });
+    }
 }
 
 void SettingsStore::update(float dt) {
+    if (m_isShutdown.load(std::memory_order_acquire)) {
+        return;
+    }
     std::vector<std::string> modsToSave;
     {
         std::lock_guard<std::recursive_mutex> lock(m_mutex);
@@ -864,6 +937,9 @@ void SettingsStore::clearAll() {
     m_mods.clear();
     m_subscriptions.clear();
     m_notifyingKeys.clear();
+    m_isShutdown.store(false, std::memory_order_release);
+    m_workerExited.store(false, std::memory_order_release);
+    s_processDetaching.store(false, std::memory_order_release);
 }
 
 } // namespace PerfUI

@@ -126,6 +126,12 @@ public:
     void flushAll();
     void update(float dt);
 
+    // Lifecycle & shutdown
+    void shutdown();
+    bool isShutdown() const;
+    static void setProcessDetaching(bool detaching = true);
+    static bool isProcessDetaching();
+
     // Test / debug utilities
     void clearAll();
 
@@ -175,6 +181,9 @@ private:
     std::thread m_workerThread;
     std::atomic<bool> m_stopWorker{ false };
     std::atomic<bool> m_workerStarted{ false };
+    std::atomic<bool> m_isShutdown{ false };
+    std::atomic<bool> m_workerExited{ false };
+    std::condition_variable m_workerExitCv;
 
     void ensureWorkerRunning();
     void enqueueSaveSnapshot(const std::string& modId);

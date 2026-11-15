@@ -1612,6 +1612,109 @@ void TestBenchmarks() {
     std::cout << "  -> Passed TestBenchmarks" << std::endl;
 }
 
+void TestShutdownAndSynchronousFallback() {
+    std::cout << "[Test] Running TestShutdownAndSynchronousFallback..." << std::endl;
+
+    auto& store = PerfUI::SettingsStore::GetSingleton();
+    auto tempDir = std::filesystem::temp_directory_path() / "PerfUI_Shutdown_Test";
+    std::filesystem::remove_all(tempDir);
+    std::filesystem::create_directories(tempDir);
+    store.clearAll();
+    store.setSettingsDirectory(tempDir);
+
+    const std::string mod = "ShutdownTestMod";
+    store.registerSetting(mod, PerfUI::SettingDef{ "Alpha", PerfUI::SettingType::Int, 10 });
+    store.registerSetting(mod, PerfUI::SettingDef{ "Beta", PerfUI::SettingType::String, std::string("initial") });
+
+    // 1. Double shutdown must be safe and idempotent
+    TEST_ASSERT(!store.isShutdown(), "Store is active initially");
+    store.shutdown();
+    TEST_ASSERT(store.isShutdown(), "Store is marked as shutdown");
+
+    // Second call to shutdown()
+    auto t0 = std::chrono::high_resolution_clock::now();
+    store.shutdown();
+    auto t1 = std::chrono::high_resolution_clock::now();
+    double doubleShutdownMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    TEST_ASSERT(doubleShutdownMs < 50.0, "Second shutdown returns immediately (<50ms)");
+    TEST_ASSERT(store.isShutdown(), "Store remains shutdown");
+
+    // 2. Post-shutdown set operates synchronously and persists directly
+    store.setInt(mod, "Alpha", 42);
+    store.setString(mod, "Beta", "persisted_post_shutdown");
+
+    // Verify file on disk exists and contains post-shutdown values immediately without update(dt)
+    auto filePath = store.getSettingsFilePath(mod);
+    TEST_ASSERT(std::filesystem::exists(filePath), "Settings file exists after post-shutdown set");
+
+    std::ifstream ifs(filePath);
+    std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    ifs.close();
+    TEST_ASSERT(content.find("\"Alpha\": 42") != std::string::npos, "Disk file contains synchronous post-shutdown int");
+    TEST_ASSERT(content.find("\"Beta\": \"persisted_post_shutdown\"") != std::string::npos, "Disk file contains synchronous post-shutdown string");
+
+    // 3. Pending saves before shutdown are flushed
+    store.clearAll();
+    store.setSettingsDirectory(tempDir);
+    TEST_ASSERT(!store.isShutdown(), "clearAll revives store");
+
+    const std::string mod2 = "ShutdownFlushMod";
+    store.registerSetting(mod2, PerfUI::SettingDef{ "Score", PerfUI::SettingType::Int, 0 });
+    store.setInt(mod2, "Score", 999); // sets dirty = true, debounceTimer = 0.4s
+    // Do NOT call update(dt) or sleep 400ms! Immediately call shutdown()
+    store.shutdown();
+
+    auto file2 = store.getSettingsFilePath(mod2);
+    TEST_ASSERT(std::filesystem::exists(file2), "Settings file flushed to disk on shutdown");
+    std::ifstream ifs2(file2);
+    std::string content2((std::istreambuf_iterator<char>(ifs2)), std::istreambuf_iterator<char>());
+    ifs2.close();
+    TEST_ASSERT(content2.find("\"Score\": 999") != std::string::npos, "Dirty setting was written to disk during shutdown flush");
+
+    // 4. Rapid series of sets and immediate shutdown
+    store.clearAll();
+    store.setSettingsDirectory(tempDir);
+    const std::string mod3 = "RapidShutdownMod";
+    for (int i = 0; i < 50; ++i) {
+        std::string key = "Key_" + std::to_string(i);
+        store.registerSetting(mod3, PerfUI::SettingDef{ key, PerfUI::SettingType::Int, 0 });
+        store.setInt(mod3, key, i * 10);
+    }
+    // Immediate shutdown
+    auto s0 = std::chrono::high_resolution_clock::now();
+    store.shutdown();
+    auto s1 = std::chrono::high_resolution_clock::now();
+    double shutdownTimeMs = std::chrono::duration<double, std::milli>(s1 - s0).count();
+    TEST_ASSERT(shutdownTimeMs < 2000.0, "Rapid sets followed by shutdown completed within timeout");
+
+    auto file3 = store.getSettingsFilePath(mod3);
+    TEST_ASSERT(std::filesystem::exists(file3), "Rapid set file persisted on disk");
+    std::ifstream ifs3(file3);
+    std::string content3((std::istreambuf_iterator<char>(ifs3)), std::istreambuf_iterator<char>());
+    ifs3.close();
+    TEST_ASSERT(content3.find("\"Key_49\": 490") != std::string::npos, "Last rapid key persisted on disk");
+
+    // 5. Test DLL_PROCESS_DETACH simulation (process detaching flag prevents blocking join)
+    store.clearAll();
+    store.setSettingsDirectory(tempDir);
+    PerfUI::SettingsStore::setProcessDetaching(true);
+    TEST_ASSERT(PerfUI::SettingsStore::isProcessDetaching(), "Process detaching flag set");
+    store.setInt("DetachMod", "Val", 1);
+    auto d0 = std::chrono::high_resolution_clock::now();
+    store.shutdown();
+    auto d1 = std::chrono::high_resolution_clock::now();
+    double detachMs = std::chrono::duration<double, std::milli>(d1 - d0).count();
+    TEST_ASSERT(detachMs < 100.0, "Shutdown during process detaching is non-blocking (<100ms)");
+
+    // Cleanup
+    PerfUI::SettingsStore::setProcessDetaching(false);
+    store.clearAll();
+    std::error_code ec;
+    std::filesystem::remove_all(tempDir, ec);
+
+    std::cout << "  -> Passed TestShutdownAndSynchronousFallback" << std::endl;
+}
+
 int main() {
     std::cout << "=== Running PerfUI SettingsStore Tests ===" << std::endl;
 
@@ -1631,6 +1734,7 @@ int main() {
     TestStringLengthsAndUtf8Boundary();
     TestApiResolutionRetryAndIsApiReady();
     TestBackgroundAsyncSavingAndDebounce();
+    TestShutdownAndSynchronousFallback();
     TestSubscriptionThreadingAndReentrantCalls();
     TestUIThreadWidgetUpdateAndThreadingModel();
     TestSimpleJsonHardeningAndFuzzing();
