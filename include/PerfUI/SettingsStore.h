@@ -107,6 +107,9 @@ public:
     // Subscriptions
     uint64_t onChanged(const std::string& modId, const std::string& key, ChangeCallback callback);
     uint64_t onModChanged(const std::string& modId, ChangeCallback callback);
+    uint64_t subscribe(const std::string& modId, const std::string& key, ChangeCallback callback) {
+        return onChanged(modId, key, std::move(callback));
+    }
     void unsubscribe(uint64_t subscriptionId);
 
     // Persistence configuration

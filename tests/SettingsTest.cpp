@@ -1,6 +1,9 @@
 #include "PerfUI/SettingsStore.h"
 #include "PerfUI/SettingsView.h"
 #include "PerfUI/SettingsSchema.h"
+#include "PerfUI/ModSettingsManager.h"
+#include "PerfUI/SettingsWindow.h"
+#include "PerfUI/PerfUIApi.h"
 #include "PerfUI/Localization.h"
 #include "MockRenderBackend.h"
 #include <iostream>
@@ -579,6 +582,128 @@ void TestDeclarativeSettingsSchema() {
     std::cout << "  -> Passed TestDeclarativeSettingsSchema" << std::endl;
 }
 
+void TestModSettingsManagerAndApiV4() {
+    std::cout << "[Test] Running TestModSettingsManagerAndApiV4..." << std::endl;
+
+    // 1. ABI Layout & Sizes
+#if defined(_MSC_VER) && defined(_M_X64)
+    TEST_ASSERT(sizeof(PerfUI::API::IPerfUI_v1) == 168, "IPerfUI_v1 size is 168");
+    TEST_ASSERT(sizeof(PerfUI::API::IPerfUI_v2) == 176, "IPerfUI_v2 size is 176");
+    TEST_ASSERT(sizeof(PerfUI::API::IPerfUI_v3) == 232, "IPerfUI_v3 size is 232");
+    TEST_ASSERT(sizeof(PerfUI::API::IPerfUI_v4) == 376, "IPerfUI_v4 size is 376");
+    TEST_ASSERT(offsetof(PerfUI::API::IPerfUI_v2, v1) == 0, "IPerfUI_v2 offset v1 == 0");
+    TEST_ASSERT(offsetof(PerfUI::API::IPerfUI_v3, v2) == 0, "IPerfUI_v3 offset v2 == 0");
+    TEST_ASSERT(offsetof(PerfUI::API::IPerfUI_v4, v3) == 0, "IPerfUI_v4 offset v3 == 0");
+#endif
+
+    // 2. Populate API v4
+    PerfUI::API::IPerfUI_v4 api{};
+    PerfUI::API::PopulateApiV4(api);
+
+    auto& mgr = PerfUI::ModSettingsManager::GetSingleton();
+    mgr.clear();
+
+    // 3. Register mods via API v4
+    // Mod 1: via JSON
+    auto tempJson = std::filesystem::temp_directory_path() / "ModAlpha.json";
+    {
+        std::ofstream out(tempJson, std::ios::trunc);
+        out << R"({
+            "modName": "ModAlpha",
+            "displayName": "Alpha Mod",
+            "content": [
+                { "type": "toggle", "id": "alphaOption", "text": "Alpha Option", "valueOptions": { "default": true } }
+            ]
+        })";
+    }
+
+    bool rJson = api.RegisterModSettingsJson("ModAlpha", "Alpha Mod", tempJson.string().c_str());
+    TEST_ASSERT(rJson, "RegisterModSettingsJson succeeded");
+
+    // Mod 2: via C++ page builder
+    auto pageBuilderFn = [](void* /*userData*/, PerfUI::API::SettingsPageBuilder* b) {
+        b->AddHeader(b, "Beta Mod Controls");
+        b->AddToggle(b, "Beta Toggle", "betaToggle", "Toggle something", false);
+        b->AddSlider(b, "Beta Slider", "betaSlider", "Slide something", 0.0f, 10.0f, 0.5f, 5.0f, "%.1f");
+    };
+
+    bool rPage = api.RegisterModSettingsPage("ModBeta", "Beta Mod", pageBuilderFn, nullptr);
+    TEST_ASSERT(rPage, "RegisterModSettingsPage succeeded");
+    TEST_ASSERT(mgr.getRegisteredMods().size() == 2, "2 mods registered");
+
+    // 4. Repeated registration with same modId updates rather than duplicates
+    bool rUpdate = api.RegisterModSettingsJson("ModAlpha", "Alpha Mod Renamed", tempJson.string().c_str());
+    TEST_ASSERT(rUpdate, "Repeated registration succeeded");
+    TEST_ASSERT(mgr.getRegisteredMods().size() == 2, "Still 2 mods (no duplicate)");
+    TEST_ASSERT(mgr.getMod("ModAlpha")->displayName == "Alpha Mod Renamed", "DisplayName updated");
+
+    // 5. Attach to SettingsWindow
+    SettingsWindow window("TestSettingsWindow");
+    mgr.attachToWindow(&window);
+    auto* betaView = window.getOrCreateCategory("mod_ModBeta", "Beta Mod");
+    TEST_ASSERT(betaView != nullptr, "Category created for ModBeta");
+
+    // 6. Get / Set API operations
+    api.SetSettingBool("ModBeta", "betaToggle", true);
+    TEST_ASSERT(api.GetSettingBool("ModBeta", "betaToggle", false) == true, "api.GetSettingBool returns true");
+
+    api.SetSettingInt("ModBeta", "counter", 100);
+    TEST_ASSERT(api.GetSettingInt("ModBeta", "counter", 0) == 100, "api.GetSettingInt returns 100");
+
+    api.SetSettingFloat("ModBeta", "betaSlider", 7.5f);
+    TEST_ASSERT(std::abs(api.GetSettingFloat("ModBeta", "betaSlider", 0.0f) - 7.5f) < 1e-4f, "api.GetSettingFloat returns 7.5");
+
+    api.SetSettingString("ModBeta", "greeting", "Hello Skyrim");
+    TEST_ASSERT(std::string(api.GetSettingString("ModBeta", "greeting", "")) == "Hello Skyrim", "api.GetSettingString returns Hello Skyrim");
+
+    api.SetSettingColor("ModBeta", "tint", 0x11223344);
+    TEST_ASSERT(api.GetSettingColor("ModBeta", "tint", 0) == 0x11223344, "api.GetSettingColor returns 0x11223344");
+
+    api.SetSettingKey("ModBeta", "menuKey", 64);
+    TEST_ASSERT(api.GetSettingKey("ModBeta", "menuKey", 0) == 64, "api.GetSettingKey returns 64");
+
+    // 7. Subscriptions through API v4
+    struct SubContext {
+        bool called{ false };
+        std::string mod;
+        std::string key;
+    } subCtx;
+
+    uint64_t subId = api.SubscribeSettingChanged("ModBeta", "betaSlider", [](void* ud, const char* m, const char* k) {
+        auto* ctx = static_cast<SubContext*>(ud);
+        ctx->called = true;
+        ctx->mod = m ? m : "";
+        ctx->key = k ? k : "";
+    }, &subCtx);
+
+    TEST_ASSERT(subId != 0, "Subscription created");
+    api.SetSettingFloat("ModBeta", "betaSlider", 9.0f);
+    TEST_ASSERT(subCtx.called == true, "Subscription callback fired");
+    TEST_ASSERT(subCtx.mod == "ModBeta", "Callback received correct mod");
+    TEST_ASSERT(subCtx.key == "betaSlider", "Callback received correct key");
+
+    subCtx.called = false;
+    api.UnsubscribeSettingChanged(subId);
+    api.SetSettingFloat("ModBeta", "betaSlider", 1.0f);
+    TEST_ASSERT(subCtx.called == false, "Callback not fired after unsubscribe");
+
+    // 8. Open & Close Settings
+    mgr.setSettingsWindow(&window);
+    api.OpenSettings("ModBeta");
+    TEST_ASSERT(window.isVisible() == true, "Window opened via api.OpenSettings");
+    api.CloseSettings();
+    TEST_ASSERT(window.isVisible() == false, "Window closed via api.CloseSettings");
+
+    // 9. Client wrappers without DLL loaded (fallback safety)
+    TEST_ASSERT(!PerfUI::Client::RegisterModSettingsJson("Test", "Test", "path.json"), "Client wrapper returns false when DLL not present");
+    TEST_ASSERT(!PerfUI::Client::RegisterModSettingsPage("Test", "Test", nullptr, nullptr), "Client wrapper returns false when DLL not present");
+    PerfUI::Client::OpenSettings("Test"); // Should not crash
+    PerfUI::Client::CloseSettings();      // Should not crash
+
+    std::filesystem::remove(tempJson);
+    std::cout << "  -> Passed TestModSettingsManagerAndApiV4" << std::endl;
+}
+
 int main() {
     std::cout << "=== Running PerfUI SettingsStore Tests ===" << std::endl;
 
@@ -591,6 +716,7 @@ int main() {
     TestConcurrency();
     TestWidgetBindingAndTwoWaySync();
     TestDeclarativeSettingsSchema();
+    TestModSettingsManagerAndApiV4();
 
     std::cout << "=== ALL SETTINGS TESTS PASSED ===" << std::endl;
     return 0;

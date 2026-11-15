@@ -3,7 +3,9 @@
 #include "InputHook.h"
 #include "SkyrimSoundService.h"
 #include "WorldTrackingService.h"
+#include "WidgetAutoLoader.h"
 #include "PerfUI/PerfUIApi.h"
+#include "PerfUI/ModSettingsManager.h"
 #include <spdlog/sinks/basic_file_sink.h>
 
 namespace {
@@ -39,17 +41,8 @@ void OnMessage(SKSE::MessagingInterface::Message* a_msg) {
                 HWND hWnd = reinterpret_cast<HWND>(renderer->data.renderWindows[0].hWnd);
                 PerfUI::Skyrim::InputHook::GetSingleton().Install(hWnd);
             }
-            SKSE::log::info("PerfUI initialized successfully! Press F11 in game to toggle menu.");
-
-            auto* dataHandler = RE::TESDataHandler::GetSingleton();
-            if (dataHandler) {
-                const auto* lal = dataHandler->LookupLoadedModByName("Alternate Start - Live Another Life.esp");
-                if (lal) {
-                    SKSE::log::info(">>> Alternate Start - Live Another Life.esp IS LOADED! Index: {}", lal->compileIndex);
-                } else {
-                    SKSE::log::warn(">>> Alternate Start - Live Another Life.esp is NOT LOADED by Skyrim!");
-                }
-            }
+            SKSE::log::info("PerfUI initialized successfully!");
+            PerfUI::Skyrim::WidgetAutoLoader::GetSingleton().Initialize(PerfUI::Skyrim::D3D11Hook::GetSingleton().GetContext());
         } else {
             SKSE::log::error("Failed to install D3D11 hook");
         }
@@ -301,17 +294,7 @@ static PerfUI::ScriptHost* API_CreateScriptHost(const char* modName, unsigned lo
         host->bindContext(ctx, ctx->root());
     }
 
-    host->registerModule("skyrim", [](PerfUI::ModuleBuilder& m) {
-        m.function("trackActor", [](uint32_t formId, double ox, double oy, double oz, bool checkLoS) -> double {
-            return static_cast<double>(API_TrackActor(formId, static_cast<float>(ox), static_cast<float>(oy), static_cast<float>(oz), checkLoS));
-        });
-        m.function("trackPosition", [](double x, double y, double z, bool checkLoS) -> double {
-            return static_cast<double>(API_TrackPosition(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), checkLoS));
-        });
-        m.function("untrack", [](uint32_t targetId) {
-            API_Untrack(targetId);
-        });
-    });
+    PerfUI::Skyrim::WidgetAutoLoader::RegisterSkyrimLuaBindings(*host);
 
     return host;
 }
@@ -332,10 +315,27 @@ static PerfUI::API::IPerfUI_v3 g_perfUI_API_v3{
 };
 #endif
 
+static PerfUI::API::IPerfUI_v4 g_perfUI_API_v4{};
+static bool g_perfUI_API_v4_initialized = false;
+
+static PerfUI::API::IPerfUI_v4* GetApiV4Instance() {
+    if (!g_perfUI_API_v4_initialized) {
+        g_perfUI_API_v4_initialized = true;
+#if defined(PERFUI_ENABLE_LUA)
+        g_perfUI_API_v4.v3 = g_perfUI_API_v3;
+#else
+        g_perfUI_API_v4.v3.v2 = g_perfUI_API_v2;
+#endif
+        PerfUI::API::PopulateApiV4(g_perfUI_API_v4);
+    }
+    return &g_perfUI_API_v4;
+}
+
 extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interfaceVersion, const PerfUI::API::ClientABIInfo* a_clientAbi) {
     if (a_interfaceVersion != PerfUI::API::InterfaceVersion_1 &&
         a_interfaceVersion != PerfUI::API::InterfaceVersion_2 &&
-        a_interfaceVersion != PerfUI::API::InterfaceVersion_3) {
+        a_interfaceVersion != PerfUI::API::InterfaceVersion_3 &&
+        a_interfaceVersion != PerfUI::API::InterfaceVersion_4) {
         SKSE::log::warn("RequestPluginAPIEx called with unsupported version: {}", a_interfaceVersion);
         return nullptr;
     }
@@ -356,6 +356,9 @@ extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interf
         expectedApiSize = sizeof(PerfUI::API::IPerfUI_v3);
     }
 #endif
+    else if (a_interfaceVersion == PerfUI::API::InterfaceVersion_4) {
+        expectedApiSize = sizeof(PerfUI::API::IPerfUI_v4);
+    }
 
     if (a_clientAbi) {
         if (a_clientAbi->structSize < sizeof(PerfUI::API::ClientABIInfo)) {
@@ -397,6 +400,9 @@ extern "C" __declspec(dllexport) void* RequestPluginAPIEx(unsigned long a_interf
     }
 
     SKSE::log::info("RequestPluginAPIEx(v{}) called by external mod - ABI verified, granting API pointer!", a_interfaceVersion);
+    if (a_interfaceVersion == PerfUI::API::InterfaceVersion_4) {
+        return static_cast<void*>(GetApiV4Instance());
+    }
 #if defined(PERFUI_ENABLE_LUA)
     if (a_interfaceVersion == PerfUI::API::InterfaceVersion_3) {
         return static_cast<void*>(&g_perfUI_API_v3);

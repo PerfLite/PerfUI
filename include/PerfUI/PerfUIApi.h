@@ -21,6 +21,7 @@ namespace PerfUI::API {
 constexpr unsigned long InterfaceVersion_1 = 1;
 constexpr unsigned long InterfaceVersion_2 = 2;
 constexpr unsigned long InterfaceVersion_3 = 3;
+constexpr unsigned long InterfaceVersion_4 = 4;
 
 constexpr unsigned long LuaApiVersion_1 = 1;
 constexpr unsigned long PERFUI_LUA_API_VERSION = LuaApiVersion_1;
@@ -88,6 +89,66 @@ struct IPerfUI_v3 {
     uint32_t    (*TrackActor)(uint32_t formId, float offsetX, float offsetY, float offsetZ, bool checkLoS);
     void        (*Untrack)(uint32_t targetId);
 };
+
+struct SettingsPageBuilder;
+
+struct SettingsPageBuilder {
+    void (*AddHeader)(SettingsPageBuilder* self, const char* title);
+    void (*AddText)(SettingsPageBuilder* self, const char* text, const char* tooltip);
+    void (*AddSeparator)(SettingsPageBuilder* self);
+    void (*AddEmpty)(SettingsPageBuilder* self, float height);
+    void (*AddToggle)(SettingsPageBuilder* self, const char* label, const char* key, const char* tooltip, bool defaultValue);
+    void (*AddSlider)(SettingsPageBuilder* self, const char* label, const char* key, const char* tooltip, float minVal, float maxVal, float stepVal, float defaultValue, const char* formatString);
+    void (*AddStepper)(SettingsPageBuilder* self, const char* label, const char* key, const char* tooltip, int32_t minVal, int32_t maxVal, int32_t stepVal, int32_t defaultValue);
+    void (*AddChoice)(SettingsPageBuilder* self, const char* label, const char* key, const char* tooltip, const char** optionIds, const char** optionLabels, size_t optionCount, const char* defaultId);
+    void (*AddColor)(SettingsPageBuilder* self, const char* label, const char* key, const char* tooltip, uint32_t defaultRgba);
+    void (*AddKeybind)(SettingsPageBuilder* self, const char* label, const char* key, const char* tooltip, uint32_t defaultKey);
+    void (*AddTextInput)(SettingsPageBuilder* self, const char* label, const char* key, const char* placeholder, const char* tooltip, const char* defaultText);
+    void (*SetRowVisibleIf)(SettingsPageBuilder* self, const char* key, const char* conditionKey, bool invert);
+    void (*SetRowEnabledIf)(SettingsPageBuilder* self, const char* key, const char* conditionKey, bool invert);
+    void* internalData;
+};
+
+// v4: adds Mod Settings Layer (SettingsStore access, declarative/C++ mod settings registration, menu opening)
+struct IPerfUI_v4 {
+    IPerfUI_v3 v3;
+
+    // Mod Settings Registration (ABI-safe: no std:: containers)
+    bool (*RegisterModSettingsJson)(const char* modId, const char* displayName, const char* jsonPath);
+    bool (*RegisterModSettingsPage)(const char* modId, const char* displayName, void (*build)(void* userData, SettingsPageBuilder* builder), void* userData);
+
+    // Settings Store Access
+    bool        (*GetSettingBool)(const char* modId, const char* key, bool defaultVal);
+    void        (*SetSettingBool)(const char* modId, const char* key, bool val);
+    int32_t     (*GetSettingInt)(const char* modId, const char* key, int32_t defaultVal);
+    void        (*SetSettingInt)(const char* modId, const char* key, int32_t val);
+    float       (*GetSettingFloat)(const char* modId, const char* key, float defaultVal);
+    void        (*SetSettingFloat)(const char* modId, const char* key, float val);
+    const char* (*GetSettingString)(const char* modId, const char* key, const char* defaultVal);
+    void        (*SetSettingString)(const char* modId, const char* key, const char* val);
+    uint32_t    (*GetSettingColor)(const char* modId, const char* key, uint32_t defaultRgba);
+    void        (*SetSettingColor)(const char* modId, const char* key, uint32_t rgba);
+    uint32_t    (*GetSettingKey)(const char* modId, const char* key, uint32_t defaultKey);
+    void        (*SetSettingKey)(const char* modId, const char* key, uint32_t keycode);
+
+    // Subscriptions
+    uint64_t    (*SubscribeSettingChanged)(const char* modId, const char* key, void (*cb)(void* userData, const char* modId, const char* key), void* userData);
+    void        (*UnsubscribeSettingChanged)(uint64_t subscriptionId);
+
+    // Menu Navigation
+    void        (*OpenSettings)(const char* modId);
+    void        (*CloseSettings)();
+};
+
+#if defined(_MSC_VER) && defined(_M_X64)
+static_assert(sizeof(IPerfUI_v1) == 168, "IPerfUI_v1 ABI size mismatch");
+static_assert(sizeof(IPerfUI_v2) == 176, "IPerfUI_v2 ABI size mismatch");
+static_assert(sizeof(IPerfUI_v3) == 232, "IPerfUI_v3 ABI size mismatch");
+static_assert(sizeof(IPerfUI_v4) == 376, "IPerfUI_v4 ABI size mismatch");
+static_assert(offsetof(IPerfUI_v2, v1) == 0, "IPerfUI_v2::v1 offset mismatch");
+static_assert(offsetof(IPerfUI_v3, v2) == 0, "IPerfUI_v3::v2 offset mismatch");
+static_assert(offsetof(IPerfUI_v4, v3) == 0, "IPerfUI_v4::v3 offset mismatch");
+#endif
 
 struct ClientABIInfo {
     unsigned long structSize{ sizeof(ClientABIInfo) };
@@ -178,6 +239,50 @@ inline API::IPerfUI_v3* GetApiV3() {
         }
     }
     return s_api;
+}
+
+// Returns nullptr when the loaded PerfUI.dll predates interface v4.
+inline API::IPerfUI_v4* GetApiV4() {
+    static API::IPerfUI_v4* s_api = nullptr;
+    static bool s_requested = false;
+    if (!s_requested) {
+        s_requested = true;
+        auto hModule = ::GetModuleHandleW(L"PerfUI.dll");
+        if (hModule) {
+            typedef void* (*RequestPluginAPIExFn)(unsigned long, const API::ClientABIInfo*);
+            auto fnEx = reinterpret_cast<RequestPluginAPIExFn>(::GetProcAddress(hModule, "RequestPluginAPIEx"));
+            if (fnEx) {
+                API::ClientABIInfo abi;
+                abi.apiStructSize = sizeof(API::IPerfUI_v4);
+                s_api = static_cast<API::IPerfUI_v4*>(fnEx(API::InterfaceVersion_4, &abi));
+            }
+        }
+    }
+    return s_api;
+}
+
+inline bool RegisterModSettingsJson(const char* modId, const char* displayName, const char* jsonPath) {
+    auto* api = GetApiV4();
+    return api && api->RegisterModSettingsJson ? api->RegisterModSettingsJson(modId, displayName, jsonPath) : false;
+}
+
+inline bool RegisterModSettingsPage(const char* modId, const char* displayName, void (*build)(void*, API::SettingsPageBuilder*), void* userData) {
+    auto* api = GetApiV4();
+    return api && api->RegisterModSettingsPage ? api->RegisterModSettingsPage(modId, displayName, build, userData) : false;
+}
+
+inline void OpenSettings(const char* modId = nullptr) {
+    auto* api = GetApiV4();
+    if (api && api->OpenSettings) {
+        api->OpenSettings(modId);
+    }
+}
+
+inline void CloseSettings() {
+    auto* api = GetApiV4();
+    if (api && api->CloseSettings) {
+        api->CloseSettings();
+    }
 }
 
 inline ScriptHost* CreateScriptHost(const char* modName) {
