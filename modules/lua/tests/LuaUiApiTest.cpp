@@ -528,8 +528,13 @@ void Test10_LuaSettingsAndIsolation()
 {
     std::cout << "\nTest 10: Lua Settings & Mod Isolation...\n";
 
+    auto tempDir = std::filesystem::temp_directory_path() / "perfui_lua_settings_test";
+    std::filesystem::remove_all(tempDir);
+    std::filesystem::create_directories(tempDir);
+
     auto& store = SettingsStore::GetSingleton();
     store.clearAll();
+    store.setSettingsDirectory(tempDir);
 
     store.registerSetting("OwnMod", SettingDef{ "volume", SettingType::Float, 50.0f });
     store.registerSetting("OwnMod", SettingDef{ "playerName", SettingType::String, std::string("Dragonborn") });
@@ -607,6 +612,8 @@ void Test10_LuaSettingsAndIsolation()
     TEST_ASSERT(changedValue == 95.0f, "perfui.settings.onChanged callback received new value 95.0");
 
     store.clearAll();
+    std::error_code ec;
+    std::filesystem::remove_all(tempDir, ec);
 }
 
 } // namespace
