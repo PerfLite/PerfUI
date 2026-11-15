@@ -950,6 +950,46 @@ void TestSafeStringRetrievalAndApiV5() {
     std::cout << "  -> Passed TestSafeStringRetrievalAndApiV5 (" << readCount.load() << " concurrent reads verified)" << std::endl;
 }
 
+void TestApiResolutionRetryAndIsApiReady() {
+    std::cout << "[Test] Running TestApiResolutionRetryAndIsApiReady..." << std::endl;
+
+    // 1. Initial state: DLL not loaded / returns null
+    PerfUI::Client::Detail::s_customRequestFn.store([](unsigned long, const PerfUI::API::ClientABIInfo*) -> void* {
+        return nullptr;
+    });
+
+    TEST_ASSERT(!PerfUI::Client::IsApiReady(1), "IsApiReady(1) false when DLL not present");
+    TEST_ASSERT(!PerfUI::Client::IsApiReady(4), "IsApiReady(4) false when DLL not present");
+    TEST_ASSERT(!PerfUI::Client::IsApiReady(5), "IsApiReady(5) false when DLL not present");
+    TEST_ASSERT(PerfUI::Client::GetApiV4() == nullptr, "GetApiV4 returns null before load");
+    TEST_ASSERT(PerfUI::Client::GetApiV5() == nullptr, "GetApiV5 returns null before load");
+
+    // 2. DLL loads: host becomes ready
+    static PerfUI::API::IPerfUI_v5 hostApiV5{};
+    PerfUI::API::PopulateApiV5(hostApiV5);
+
+    PerfUI::Client::Detail::s_customRequestFn.store([](unsigned long ver, const PerfUI::API::ClientABIInfo*) -> void* {
+        if (ver <= 5) return &hostApiV5;
+        return nullptr;
+    });
+
+    // 3. Retry succeeds: failure was NOT cached permanently!
+    TEST_ASSERT(PerfUI::Client::IsApiReady(1), "IsApiReady(1) true after load (retry succeeded)");
+    TEST_ASSERT(PerfUI::Client::IsApiReady(4), "IsApiReady(4) true after load (retry succeeded)");
+    TEST_ASSERT(PerfUI::Client::IsApiReady(5), "IsApiReady(5) true after load (retry succeeded)");
+
+    auto* api4 = PerfUI::Client::GetApiV4();
+    TEST_ASSERT(api4 != nullptr, "GetApiV4 returns non-null after host load");
+
+    auto* api5 = PerfUI::Client::GetApiV5();
+    TEST_ASSERT(api5 != nullptr, "GetApiV5 returns non-null after host load");
+
+    // Clean up hook
+    PerfUI::Client::Detail::s_customRequestFn.store(nullptr);
+
+    std::cout << "  -> Passed TestApiResolutionRetryAndIsApiReady" << std::endl;
+}
+
 void TestBenchmarks() {
     std::cout << "[Benchmark] Running SettingsStore Performance Benchmarks..." << std::endl;
 
@@ -1047,6 +1087,7 @@ int main() {
     TestHotkeysAndConflictResolution();
     TestAutoLoaderAndSchemaMarker();
     TestSafeStringRetrievalAndApiV5();
+    TestApiResolutionRetryAndIsApiReady();
     TestBenchmarks();
 
     std::cout << "=== ALL SETTINGS TESTS PASSED ===" << std::endl;

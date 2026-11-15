@@ -6,6 +6,7 @@
 #include "Overlay.h"
 #include <string>
 #include <cstdint>
+#include <atomic>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -195,27 +196,48 @@ struct ClientABIInfo {
 
 namespace PerfUI::Client {
 
-// Function for third-party SKSE modders to obtain the PerfUI API pointer
-inline API::IPerfUI_v1* GetApi() {
-    static API::IPerfUI_v1* s_api = nullptr;
-    if (!s_api) {
-        auto hModule = ::GetModuleHandleW(L"PerfUI.dll");
-        if (hModule) {
-            typedef void* (*RequestPluginAPIExFn)(unsigned long, const API::ClientABIInfo*);
-            auto fnEx = reinterpret_cast<RequestPluginAPIExFn>(::GetProcAddress(hModule, "RequestPluginAPIEx"));
-            if (fnEx) {
-                API::ClientABIInfo abi;
-                s_api = static_cast<API::IPerfUI_v1*>(fnEx(API::InterfaceVersion_1, &abi));
-            } else {
-                typedef void* (*RequestPluginAPIFn)(unsigned long);
-                auto fn = reinterpret_cast<RequestPluginAPIFn>(::GetProcAddress(hModule, "RequestPluginAPI"));
-                if (fn) {
-                    s_api = static_cast<API::IPerfUI_v1*>(fn(API::InterfaceVersion_1));
-                }
-            }
-        }
+namespace Detail {
+using RequestApiFn = void* (*)(unsigned long version, const API::ClientABIInfo* abi);
+inline std::atomic<RequestApiFn> s_customRequestFn{ nullptr };
+
+inline void* QueryHostApi(unsigned long version, size_t structSize) {
+    auto customFn = s_customRequestFn.load(std::memory_order_relaxed);
+    if (customFn) {
+        API::ClientABIInfo abi;
+        abi.apiStructSize = static_cast<unsigned long>(structSize);
+        return customFn(version, &abi);
     }
-    return s_api;
+    auto hModule = ::GetModuleHandleW(L"PerfUI.dll");
+    if (!hModule) return nullptr;
+
+    typedef void* (*RequestPluginAPIExFn)(unsigned long, const API::ClientABIInfo*);
+    auto fnEx = reinterpret_cast<RequestPluginAPIExFn>(::GetProcAddress(hModule, "RequestPluginAPIEx"));
+    if (fnEx) {
+        API::ClientABIInfo abi;
+        abi.apiStructSize = static_cast<unsigned long>(structSize);
+        return fnEx(version, &abi);
+    }
+    typedef void* (*RequestPluginAPIFn)(unsigned long);
+    auto fn = reinterpret_cast<RequestPluginAPIFn>(::GetProcAddress(hModule, "RequestPluginAPI"));
+    if (fn) {
+        return fn(version);
+    }
+    return nullptr;
+}
+} // namespace Detail
+
+// Function for third-party SKSE modders to obtain the PerfUI API pointer.
+// Retries on subsequent calls if PerfUI.dll was not yet loaded during the first attempt.
+inline API::IPerfUI_v1* GetApi() {
+    static std::atomic<API::IPerfUI_v1*> s_cached{ nullptr };
+    auto* ptr = s_cached.load(std::memory_order_acquire);
+    if (ptr) return ptr;
+
+    ptr = static_cast<API::IPerfUI_v1*>(Detail::QueryHostApi(API::InterfaceVersion_1, sizeof(API::IPerfUI_v1)));
+    if (ptr) {
+        s_cached.store(ptr, std::memory_order_release);
+    }
+    return ptr;
 }
 
 inline UIContext* GetContext() {
@@ -225,82 +247,70 @@ inline UIContext* GetContext() {
 
 // Returns nullptr when the loaded PerfUI.dll predates interface v2.
 inline API::IPerfUI_v2* GetApiV2() {
-    static API::IPerfUI_v2* s_api = nullptr;
-    static bool s_requested = false;
-    if (!s_requested) {
-        s_requested = true;
-        auto hModule = ::GetModuleHandleW(L"PerfUI.dll");
-        if (hModule) {
-            typedef void* (*RequestPluginAPIExFn)(unsigned long, const API::ClientABIInfo*);
-            auto fnEx = reinterpret_cast<RequestPluginAPIExFn>(::GetProcAddress(hModule, "RequestPluginAPIEx"));
-            if (fnEx) {
-                API::ClientABIInfo abi;
-                abi.apiStructSize = sizeof(API::IPerfUI_v2);
-                s_api = static_cast<API::IPerfUI_v2*>(fnEx(API::InterfaceVersion_2, &abi));
-            }
-        }
+    static std::atomic<API::IPerfUI_v2*> s_cached{ nullptr };
+    auto* ptr = s_cached.load(std::memory_order_acquire);
+    if (ptr) return ptr;
+
+    ptr = static_cast<API::IPerfUI_v2*>(Detail::QueryHostApi(API::InterfaceVersion_2, sizeof(API::IPerfUI_v2)));
+    if (ptr) {
+        s_cached.store(ptr, std::memory_order_release);
     }
-    return s_api;
+    return ptr;
 }
 
 // Returns nullptr when the loaded PerfUI.dll predates interface v3 or was built without Lua.
 inline API::IPerfUI_v3* GetApiV3() {
-    static API::IPerfUI_v3* s_api = nullptr;
-    static bool s_requested = false;
-    if (!s_requested) {
-        s_requested = true;
-        auto hModule = ::GetModuleHandleW(L"PerfUI.dll");
-        if (hModule) {
-            typedef void* (*RequestPluginAPIExFn)(unsigned long, const API::ClientABIInfo*);
-            auto fnEx = reinterpret_cast<RequestPluginAPIExFn>(::GetProcAddress(hModule, "RequestPluginAPIEx"));
-            if (fnEx) {
-                API::ClientABIInfo abi;
-                abi.apiStructSize = sizeof(API::IPerfUI_v3);
-                s_api = static_cast<API::IPerfUI_v3*>(fnEx(API::InterfaceVersion_3, &abi));
-            }
-        }
+    static std::atomic<API::IPerfUI_v3*> s_cached{ nullptr };
+    auto* ptr = s_cached.load(std::memory_order_acquire);
+    if (ptr) return ptr;
+
+    ptr = static_cast<API::IPerfUI_v3*>(Detail::QueryHostApi(API::InterfaceVersion_3, sizeof(API::IPerfUI_v3)));
+    if (ptr) {
+        s_cached.store(ptr, std::memory_order_release);
     }
-    return s_api;
+    return ptr;
 }
 
 // Returns nullptr when the loaded PerfUI.dll predates interface v4.
 inline API::IPerfUI_v4* GetApiV4() {
-    static API::IPerfUI_v4* s_api = nullptr;
-    static bool s_requested = false;
-    if (!s_requested) {
-        s_requested = true;
-        auto hModule = ::GetModuleHandleW(L"PerfUI.dll");
-        if (hModule) {
-            typedef void* (*RequestPluginAPIExFn)(unsigned long, const API::ClientABIInfo*);
-            auto fnEx = reinterpret_cast<RequestPluginAPIExFn>(::GetProcAddress(hModule, "RequestPluginAPIEx"));
-            if (fnEx) {
-                API::ClientABIInfo abi;
-                abi.apiStructSize = sizeof(API::IPerfUI_v4);
-                s_api = static_cast<API::IPerfUI_v4*>(fnEx(API::InterfaceVersion_4, &abi));
-            }
-        }
+    static std::atomic<API::IPerfUI_v4*> s_cached{ nullptr };
+    auto* ptr = s_cached.load(std::memory_order_acquire);
+    if (ptr) return ptr;
+
+    ptr = static_cast<API::IPerfUI_v4*>(Detail::QueryHostApi(API::InterfaceVersion_4, sizeof(API::IPerfUI_v4)));
+    if (ptr) {
+        s_cached.store(ptr, std::memory_order_release);
     }
-    return s_api;
+    return ptr;
 }
 
 // Returns nullptr when the loaded PerfUI.dll predates interface v5.
 inline API::IPerfUI_v5* GetApiV5() {
-    static API::IPerfUI_v5* s_api = nullptr;
-    static bool s_requested = false;
-    if (!s_requested) {
-        s_requested = true;
-        auto hModule = ::GetModuleHandleW(L"PerfUI.dll");
-        if (hModule) {
-            typedef void* (*RequestPluginAPIExFn)(unsigned long, const API::ClientABIInfo*);
-            auto fnEx = reinterpret_cast<RequestPluginAPIExFn>(::GetProcAddress(hModule, "RequestPluginAPIEx"));
-            if (fnEx) {
-                API::ClientABIInfo abi;
-                abi.apiStructSize = sizeof(API::IPerfUI_v5);
-                s_api = static_cast<API::IPerfUI_v5*>(fnEx(API::InterfaceVersion_5, &abi));
-            }
-        }
+    static std::atomic<API::IPerfUI_v5*> s_cached{ nullptr };
+    auto* ptr = s_cached.load(std::memory_order_acquire);
+    if (ptr) return ptr;
+
+    ptr = static_cast<API::IPerfUI_v5*>(Detail::QueryHostApi(API::InterfaceVersion_5, sizeof(API::IPerfUI_v5)));
+    if (ptr) {
+        s_cached.store(ptr, std::memory_order_release);
     }
-    return s_api;
+    return ptr;
+}
+
+/**
+ * @brief Check whether PerfUI.dll is loaded and the requested interface version is ready.
+ * @param minVersion Minimum required interface version (default InterfaceVersion_1).
+ * Recommended registration point for mod settings is after SKSE DataLoaded event (kDataLoaded).
+ */
+inline bool IsApiReady(unsigned long minVersion = API::InterfaceVersion_1) {
+    switch (minVersion) {
+    case API::InterfaceVersion_1: return GetApi() != nullptr;
+    case API::InterfaceVersion_2: return GetApiV2() != nullptr;
+    case API::InterfaceVersion_3: return GetApiV3() != nullptr;
+    case API::InterfaceVersion_4: return GetApiV4() != nullptr;
+    case API::InterfaceVersion_5: return GetApiV5() != nullptr;
+    default: return false;
+    }
 }
 
 inline bool RegisterModSettingsJson(const char* modId, const char* displayName, const char* jsonPath) {
