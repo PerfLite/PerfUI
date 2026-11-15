@@ -310,13 +310,17 @@ PerfUI provides a binary-stable C interface avoiding C++ standard library types 
   std::string profile = PerfUI::Client::GetSettingString("MyMod", "profileName", "Default");
   ```
 
-### 5.3 SKSE Lifecycle & API Readiness (`IsApiReady`)
-* Resolution is thread-safe, atomic, and **retries upon initial failure**: if a plugin queries PerfUI before it loads, subsequent calls successfully resolve the interface once loaded.
-* `PerfUI::Client::IsApiReady(minVersion = 4)` checks whether the host interface is ready.
+### 5.3 SKSE Lifecycle, API Readiness (`IsApiReady`) & Rejection Caching
+* Resolution is thread-safe, atomic, and **retries upon initial failure**: if a plugin queries PerfUI before `PerfUI.dll` loads, subsequent calls successfully retry and resolve the interface once loaded.
+* **DLL Status Distinction:** When `PerfUI.dll` is loaded into the process but predates the requested version (e.g. older DLL lacking v4/v5), the refusal is cached permanently (`s_unsupportedV*`), preventing redundant queries and log spam.
+* Signature `PerfUI::Client::IsApiReady(minVersion = InterfaceVersion_1)`:
+  - Without arguments checks whether any base PerfUI API (v1+) is available.
+  - To verify settings support, explicitly pass the version: `PerfUI::Client::IsApiReady(4)` (Settings API v4) or `PerfUI::Client::IsApiReady(5)` (String Copy v5).
 * **Recommended Registration Hook:** Register mod settings inside `SKSE::MessagingInterface::kDataLoaded` or `kPostLoad`.
 
-### 5.4 Subscription Threading & Re-entrancy
-* Callbacks registered via `SubscribeSettingChanged` are invoked **synchronously on the caller thread** executing `SetSetting*`.
+### 5.4 Subscription Threading & UI Thread Safety
+* **External Mod Subscriptions (`SubscribeSettingChanged`):** Invoked **synchronously on the caller thread** executing `SetSetting*` per the C-API specification.
+* **Internal Widget Subscriptions (`SettingsSection`):** Thread-safe. When mutated from background game threads, widget tree updates are enqueued into `m_pendingUpdates` and safely dispatched on the UI thread during the next `update(dt)`, eliminating races with rendering.
 * **Safe Re-entrancy:** Inside a callback, you may:
   1. Mutate another setting via `SetSetting*` (deadlock-free; recursion for the same key is suppressed).
   2. Unsubscribe itself via `UnsubscribeSettingChanged(subId)`.
@@ -357,23 +361,38 @@ uint64_t subId = PerfUI::Client::SubscribeSettingChanged("TrueHud", "scale", [](
 PerfUI::Client::OpenSettings("TrueHud");
 ```
 
+### 5.6 Lifecycle & Safe Shutdown (`shutdown`)
+* `SettingsStore::shutdown()`: Idempotent graceful termination method.
+* Flushes all pending and dirty changes to disk (`flushAll()`) and terminates worker thread with a 2-second timeout.
+* During DLL detach (`DLL_PROCESS_DETACH`), `s_processDetaching` prevents blocking `join()` under the OS loader lock.
+* After shutdown, the store falls back to **synchronous write mode**, ensuring late `set` calls persist to disk without data loss.
+
 ---
 
-## 6. Lua Scripting API (`perfui.settings`)
+## 6. Lua Scripting API (`perfui.settings`) & Mod Isolation
 
 ```lua
--- Read setting with default fallback
+-- Read setting with default fallback (reading other mods' settings is permitted)
 local isHudEnabled = perfui.settings.get("MyMod", "enableDynamicHud", true)
 local hudScale = perfui.settings.get("MyMod", "hudScale", 100.0)
 
--- Subscribe to user adjustments
+-- Short form (modId defaults to the script host's own name)
+local hudScaleShort = perfui.settings.get("hudScale", 100.0)
+
+-- Subscribe to adjustments
 perfui.settings.onChanged("MyMod", "hudScale", function(modId, key, newValue)
     print(string.format("Scale adjusted to: %.1f%%", newValue))
 end)
 
--- Programmatic updates
+-- Programmatic updates (STRICT MOD ISOLATION)
 perfui.settings.set("MyMod", "hudScale", 120.0)
+-- perfui.settings.set("OtherMod", "volume", 50.0) -- THROWS LUA ERROR: script 'MyMod' cannot modify settings of mod 'OtherMod'
 ```
+
+### 6.1 Script Isolation Invariants
+* **Read (`get`):** Allowed for any mod's settings (enabling cross-mod integration and compatibility checks).
+* **Write (`set`):** Strictly restricted to the script's own mod (`modId == host->name()`). Writing to another mod raises a Lua error `settings access denied`.
+* **Subscription (`onChanged`):** Allowed for own or foreign mods; automatically cleaned up on `ScriptHost` destruction.
 
 ---
 
